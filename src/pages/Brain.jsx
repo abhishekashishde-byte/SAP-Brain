@@ -507,6 +507,8 @@ export default function Brain({ session }) {
     const msgText = input.trim()
     const userMsg = { role:'user', content:msgText }
     setInput('')
+    // Reset textarea height
+    if (inputRef.current) { inputRef.current.style.height = '24px' }
     setIsLoading(true)
 
     let convId = activeConvId
@@ -903,15 +905,21 @@ export default function Brain({ session }) {
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={e=>setInput(e.target.value)}
+                onChange={e => {
+                  setInput(e.target.value)
+                  // Auto-expand height
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                }}
                 onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); handleSend() } }}
                 placeholder={pendingModule ? `Ask about ${pendingTopic || pendingModule}…` : 'Ask any SAP question… (Enter to send, Shift+Enter for new line)'}
                 rows={1}
                 style={{
                   flex:1, background:'transparent', border:'none', resize:'none',
                   fontSize:14, color:'#1C1C1E', fontFamily:"'DM Sans',sans-serif",
-                  lineHeight:1.6, maxHeight:120, overflowY:'auto', padding:0,
-                  outline:'none',
+                  lineHeight:1.65, height:'24px', maxHeight:'200px',
+                  overflowY:'auto', padding:0, outline:'none',
+                  whiteSpace:'pre-wrap', wordBreak:'break-word',
                 }}
               />
               <button
