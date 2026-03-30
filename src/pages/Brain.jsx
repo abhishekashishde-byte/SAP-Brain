@@ -215,15 +215,14 @@ function MessageBubble({ msg, isStreaming, streamingText }) {
 
   const inlineFormat = (text) => {
     if (!text) return ''
-    // Bold **text**
-    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
+    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|_[^_]+_)/g)
     return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
+      if (part.startsWith('**') && part.endsWith('**'))
         return <strong key={i} style={{ fontWeight:600, color:'#1C1C1E' }}>{part.slice(2,-2)}</strong>
-      }
-      if (part.startsWith('`') && part.endsWith('`')) {
+      if (part.startsWith('`') && part.endsWith('`'))
         return <code key={i} style={{ fontFamily:"'IBM Plex Mono',monospace", background:'rgba(200,80,192,0.08)', padding:'1px 5px', borderRadius:4, fontSize:'0.88em', color:'#7C3A7A' }}>{part.slice(1,-1)}</code>
-      }
+      if (part.startsWith('_') && part.endsWith('_'))
+        return <span key={i} style={{ fontSize:11, color:'#AEAEB2', fontStyle:'italic' }}>{part.slice(1,-1)}</span>
       return <span key={i}>{part}</span>
     })
   }
@@ -541,19 +540,21 @@ export default function Brain({ session }) {
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone }),
       })
-      const { reply, error } = await res.json()
+      const { reply, error, model } = await res.json()
       if (error) throw new Error(error)
 
-      setIsLoading(false)
+      // Add model indicator to reply
+      const modelTag = model === 'claude' ? '\n\n_✦ Claude_' : '\n\n_⚡ Groq_'
+      const replyWithTag = reply + modelTag
 
-      // Stream the response with typing effect
+      setIsLoading(false)
       setIsStreaming(true)
       abortRef.current = new AbortController()
-      await simulateTyping(reply, setStreamingText, abortRef.current.signal)
+      await simulateTyping(replyWithTag, setStreamingText, abortRef.current.signal)
       setIsStreaming(false)
       setStreamingText('')
 
-      const finalMsgs = [...currentMsgs, { role:'assistant', content:reply }]
+      const finalMsgs = [...currentMsgs, { role:'assistant', content:replyWithTag }]
       await updateConversation(convId, { messages:finalMsgs })
       setConversations(prev => prev.map(c => c.id===convId ? {...c, messages:finalMsgs, updated_at:new Date().toISOString()} : c))
 
@@ -643,7 +644,7 @@ export default function Brain({ session }) {
       {/* ── Sidebar */}
       <div style={{
         width: sidebarOpen ? 264 : 0, minWidth: sidebarOpen ? 264 : 0,
-        background:'#FFFFFF', borderRight:'1px solid #EDEDE8',
+        background:'linear-gradient(180deg,#FFFFFF 0%,#FDF8FF 100%)', borderRight:'1px solid #EDEDE8',
         display:'flex', flexDirection:'column', overflow:'hidden',
         transition:'all 0.25s ease', flexShrink:0,
       }}>
@@ -753,10 +754,11 @@ export default function Brain({ session }) {
       <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, position:'relative' }}>
 
         {/* Animated background blobs */}
-        <div style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none', zIndex:0 }}>
-          <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.06) 0%,transparent 70%)', top:'-10%', right:'5%', animation:'blob1 12s ease-in-out infinite' }}/>
-          <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.05) 0%,transparent 70%)', bottom:'5%', left:'10%', animation:'blob2 15s ease-in-out infinite' }}/>
-          <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,204,112,0.06) 0%,transparent 70%)', top:'40%', right:'30%', animation:'blob3 10s ease-in-out infinite' }}/>
+        <div style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none', zIndex:0, background:'linear-gradient(160deg,#FDF8FF 0%,#FFF5F0 40%,#FFFBF0 100%)' }}>
+          <div style={{ position:'absolute', width:600, height:600, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.13) 0%,transparent 65%)', top:'-15%', right:'0%', animation:'blob1 12s ease-in-out infinite' }}/>
+          <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.1) 0%,transparent 65%)', bottom:'-10%', left:'5%', animation:'blob2 15s ease-in-out infinite' }}/>
+          <div style={{ position:'absolute', width:380, height:380, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,204,112,0.12) 0%,transparent 65%)', top:'35%', right:'25%', animation:'blob3 10s ease-in-out infinite' }}/>
+          <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.08) 0%,transparent 65%)', bottom:'20%', right:'10%', animation:'blob1 14s ease-in-out infinite reverse' }}/>
         </div>
 
         {/* Top bar */}
