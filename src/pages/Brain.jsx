@@ -445,6 +445,7 @@ export default function Brain({ session }) {
   const [showSummarise, setShowSummarise]   = useState(false)
   const [isSummarising, setIsSummarising]   = useState(false)
   const [sidebarOpen, setSidebarOpen]       = useState(true)
+  const [tone, setTone]                     = useState('balanced')
 
   const bottomRef   = useRef(null)
   const inputRef    = useRef(null)
@@ -538,7 +539,7 @@ export default function Brain({ session }) {
       const res = await fetch('/api/chat', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic }),
+        body:JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone }),
       })
       const { reply, error } = await res.json()
       if (error) throw new Error(error)
@@ -626,11 +627,17 @@ export default function Brain({ session }) {
         @keyframes cursorBlink { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes spin { to{transform:rotate(360deg)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        @keyframes blob1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.08)} 66%{transform:translate(-20px,20px) scale(0.95)} }
+        @keyframes blob2 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-35px,25px) scale(0.93)} 66%{transform:translate(25px,-15px) scale(1.05)} }
+        @keyframes blob3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,30px) scale(1.06)} }
         .sidebar-btn:hover { background:#FDF4FF !important; }
         .send-btn:hover:not(:disabled) { transform:scale(0.96); opacity:0.88; }
         .icon-btn:hover { background:#FDF4FF !important; }
         textarea:focus { outline:none; }
         input:focus { outline:none; }
+        .tone-btn { padding:5px 12px; border-radius:20px; border:1.5px solid #E8E3D5; background:transparent; font-size:11px; font-family:'DM Sans',sans-serif; cursor:pointer; transition:all 0.15s; color:#8A8A8E; }
+        .tone-btn.active { background:linear-gradient(135deg,rgba(200,80,192,0.12),rgba(255,107,53,0.08)); border-color:#E8C8F0; color:#C850C0; font-weight:600; }
+        .tone-btn:hover { border-color:#E8C8F0; color:#C850C0; }
       `}</style>
 
       {/* ── Sidebar */}
@@ -743,13 +750,20 @@ export default function Brain({ session }) {
       </div>
 
       {/* ── Main area */}
-      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, position:'relative' }}>
+
+        {/* Animated background blobs */}
+        <div style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none', zIndex:0 }}>
+          <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.06) 0%,transparent 70%)', top:'-10%', right:'5%', animation:'blob1 12s ease-in-out infinite' }}/>
+          <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.05) 0%,transparent 70%)', bottom:'5%', left:'10%', animation:'blob2 15s ease-in-out infinite' }}/>
+          <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,204,112,0.06) 0%,transparent 70%)', top:'40%', right:'30%', animation:'blob3 10s ease-in-out infinite' }}/>
+        </div>
 
         {/* Top bar */}
         <div style={{
           padding:'14px 20px', borderBottom:'1px solid #EDEDE8',
-          display:'flex', alignItems:'center', gap:12, background:'#FFFFFF',
-          flexShrink:0,
+          display:'flex', alignItems:'center', gap:12, background:'rgba(255,255,255,0.85)',
+          backdropFilter:'blur(8px)', flexShrink:0, position:'relative', zIndex:2,
         }}>
           <button
             className="icon-btn"
@@ -789,6 +803,27 @@ export default function Brain({ session }) {
           )}
         </div>
 
+        {/* Tone selector */}
+        <div style={{
+          padding:'8px 20px', borderBottom:'1px solid #F5F0F8',
+          display:'flex', alignItems:'center', gap:8,
+          background:'rgba(255,255,255,0.7)', backdropFilter:'blur(6px)',
+          flexShrink:0, position:'relative', zIndex:2,
+        }}>
+          <span style={{ fontSize:11, color:'#AEAEB2', marginRight:4 }}>Tone:</span>
+          {[
+            { key:'balanced', label:'⚖️ Balanced' },
+            { key:'direct',   label:'⚡ Direct' },
+            { key:'friendly', label:'😊 Friendly' },
+            { key:'formal',   label:'📋 Formal' },
+          ].map(t => (
+            <button key={t.key} className={`tone-btn${tone===t.key?' active':''}`}
+              onClick={()=>setTone(t.key)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {/* Summarise warning */}
         {showSummarise && activeConv && (
           <div style={{
@@ -814,7 +849,7 @@ export default function Brain({ session }) {
         )}
 
         {/* Chat area */}
-        <div style={{ flex:1, overflowY:'auto', padding:'24px 20px' }}>
+        <div style={{ flex:1, overflowY:'auto', padding:'24px 20px', position:'relative', zIndex:1 }}>
           <div style={{ maxWidth:740, margin:'0 auto' }}>
 
             {/* Empty state */}
@@ -890,7 +925,9 @@ export default function Brain({ session }) {
 
         {/* Input area */}
         <div style={{
-          padding:'14px 20px 18px', borderTop:'1px solid #EDEDE8', background:'#FFFFFF', flexShrink:0,
+          padding:'14px 20px 18px', borderTop:'1px solid #EDEDE8',
+          background:'rgba(255,255,255,0.88)', backdropFilter:'blur(8px)',
+          flexShrink:0, position:'relative', zIndex:2,
         }}>
           <div style={{ maxWidth:740, margin:'0 auto' }}>
             <div style={{
