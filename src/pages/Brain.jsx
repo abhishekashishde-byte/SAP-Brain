@@ -124,12 +124,105 @@ function MessageBubble({ msg, isStreaming, streamingText }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
 
-  // Simple inline code highlighting
-  const renderContent = (text) => {
-    const parts = text.split(/(`[^`]+`)/g)
+  const renderMarkdown = (text) => {
+    if (!text) return null
+    const lines = text.split('\n')
+    const elements = []
+    let i = 0
+
+    while (i < lines.length) {
+      const line = lines[i]
+
+      // Table detection
+      if (line.includes('|') && i + 1 < lines.length && lines[i+1]?.includes('---')) {
+        const tableLines = []
+        while (i < lines.length && lines[i].includes('|')) {
+          tableLines.push(lines[i])
+          i++
+        }
+        const headers = tableLines[0].split('|').filter(c => c.trim())
+        const rows = tableLines.slice(2).map(r => r.split('|').filter(c => c.trim()))
+        elements.push(
+          <div key={`t${i}`} style={{ overflowX:'auto', margin:'10px 0' }}>
+            <table style={{ borderCollapse:'collapse', width:'100%', fontSize:13 }}>
+              <thead>
+                <tr>{headers.map((h,j) => (
+                  <th key={j} style={{ padding:'8px 12px', background:'linear-gradient(135deg,rgba(200,80,192,0.12),rgba(255,107,53,0.08))', borderBottom:'2px solid #E8C8F0', textAlign:'left', fontWeight:600, color:'#1C1C1E', whiteSpace:'nowrap' }}>
+                    {h.trim()}
+                  </th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {rows.map((row,j) => (
+                  <tr key={j} style={{ borderBottom:'1px solid #F0EDE8', background: j%2===0 ? '#FFFFFF' : '#FAFAF8' }}>
+                    {row.map((cell,k) => (
+                      <td key={k} style={{ padding:'7px 12px', color:'#3A3A3C', verticalAlign:'top' }}>
+                        {inlineFormat(cell.trim())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+        continue
+      }
+
+      // Heading ##
+      if (line.startsWith('## ')) {
+        elements.push(<div key={i} style={{ fontWeight:700, fontSize:15, color:'#1C1C1E', margin:'12px 0 4px', fontFamily:"'Playfair Display',serif" }}>{line.slice(3)}</div>)
+      }
+      // Heading ###
+      else if (line.startsWith('### ')) {
+        elements.push(<div key={i} style={{ fontWeight:600, fontSize:14, color:'#1C1C1E', margin:'10px 0 3px' }}>{line.slice(4)}</div>)
+      }
+      // Bullet * or -
+      else if (/^[\*\-] /.test(line)) {
+        elements.push(
+          <div key={i} style={{ display:'flex', gap:8, margin:'3px 0', paddingLeft:4 }}>
+            <span style={{ color:'#C850C0', marginTop:1, flexShrink:0 }}>•</span>
+            <span>{inlineFormat(line.slice(2))}</span>
+          </div>
+        )
+      }
+      // Sub-bullet + or spaces
+      else if (/^\s+[\+\-\*] /.test(line)) {
+        const text = line.replace(/^\s+[\+\-\*] /, '')
+        elements.push(
+          <div key={i} style={{ display:'flex', gap:8, margin:'2px 0', paddingLeft:20 }}>
+            <span style={{ color:'#FF6B35', fontSize:10, marginTop:4, flexShrink:0 }}>◦</span>
+            <span style={{ fontSize:13 }}>{inlineFormat(text)}</span>
+          </div>
+        )
+      }
+      // Horizontal rule ---
+      else if (/^---+$/.test(line.trim())) {
+        elements.push(<hr key={i} style={{ border:'none', borderTop:'1px solid #EDEDE8', margin:'10px 0' }}/>)
+      }
+      // Empty line
+      else if (line.trim() === '') {
+        elements.push(<div key={i} style={{ height:6 }}/>)
+      }
+      // Normal text
+      else {
+        elements.push(<div key={i} style={{ margin:'2px 0', lineHeight:1.7 }}>{inlineFormat(line)}</div>)
+      }
+      i++
+    }
+    return elements
+  }
+
+  const inlineFormat = (text) => {
+    if (!text) return ''
+    // Bold **text**
+    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
     return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} style={{ fontWeight:600, color:'#1C1C1E' }}>{part.slice(2,-2)}</strong>
+      }
       if (part.startsWith('`') && part.endsWith('`')) {
-        return <code key={i} style={{ fontFamily:"'IBM Plex Mono',monospace", background:'rgba(0,0,0,0.06)', padding:'1px 5px', borderRadius:4, fontSize:'0.9em' }}>{part.slice(1,-1)}</code>
+        return <code key={i} style={{ fontFamily:"'IBM Plex Mono',monospace", background:'rgba(200,80,192,0.08)', padding:'1px 5px', borderRadius:4, fontSize:'0.88em', color:'#7C3A7A' }}>{part.slice(1,-1)}</code>
       }
       return <span key={i}>{part}</span>
     })
@@ -142,31 +235,28 @@ function MessageBubble({ msg, isStreaming, streamingText }) {
       animation:'msgSlide 0.25s ease forwards',
     }}>
       {!isUser && (
-        <div style={{
-          width:32, height:32, borderRadius:10, flexShrink:0,
-          display:'flex', alignItems:'center', justifyContent:'center', marginTop:2,
-        }}><WaniLogo size={30}/></div>
+        <div style={{ width:32, height:32, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', marginTop:2 }}>
+          <WaniLogo size={30}/>
+        </div>
       )}
       <div style={{
-        maxWidth:'70%',
+        maxWidth:'72%',
         background: isUser ? '#FDF4FF' : '#FFFFFF',
         border: isUser ? '1px solid #E8C8F0' : '1px solid #EDEDED',
         borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
         padding:'12px 16px',
         color:'#1C1C1E', fontSize:14, lineHeight:1.7,
-        whiteSpace:'pre-wrap', wordBreak:'break-word',
+        wordBreak:'break-word',
         boxShadow: isUser ? '0 1px 4px rgba(200,80,192,0.1)' : '0 1px 4px rgba(0,0,0,0.04)',
       }}>
-        {renderContent(content)}
-        {isStreaming && <span style={{ display:'inline-block', width:2, height:'1em', background:gold, marginLeft:2, animation:'cursorBlink 0.8s infinite', verticalAlign:'middle' }}/>}
+        {isUser
+          ? <span style={{whiteSpace:'pre-wrap'}}>{content}</span>
+          : renderMarkdown(content)
+        }
+        {isStreaming && <span style={{ display:'inline-block', width:2, height:'1em', background:'#C850C0', marginLeft:2, animation:'cursorBlink 0.8s infinite', verticalAlign:'middle' }}/>}
       </div>
       {isUser && (
-        <div style={{
-          width:32, height:32, borderRadius:10, flexShrink:0,
-          background:'linear-gradient(135deg,#1E3A5F,#2563EB)',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontSize:12, fontWeight:700, color:'#fff', marginTop:2,
-        }}>A</div>
+        <div style={{ width:32, height:32, borderRadius:10, flexShrink:0, background:'linear-gradient(135deg,#1E3A5F,#2563EB)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', marginTop:2 }}>A</div>
       )}
     </div>
   )
