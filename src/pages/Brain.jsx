@@ -516,11 +516,17 @@ export default function Brain({ session }) {
     let currentTopic = activeConv?.topic || pendingTopic
     let currentMsgs = [...messages, userMsg]
 
-    // If no active conversation, create one immediately
+    // If no active conversation, create one immediately with placeholder title
     if (!convId) {
-      const title = msgText.length > 50 ? msgText.slice(0,47)+'…' : msgText
+      // Clean title — remove T-codes, limit length
+      const cleanTitle = msgText
+        .replace(/\b[A-Z]{2,4}\d{2,3}N?\b/g, '') // remove T-codes like IW31, ME21N
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 50) || 'New Conversation'
+
       const newConv = await createConversation(session.user.id, {
-        title, module: currentMod, topic: currentTopic, messages: [userMsg]
+        title: cleanTitle, module: currentMod, topic: currentTopic, messages: [userMsg]
       })
       convId = newConv.id
       currentMsgs = [userMsg]
@@ -558,8 +564,8 @@ export default function Brain({ session }) {
       await updateConversation(convId, { messages:finalMsgs })
       setConversations(prev => prev.map(c => c.id===convId ? {...c, messages:finalMsgs, updated_at:new Date().toISOString()} : c))
 
-      // Auto-categorise if no module was set (free mode, first message)
-      if (!currentMod && currentMsgs.length === 1) {
+      // Auto-categorise — always run on first message to get clean title and module
+      if (currentMsgs.length === 1) {
         fetch('/api/categorise', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
