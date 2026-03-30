@@ -1,30 +1,50 @@
-// api/chat.js — Groq + SAP tokenization + tone-aware system prompt
+// api/chat.js — Smart routing: Claude for complex SAP, Groq for simple questions
 
-const BASE_SYSTEM_PROMPT = `You are Wani — a senior SAP S/4HANA consultant and trusted personal advisor specializing in PP, PM, MM, Fiori, and S/4HANA configuration. You have 15+ years of hands-on SAP experience across global implementations.
+const BASE_SYSTEM_PROMPT = `You are Wani — a senior SAP S/4HANA consultant with 15+ years of hands-on implementation experience across PP, PM, MM, Fiori, and S/4HANA. You are talking to a fellow senior SAP consultant — treat them as a peer.
 
-You are talking to a senior SAP consultant who is your peer — treat them as an equal, not a student.
+ABSOLUTE RULES — NEVER BREAK:
+1. TRANSACTION CODES: Only state a T-code if you are 100% certain. If unsure say "verify in your system". Wrong T-codes are worse than no T-codes.
+2. ORDER TYPES vs T-CODES: PM order types (PM01, PM02 etc.) are 4-character keys in SPRO — NOT transaction codes. T-codes are typed in the SAP command bar (IW31, CO01 etc).
+3. NEVER INVENT: Never invent table names, field names, BAdI names, FM names. Only state what you know with certainty.
+4. UNCERTAINTY: "Not certain — verify in your system" is always better than a confident wrong answer.
 
-CRITICAL RULES — NEVER BREAK THESE:
-1. TRANSACTION CODES: Only mention a T-code if you are 100% certain it is correct. If you are not sure, say "verify the exact T-code in your system" — never guess. Wrong T-codes destroy trust. For example: production versions are managed via C223, NOT CP01. CP01 is for standard cost estimates.
-2. STANDARD vs CUSTOM: Always clearly distinguish between standard SAP behavior and behavior that may vary by configuration, Z-code, or BAdI. Say "this is standard SAP" or "this depends on your system config" explicitly.
-3. UNCERTAINTY: If you are not confident, say so clearly. "I'm not 100% sure — verify this in your system" is far better than a confident wrong answer.
-4. HALLUCINATION: Never invent table names, field names, BAdI names, or program names. Only state what you know with certainty.
+SAP KNOWLEDGE ANCHORS:
+- Maintenance orders: IW31 (create), IW32 (change), IW33 (display), IW38 (mass change)
+- Production orders: CO01 (create), CO02 (change), CO03 (display)
+- Production versions: C223 (mass maintenance), C220 (individual)
+- Purchase orders: ME21N (create), ME22N (change), ME23N (display)
+- Material master: MM01, MM02, MM03 | BOM: CS01, CS02, CS03 | Routing: CA01, CA02, CA03
+- PM order types standard: PM01 (corrective), PM03 (inspection), PM04 (refurbishment) — exact list depends on implementation
+- MRP: MD01 (run), MD02 (single item), MD04 (stock/requirements list)
 
 RESPONSE STYLE:
-- Be concise but complete — 3 to 8 bullet points or short paragraphs
-- Use backticks for \`T-codes\`, \`table names\`, \`field names\`, \`BAdI names\`
-- Format with bullet points or short paragraphs — never walls of text
-- When the user makes a good observation or asks a smart question, acknowledge it naturally
-- If the question has a nuance or catch, point it out — "Good catch — there's actually a subtlety here"
-- Speak like a knowledgeable colleague, not a manual
+- Concise — 3 to 8 bullet points or short paragraphs max
+- Backticks for \`T-codes\`, \`table names\`, \`field names\`, \`BAdI names\`
+- Acknowledge good observations naturally — "Good catch", "Exactly", "There's a nuance here"
+- Speak like a knowledgeable colleague, not a textbook
 
-TOKEN HANDLING: Tokens like [ORDER_1], [PLANT_2] are anonymised SAP values — treat them as real and use the same token in your response.`
+TOKENS: [ORDER_1], [PLANT_2] etc. are anonymised SAP values — treat as real, use same token in response.`
 
-const TONE_PROMPTS = {
-  balanced: `\nTONE: Balanced and professional. Warm but direct. Acknowledge good questions naturally. Use phrases like "Good point", "Exactly right", "There's actually a nuance here" when genuinely appropriate — but don't overdo it.`,
-  direct: `\nTONE: Direct and to the point. No pleasantries. Just the facts, fast. Bullet points preferred. Skip the acknowledgements and get straight to the answer.`,
-  friendly: `\nTONE: Warm, friendly, and encouraging. Like a helpful senior colleague over coffee. Use natural conversational phrases. Acknowledge effort and good thinking. Make the person feel confident.`,
-  formal: `\nTONE: Formal and precise. Academic style. Complete sentences. Structured response with clear sections. Professional distance.`,
+const TONE_ADDITIONS = {
+  balanced: `\nTONE: Warm but direct. Acknowledge smart questions naturally.`,
+  direct:   `\nTONE: Direct and fast. Bullet points only. Skip pleasantries.`,
+  friendly: `\nTONE: Warm and encouraging. Like a helpful colleague over coffee.`,
+  formal:   `\nTONE: Formal and precise. Complete sentences. Structured.`,
+}
+
+// Classify question complexity — simple goes to Groq (free), complex goes to Claude (paid)
+function isComplexQuestion(message) {
+  const complex = [
+    /why/i, /how does/i, /difference between/i, /when should/i, /impact/i,
+    /badi/i, /user exit/i, /debug/i, /error/i, /not working/i, /issue/i,
+    /configure/i, /customiz/i, /z-program/i, /zprog/i, /enhancement/i,
+    /cross.module/i, /integration/i, /settlement/i, /valuation/i,
+    /refurbish/i, /split valuation/i, /costing/i, /variance/i,
+    /mrp.area/i, /planning/i, /sequence/i, /routing/i, /capacity/i,
+    /compare/i, /versus/i, /vs\b/i, /pros and cons/i, /advantage/i,
+    /table/i, /field/i, /spro/i, /configuration/i, /behavior/i,
+  ]
+  return complex.some(pattern => pattern.test(message))
 }
 
 function tokenize(messages) {
@@ -53,38 +73,100 @@ function detokenize(text, map) {
   return text
 }
 
+async function callClaude(systemPrompt, messages) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1200,
+      system: systemPrompt,
+      messages,
+    }),
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data?.error?.message || 'Claude error')
+  return data.content?.[0]?.text || 'No response.'
+}
+
+async function callGroq(systemPrompt, messages) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 1200,
+      temperature: 0.2,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    }),
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data?.error?.message || 'Groq error')
+  return data.choices?.[0]?.message?.content || 'No response.'
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { messages, module: mod, topic, tone = 'balanced' } = req.body
   if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'Invalid body' })
 
-  // Build system prompt with selected tone
-  const systemPrompt = BASE_SYSTEM_PROMPT + (TONE_PROMPTS[tone] || TONE_PROMPTS.balanced)
+  const systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || TONE_ADDITIONS.balanced)
 
+  // Add topic context to last user message
   const withContext = messages.map((m, i) =>
     i === messages.length - 1 && m.role === 'user'
       ? { ...m, content: `SAP context: module="${mod || 'General'}", topic="${topic || 'General'}"\n\n${m.content}` }
       : m
   )
 
+  // Tokenize sensitive values
   const { anonymised, map } = tokenize(withContext)
 
+  // Decide which model to use
+  const lastUserMessage = messages[messages.length - 1]?.content || ''
+  const useClaudeKey = process.env.ANTHROPIC_API_KEY
+  const useGroqKey = process.env.GROQ_API_KEY
+  const complex = isComplexQuestion(lastUserMessage)
+
+  // Route: Claude for complex if key available, Groq for simple or as fallback
+  let raw = ''
+  let modelUsed = ''
+
   try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 1200,
-        temperature: 0.4,
-        messages: [{ role: 'system', content: systemPrompt }, ...anonymised],
-      }),
-    })
-    const data = await response.json()
-    if (!response.ok) return res.status(500).json({ error: data?.error?.message || 'Groq error' })
-    const raw = data.choices?.[0]?.message?.content || 'No response.'
-    return res.status(200).json({ reply: detokenize(raw, map) })
+    if (complex && useClaudeKey) {
+      raw = await callClaude(systemPrompt, anonymised)
+      modelUsed = 'claude'
+    } else if (useGroqKey) {
+      raw = await callGroq(systemPrompt, anonymised)
+      modelUsed = 'groq'
+    } else if (useClaudeKey) {
+      // Groq key missing — fall back to Claude for everything
+      raw = await callClaude(systemPrompt, anonymised)
+      modelUsed = 'claude'
+    } else {
+      return res.status(500).json({ error: 'No API keys configured' })
+    }
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    // If primary fails, try the other
+    try {
+      if (modelUsed !== 'groq' && useGroqKey) {
+        raw = await callGroq(systemPrompt, anonymised)
+      } else if (modelUsed !== 'claude' && useClaudeKey) {
+        raw = await callClaude(systemPrompt, anonymised)
+      } else {
+        return res.status(500).json({ error: err.message })
+      }
+    } catch (fallbackErr) {
+      return res.status(500).json({ error: fallbackErr.message })
+    }
   }
+
+  return res.status(200).json({ reply: detokenize(raw, map), model: modelUsed })
 }
