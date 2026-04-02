@@ -72,7 +72,7 @@ const T = {
   }
 }
 
-const goldGrad = 'linear-gradient(135deg,#C850C0,#FF6B35,#FFCC70)'
+const goldGrad = 'linear-gradient(135deg,#4F46E5,#6366F1)'
 
 const MODULE_COLORS = {
   "PP – Production Planning": { from:'#16a34a', to:'#059669', emoji:'⚙️' },
@@ -137,7 +137,7 @@ function TypingDots({ t }) {
   return (
     <div style={{ display:'flex', gap:5, alignItems:'center', padding:'12px 16px' }}>
       {[0,1,2].map(i => (
-        <div key={i} style={{ width:7, height:7, borderRadius:'50%', background:'#C850C0', animation:'typingBounce 1.2s infinite', animationDelay:`${i*0.18}s`, opacity:0.7 }}/>
+        <div key={i} style={{ width:7, height:7, borderRadius:'50%', background:'#4F46E5', animation:'typingBounce 1.2s infinite', animationDelay:`${i*0.18}s`, opacity:0.7 }}/>
       ))}
     </div>
   )
@@ -171,17 +171,17 @@ function MessageBubble({ msg, isStreaming, streamingText, t }) {
         const rows = tl.slice(2).map(r=>r.split('|').filter(c=>c.trim()))
         els.push(<div key={`t${i}`} style={{ overflowX:'auto', margin:'10px 0' }}>
           <table style={{ borderCollapse:'collapse', width:'100%', fontSize:13 }}>
-            <thead><tr>{headers.map((h,j)=><th key={j} style={{ padding:'8px 12px', background:'rgba(200,80,192,0.12)', borderBottom:'2px solid rgba(200,80,192,0.3)', textAlign:'left', fontWeight:600, color:t.text, whiteSpace:'nowrap' }}>{h.trim()}</th>)}</tr></thead>
+            <thead><tr>{headers.map((h,j)=><th key={j} style={{ padding:'8px 12px', background:'rgba(79,70,229,0.08)', borderBottom:'2px solid rgba(79,70,229,0.2)', textAlign:'left', fontWeight:600, color:t.text, whiteSpace:'nowrap' }}>{h.trim()}</th>)}</tr></thead>
             <tbody>{rows.map((row,j)=><tr key={j} style={{ borderBottom:`1px solid ${t.border}`, background: j%2===0?t.surface:t.surface2 }}>{row.map((cell,k)=><td key={k} style={{ padding:'7px 12px', color:t.text2 }}>{inlineFormat(cell.trim())}</td>)}</tr>)}</tbody>
           </table></div>)
         continue
       }
       if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700, fontSize:15, color:t.text, margin:'12px 0 4px', fontFamily:"'Playfair Display',serif" }}>{line.slice(3)}</div>); i++; continue }
       if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600, fontSize:14, color:t.text, margin:'10px 0 3px' }}>{line.slice(4)}</div>); i++; continue }
-      if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex', gap:8, margin:'4px 0', paddingLeft:4 }}><span style={{ color:'#C850C0', marginTop:1, flexShrink:0, fontSize:14 }}>•</span><span style={{ lineHeight:1.65, color:t.text2 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
+      if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex', gap:8, margin:'4px 0', paddingLeft:4 }}><span style={{ color:'#4F46E5', marginTop:1, flexShrink:0, fontSize:14 }}>•</span><span style={{ lineHeight:1.65, color:t.text2 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
       if (/^\s+[\+\-\*] /.test(line)) {
         const txt = line.replace(/^\s+[\+\-\*] /,'')
-        els.push(<div key={i} style={{ display:'flex', gap:8, margin:'3px 0', paddingLeft:20 }}><span style={{ color:'#FF6B35', fontSize:12, marginTop:3, flexShrink:0 }}>–</span><span style={{ fontSize:13, lineHeight:1.6, color:t.text3 }}>{inlineFormat(txt)}</span></div>); i++; continue
+        els.push(<div key={i} style={{ display:'flex', gap:8, margin:'3px 0', paddingLeft:20 }}><span style={{ color:'#6366F1', fontSize:12, marginTop:3, flexShrink:0 }}>–</span><span style={{ fontSize:13, lineHeight:1.6, color:t.text3 }}>{inlineFormat(txt)}</span></div>); i++; continue
       }
       if (/^---+$/.test(line.trim())) { els.push(<hr key={i} style={{ border:'none', borderTop:`1px solid ${t.border}`, margin:'10px 0' }}/>); i++; continue }
       if (line.trim() === '')         { els.push(<div key={i} style={{ height:6 }}/>); i++; continue }
@@ -200,10 +200,10 @@ function MessageBubble({ msg, isStreaming, streamingText, t }) {
         border: `1px solid ${isUser ? t.msgUserBdr : t.msgAIBdr}`,
         borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
         padding:'12px 16px', fontSize:14, lineHeight:1.7, wordBreak:'break-word',
-        boxShadow: isUser ? '0 2px 8px rgba(200,80,192,0.1)' : '0 2px 6px rgba(0,0,0,0.08)',
+        boxShadow: isUser ? '0 2px 8px rgba(79,70,229,0.08)' : '0 2px 6px rgba(0,0,0,0.08)',
       }}>
         {isUser ? <span style={{ whiteSpace:'pre-wrap', color:t.text }}>{content}</span> : renderMarkdown(content)}
-        {isStreaming && <span style={{ display:'inline-block', width:2, height:'1em', background:'#C850C0', marginLeft:2, animation:'cursorBlink 0.8s infinite', verticalAlign:'middle' }}/>}
+        {isStreaming && <span style={{ display:'inline-block', width:2, height:'1em', background:'#4F46E5', marginLeft:2, animation:'cursorBlink 0.8s infinite', verticalAlign:'middle' }}/>}
       </div>
       {isUser && <div style={{ width:32, height:32, borderRadius:10, flexShrink:0, background:'linear-gradient(135deg,#1E3A5F,#2563EB)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', marginTop:2 }}>A</div>}
     </div>
@@ -220,24 +220,24 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:16 }} onClick={onClose}>
       <div style={{
         background:'linear-gradient(145deg,#1A1035,#0F0A2A)',
-        border:'1px solid rgba(200,80,192,0.3)',
+        border:'1px solid rgba(79,70,229,0.2)',
         borderRadius:24, padding:32, width:340, maxWidth:'100%',
         boxShadow:'0 24px 64px rgba(0,0,0,0.5)',
         animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards',
       }} onClick={e=>e.stopPropagation()}>
         <div style={{ textAlign:'center', marginBottom:24 }}>
-          <div style={{ width:72, height:72, borderRadius:'50%', background:goldGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:700, color:'#fff', margin:'0 auto 12px', boxShadow:'0 4px 20px rgba(200,80,192,0.4)' }}>{initials}</div>
+          <div style={{ width:72, height:72, borderRadius:'50%', background:goldGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:700, color:'#fff', margin:'0 auto 12px', boxShadow:'0 4px 20px rgba(79,70,229,0.25)' }}>{initials}</div>
           <div style={{ fontSize:13, color:'rgba(255,255,255,0.5)' }}>{session.user.email}</div>
         </div>
         <div style={{ marginBottom:20 }}>
           <label style={{ display:'block', fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.4)', letterSpacing:1.2, textTransform:'uppercase', marginBottom:8 }}>Display Name</label>
           <input value={name} onChange={e=>setName(e.target.value)} placeholder={profile?.name || 'Enter your name'}
-            style={{ width:'100%', padding:'12px 16px', boxSizing:'border-box', background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(200,80,192,0.3)', borderRadius:12, fontSize:14, fontFamily:"'DM Sans',sans-serif", color:'#fff', outline:'none' }}
-            onFocus={e=>e.target.style.borderColor='rgba(200,80,192,0.7)'}
-            onBlur={e=>e.target.style.borderColor='rgba(200,80,192,0.3)'}
+            style={{ width:'100%', padding:'12px 16px', boxSizing:'border-box', background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(79,70,229,0.25)', borderRadius:12, fontSize:14, fontFamily:"'DM Sans',sans-serif", color:'#fff', outline:'none' }}
+            onFocus={e=>e.target.style.borderColor='rgba(79,70,229,0.7)'}
+            onBlur={e=>e.target.style.borderColor='rgba(79,70,229,0.25)'}
           />
         </div>
-        <button onClick={async()=>{ setSaving(true); await onSave({name}); setSaving(false); onClose() }} style={{ width:'100%', padding:13, background:goldGrad, border:'none', borderRadius:12, color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", marginBottom:12, boxShadow:'0 4px 16px rgba(200,80,192,0.35)' }}>
+        <button onClick={async()=>{ setSaving(true); await onSave({name}); setSaving(false); onClose() }} style={{ width:'100%', padding:13, background:goldGrad, border:'none', borderRadius:12, color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", marginBottom:12, boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
           {saving ? 'Saving...' : 'Save Profile'}
         </button>
         <button onClick={onSignOut} style={{ width:'100%', padding:12, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:12, color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}
@@ -256,8 +256,8 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={onClick}
       style={{
         padding:'10px 14px', borderRadius:10, cursor:'pointer',
-        background: isActive ? 'linear-gradient(135deg,rgba(200,80,192,0.15),rgba(255,107,53,0.08))' : hovered ? 'rgba(200,80,192,0.07)' : 'transparent',
-        borderLeft: isActive ? '3px solid #C850C0' : '3px solid transparent',
+        background: isActive ? 'rgba(79,70,229,0.12)' : hovered ? 'rgba(79,70,229,0.06)' : 'transparent',
+        borderLeft: isActive ? '3px solid #4F46E5' : '3px solid transparent',
         marginBottom:3, transition:'all 0.15s', position:'relative',
       }}
     >
@@ -266,7 +266,7 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
         {conv.is_summarised && <span style={{ fontSize:9, color:t.text4, background:t.surface2, padding:'1px 5px', borderRadius:10 }}>∑</span>}
       </div>
       <div style={{ fontSize:13, fontWeight:isActive?600:400, color:isActive?t.text:t.text2, lineHeight:1.4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:hovered?24:0 }}>{conv.title}</div>
-      <div style={{ fontSize:12, color:isActive?'#C850C0':t.text3, marginTop:2, fontWeight:isActive?500:400 }}>
+      <div style={{ fontSize:12, color:isActive?'#4F46E5':t.text3, marginTop:2, fontWeight:isActive?500:400 }}>
         {conv.topic} · {new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
       </div>
       {hovered && (
@@ -280,43 +280,49 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
 }
 
 // ─── HomeScreen — Card Stack ──────────────────────────────────────────────────
+// One unified corporate accent — indigo. Cards differ only in their dark/light bg shade.
+// bgDark: used in dark mode. bgLight: used in light mode.
 const MODULE_STACK = [
   {
     key: 'PP – Production Planning',
     mod: 'PP', sub: 'Production Planning',
-    acc: '#22c55e', glow: 'rgba(34,197,94,0.16)',
-    bg: 'radial-gradient(ellipse at 30% 60%,rgba(16,42,22,0.99),rgba(5,9,7,0.99))',
     emoji: '⚙️',
+    bgDark:  '#12111F',
+    bgLight: '#F4F4F8',
   },
   {
     key: 'PM – Plant Maintenance',
     mod: 'PM', sub: 'Plant Maintenance',
-    acc: '#818cf8', glow: 'rgba(129,140,248,0.16)',
-    bg: 'radial-gradient(ellipse at 30% 60%,rgba(18,14,46,0.99),rgba(6,5,18,0.99))',
     emoji: '🔧',
+    bgDark:  '#111220',
+    bgLight: '#F3F4F8',
   },
   {
     key: 'MM – Logistics',
     mod: 'MM', sub: 'Logistics',
-    acc: '#fb923c', glow: 'rgba(251,146,60,0.16)',
-    bg: 'radial-gradient(ellipse at 30% 60%,rgba(38,16,4,0.99),rgba(10,5,2,0.99))',
     emoji: '📦',
+    bgDark:  '#131118',
+    bgLight: '#F5F4F8',
   },
   {
     key: 'Fiori / UX',
     mod: 'Fiori', sub: 'User Experience',
-    acc: '#38bdf8', glow: 'rgba(56,189,248,0.16)',
-    bg: 'radial-gradient(ellipse at 30% 60%,rgba(4,20,38,0.99),rgba(2,6,14,0.99))',
     emoji: '◻',
+    bgDark:  '#101320',
+    bgLight: '#F2F4F9',
   },
   {
     key: 'S/4HANA General',
     mod: 'S/4HANA', sub: 'General',
-    acc: '#fbbf24', glow: 'rgba(251,191,36,0.16)',
-    bg: 'radial-gradient(ellipse at 30% 60%,rgba(32,20,2,0.99),rgba(8,6,1,0.99))',
     emoji: '◈',
+    bgDark:  '#14111A',
+    bgLight: '#F5F3F8',
   },
 ]
+
+// Single corporate accent used everywhere
+const CORP_ACC     = '#4F46E5'
+const CORP_ACC_MUT = 'rgba(79,70,229,0.12)'
 
 const SCALE_STEP   = 0.055
 const Y_STEP       = 22
@@ -331,7 +337,7 @@ function slotStyle(slot) {
   return { transform:`translateY(${y}px) scale(${scale})`, opacity, zIndex:N_CARDS - slot, pointerEvents:'none' }
 }
 
-function HomeScreen({ conversations, onSelectTopic, t }) {
+function HomeScreen({ conversations, onSelectTopic, t, dark }) {
   const [slots, setSlots]     = useState(MODULE_STACK.map((_,i) => i))
   const [busy, setBusy]       = useState(false)
   const cardRefs              = useRef([])
@@ -418,19 +424,19 @@ function HomeScreen({ conversations, onSelectTopic, t }) {
       <style>{`
         @keyframes deckIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         .deck-wrap { animation: deckIn 0.5s ease both; }
-        .topic-pill-hs { font-size:11px; padding:5px 12px; border-radius:20px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); color:rgba(255,255,255,0.4); cursor:pointer; transition:border-color 0.2s,color 0.2s; white-space:nowrap; pointer-events:auto; position:relative; z-index:30; }
-        .topic-pill-hs:hover { color:var(--pill-acc); border-color:var(--pill-acc); }
-        .topic-pill-hs.lit { border-color:var(--pill-acc); color:var(--pill-acc); }
-        .cta-btn { font-size:11px; font-weight:600; padding:6px 16px; border-radius:20px; border:1px solid var(--cta-acc); background:transparent; color:var(--cta-acc); font-family:'DM Sans',sans-serif; cursor:pointer; pointer-events:auto; position:relative; z-index:30; transition:background 0.2s; }
-        .cta-btn:hover { background:rgba(255,255,255,0.06); }
-        .recent-item-hs { display:flex; align-items:center; gap:10px; padding:9px 13px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:10px; cursor:pointer; transition:background 0.15s,border-color 0.15s; }
-        .recent-item-hs:hover { background:rgba(200,80,192,0.06); border-color:rgba(200,80,192,0.2); }
+        .topic-pill-hs { font-size:11px; padding:5px 12px; border-radius:20px; background:${dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'}; border:1px solid ${dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'}; color:${dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.45)'}; cursor:pointer; transition:border-color 0.2s,color 0.2s; white-space:nowrap; pointer-events:auto; position:relative; z-index:30; }
+        .topic-pill-hs:hover { color:#4F46E5; border-color:#4F46E5; }
+        .topic-pill-hs.lit { border-color:#4F46E5; color:#4F46E5; background:rgba(79,70,229,0.08); }
+        .cta-btn { font-size:11px; font-weight:600; padding:6px 16px; border-radius:6px; border:1px solid ${dark?'rgba(255,255,255,0.15)':'rgba(0,0,0,0.15)'}; background:transparent; color:${dark?'rgba(255,255,255,0.7)':'rgba(0,0,0,0.6)'}; font-family:'DM Sans',sans-serif; cursor:pointer; pointer-events:auto; position:relative; z-index:30; transition:background 0.2s,border-color 0.2s; }
+        .cta-btn:hover { background:rgba(79,70,229,0.08); border-color:#4F46E5; color:#4F46E5; }
+        .recent-item-hs { display:flex; align-items:center; gap:10px; padding:9px 13px; background:transparent; border:1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}; border-radius:10px; cursor:pointer; transition:background 0.15s,border-color 0.15s; }
+        .recent-item-hs:hover { background:rgba(79,70,229,0.06); border-color:rgba(79,70,229,0.3); }
       `}</style>
 
       {/* Title */}
       <div style={{ textAlign:'center', marginBottom:28 }}>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#F0EEF8', marginBottom:5 }}>What would you like to explore?</div>
-        <p style={{ fontSize:12, color:'rgba(255,255,255,0.22)' }}>click card · swipe down to cycle · swipe up to go back</p>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:t.text, marginBottom:5 }}>What would you like to explore?</div>
+        <p style={{ fontSize:12, color:t.text3 }}>click card · swipe down to cycle · swipe up to go back</p>
       </div>
 
       {/* Card stack */}
@@ -491,27 +497,27 @@ function HomeScreen({ conversations, onSelectTopic, t }) {
               style={{
                 position:'absolute', inset:0,
                 borderRadius:22, overflow:'hidden',
-                border:'1px solid rgba(255,255,255,0.07)',
-                background: m.bg,
+                border:`1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}`,
+                background: dark ? m.bgDark : m.bgLight,
                 willChange:'transform,opacity',
               }}
             >
-              {/* glow wash */}
-              <div style={{ position:'absolute', inset:0, borderRadius:22, pointerEvents:'none',
-                background:`radial-gradient(ellipse at 20% 55%,${m.glow} 0%,transparent 60%), radial-gradient(ellipse at 80% 15%,${m.glow} 0%,transparent 50%)` }}/>
+              {/* subtle top-left wash — dark only */}
+              {dark && <div style={{ position:'absolute', inset:0, borderRadius:22, pointerEvents:'none',
+                background:'radial-gradient(ellipse at 20% 40%, rgba(79,70,229,0.08) 0%, transparent 60%)' }}/>}
               {/* top accent */}
               <div style={{ position:'absolute', top:0, left:0, right:0, height:2,
-                background:`linear-gradient(90deg,${m.acc} 0%,transparent 65%)`, zIndex:2 }}/>
+                background:`linear-gradient(90deg,${dark?'rgba(79,70,229,0.5)':'rgba(79,70,229,0.35)'} 0%,transparent 65%)`, zIndex:2 }}/>
               {/* content */}
               <div style={{ position:'relative', zIndex:1, height:'100%', display:'flex', flexDirection:'column', pointerEvents:'none' }}>
                 {/* head */}
-                <div style={{ padding:'1.1rem 1.3rem 0.9rem', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid rgba(255,255,255,0.05)', flexShrink:0 }}>
-                  <div style={{ width:40, height:40, borderRadius:11, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:19, flexShrink:0 }}>{m.emoji}</div>
+                <div style={{ padding:'1.1rem 1.3rem 0.9rem', display:'flex', alignItems:'center', gap:12, borderBottom:`1px solid ${dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.06)'}`, flexShrink:0 }}>
+                  <div style={{ width:40, height:40, borderRadius:11, background:dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.04)', border:`1px solid ${dark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:19, flexShrink:0 }}>{m.emoji}</div>
                   <div>
-                    <div style={{ fontFamily:"'Playfair Display',serif", fontSize:21, fontWeight:600, color:m.acc, lineHeight:1, textShadow:`0 0 22px ${m.glow}` }}>{m.mod}</div>
-                    <div style={{ fontSize:11, color:'rgba(255,255,255,0.28)', marginTop:3 }}>{m.sub}</div>
+                    <div style={{ fontFamily:"'Playfair Display',serif", fontSize:21, fontWeight:600, color:'#4F46E5', lineHeight:1 }}>{m.mod}</div>
+                    <div style={{ fontSize:11, color:t.text3, marginTop:3 }}>{m.sub}</div>
                   </div>
-                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:600, padding:'3px 9px', borderRadius:20, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', color:'rgba(255,255,255,0.28)', whiteSpace:'nowrap' }}>
+                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:600, padding:'3px 9px', borderRadius:20, background:'rgba(255,255,255,0.04)', border:`1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}`, color:'rgba(255,255,255,0.28)', whiteSpace:'nowrap' }}>
                     {count} {count === 1 ? 'conv' : 'convs'}
                   </span>
                 </div>
@@ -523,17 +529,17 @@ function HomeScreen({ conversations, onSelectTopic, t }) {
                       return (
                         <span key={tp}
                           className={`topic-pill-hs${hasConv?' lit':''}`}
-                          style={{ '--pill-acc': m.acc }}
+                          style={{ '--pill-acc': '#4F46E5' }}
                           onClick={e => { e.stopPropagation(); onSelectTopic(m.key, tp) }}
                         >{tp}</span>
                       )
                     })}
                   </div>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:9, borderTop:'1px solid rgba(255,255,255,0.05)', marginTop:'auto' }}>
-                    <span style={{ fontSize:11, color:'rgba(255,255,255,0.16)' }}>click · swipe to cycle</span>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:9, borderTop:`1px solid ${dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.06)'}`, marginTop:'auto' }}>
+                    <span style={{ fontSize:11, color:t.text4 }}>click · swipe to cycle</span>
                     <button
                       className="cta-btn"
-                      style={{ '--cta-acc': m.acc, boxShadow:`0 0 12px ${m.glow}`, textShadow:`0 0 10px ${m.glow}` }}
+                      style={{}}
                       onClick={e => { e.stopPropagation(); onSelectTopic(m.key, null) }}
                     >Open {m.mod} →</button>
                   </div>
@@ -548,7 +554,7 @@ function HomeScreen({ conversations, onSelectTopic, t }) {
       <div style={{ display:'flex', gap:7, marginTop:16, alignItems:'center', justifyContent:'center' }}>
         {MODULE_STACK.map((_, i) => (
           <div key={i} style={{ width:6, height:6, borderRadius:'50%', transition:'background 0.35s, transform 0.35s',
-            background: slots.indexOf(0) === i ? '#ffffff' : 'rgba(255,255,255,0.14)',
+            background: slots.indexOf(0) === i ? (dark?'#ffffff':'#4F46E5') : (dark?'rgba(255,255,255,0.14)':'rgba(0,0,0,0.12)'),
             transform: slots.indexOf(0) === i ? 'scale(1.35)' : 'scale(1)',
           }}/>
         ))}
@@ -557,20 +563,20 @@ function HomeScreen({ conversations, onSelectTopic, t }) {
       {/* Recent conversations */}
       {conversations.length > 0 && (
         <div style={{ width:'min(100%, 34rem)', marginTop:24 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.2)', letterSpacing:0.9, textTransform:'uppercase', marginBottom:10 }}>Recent</div>
+          <div style={{ fontSize:10, fontWeight:700, color:t.text4, letterSpacing:0.9, textTransform:'uppercase', marginBottom:10 }}>Recent</div>
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
             {conversations.slice(0,4).map(conv => {
               const m = MODULE_STACK.find(x => x.key === conv.module)
               return (
                 <div key={conv.id} className="recent-item-hs" onClick={() => onSelectTopic(conv.module, conv.topic, conv.id)}>
                   <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:8,
-                    background: m ? `${m.acc}18` : 'rgba(255,255,255,0.06)',
-                    border: `1px solid ${m ? m.acc+'40' : 'rgba(255,255,255,0.1)'}`,
-                    color: m ? m.acc : 'rgba(255,255,255,0.4)', flexShrink:0 }}>
+                    background: 'rgba(79,70,229,0.1)',
+                    border: '1px solid rgba(79,70,229,0.2)',
+                    color: '#4F46E5', flexShrink:0 }}>
                     {conv.module?.split('–')[0].trim() || 'SAP'}
                   </span>
-                  <span style={{ fontSize:12, color:'rgba(255,255,255,0.55)', flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{conv.title}</span>
-                  <span style={{ fontSize:11, color:'rgba(255,255,255,0.2)', flexShrink:0 }}>{new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
+                  <span style={{ fontSize:12, color:t.text2, flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{conv.title}</span>
+                  <span style={{ fontSize:11, color:t.text4, flexShrink:0 }}>{new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
                 </div>
               )
             })}
@@ -609,12 +615,12 @@ function TopicView({ module: mod, topic, conversations, onSelectConv, onNewChat,
               const count = conversations.filter(c=>c.module===mod&&c.topic===tp).length
               return (
                 <div key={tp} onClick={()=>onSelectConv(null, mod, tp)}
-                  style={{ padding:'6px 14px', borderRadius:20, background:count>0?`rgba(200,80,192,0.1)`:t.surface2, border:`1.5px solid ${count>0?'rgba(200,80,192,0.3)':t.border}`, cursor:'pointer', fontSize:12, color:count>0?'#C850C0':t.text3, fontWeight:count>0?600:400, transition:'all 0.15s', display:'flex', alignItems:'center', gap:6 }}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor='#C850C0'}
-                  onMouseLeave={e=>e.currentTarget.style.borderColor=count>0?'rgba(200,80,192,0.3)':t.border}
+                  style={{ padding:'6px 14px', borderRadius:20, background:count>0?'rgba(79,70,229,0.08)':t.surface2, border:`1.5px solid ${count>0?'rgba(79,70,229,0.25)':t.border}`, cursor:'pointer', fontSize:12, color:count>0?'#4F46E5':t.text3, fontWeight:count>0?600:400, transition:'all 0.15s', display:'flex', alignItems:'center', gap:6 }}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor=count>0?'rgba(79,70,229,0.2)':t.border}
                 >
                   {tp}
-                  {count > 0 && <span style={{ background:'#C850C0', color:'#fff', borderRadius:10, padding:'0 6px', fontSize:10, fontWeight:700 }}>{count}</span>}
+                  {count > 0 && <span style={{ background:'#4F46E5', color:'#fff', borderRadius:10, padding:'0 6px', fontSize:10, fontWeight:700 }}>{count}</span>}
                 </div>
               )
             })}
@@ -635,7 +641,7 @@ function TopicView({ module: mod, topic, conversations, onSelectConv, onNewChat,
                 {convs.map(conv => (
                   <div key={conv.id} onClick={()=>onSelectConv(conv.id)}
                     style={{ padding:'14px 16px', borderRadius:12, background:t.surface, border:`1.5px solid ${t.border}`, cursor:'pointer', transition:'all 0.15s', display:'flex', alignItems:'center', justifyContent:'space-between' }}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor='#C850C0';e.currentTarget.style.boxShadow='0 4px 12px rgba(200,80,192,0.12)'}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 4px 12px rgba(79,70,229,0.1)'}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.boxShadow='none'}}
                   >
                     <div style={{ flex:1, minWidth:0 }}>
@@ -824,8 +830,8 @@ export default function Brain({ session }) {
         @keyframes blob2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-35px,25px) scale(0.93)}66%{transform:translate(25px,-15px) scale(1.05)}}
         @keyframes blob3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(20px,30px) scale(1.06)}}
         .tone-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.18s;font-weight:500;}
-        .tone-btn.active{background:linear-gradient(135deg,#C850C0,#FF6B35);border-color:transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 10px rgba(200,80,192,0.3);}
-        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(200,80,192,0.3);border-radius:4px}
+        .tone-btn.active{background:#4F46E5;border-color:transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 10px rgba(79,70,229,0.25);}
+        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(79,70,229,0.25);border-radius:4px}
         @media(max-width:768px){.main-topbar{padding:10px 14px!important;}.chat-input-wrap{padding:10px 12px 14px!important;}.chat-messages{padding:16px 12px!important;}}
       `}</style>
 
@@ -853,10 +859,10 @@ export default function Brain({ session }) {
             width:'100%', padding:'10px 14px', background:goldGrad, border:'none', borderRadius:10,
             color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif",
             display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-            boxShadow:'0 2px 10px rgba(200,80,192,0.25)', transition:'all 0.2s',
+            boxShadow:'0 2px 10px rgba(79,70,229,0.2)', transition:'all 0.2s',
           }}
-            onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(200,80,192,0.4)';e.currentTarget.style.transform='translateY(-1px)'}}
-            onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(200,80,192,0.25)';e.currentTarget.style.transform='translateY(0)'}}
+            onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
+            onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
           ><span style={{ fontSize:16 }}>+</span> New Conversation</button>
         </div>
 
@@ -866,7 +872,7 @@ export default function Brain({ session }) {
             <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:t.text4, fontSize:13 }}>🔍</span>
             <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search..."
               style={{ width:'100%', padding:'8px 10px 8px 32px', boxSizing:'border-box', border:`1.5px solid ${t.border}`, borderRadius:10, fontSize:13, color:t.text, background:t.inputBg, fontFamily:"'DM Sans',sans-serif", outline:'none', transition:'border-color 0.2s' }}
-              onFocus={e=>e.target.style.borderColor='#C850C0'}
+              onFocus={e=>e.target.style.borderColor='#4F46E5'}
               onBlur={e=>e.target.style.borderColor=t.border}
             />
           </div>
@@ -876,7 +882,7 @@ export default function Brain({ session }) {
         <div style={{ flex:1, overflowY:'auto', padding:'4px 8px 8px' }}>
           {dbLoading ? (
             <div style={{ padding:20, textAlign:'center' }}>
-              <div style={{ width:20, height:20, border:`2px solid ${t.border}`, borderTopColor:'#C850C0', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 8px' }}/>
+              <div style={{ width:20, height:20, border:`2px solid ${t.border}`, borderTopColor:'#4F46E5', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 8px' }}/>
               <span style={{ fontSize:12, color:t.text4 }}>Loading...</span>
             </div>
           ) : filteredConvs.length === 0 ? (
@@ -902,10 +908,10 @@ export default function Brain({ session }) {
         {/* Profile */}
         <div style={{ padding:'10px 14px', borderTop:`1px solid ${t.border}` }}>
           <div onClick={()=>setShowProfile(true)} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:10, cursor:'pointer', transition:'background 0.15s' }}
-            onMouseEnter={e=>e.currentTarget.style.background='rgba(200,80,192,0.08)'}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
             onMouseLeave={e=>e.currentTarget.style.background='transparent'}
           >
-            <div style={{ width:32, height:32, borderRadius:'50%', background:goldGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0, boxShadow:'0 2px 8px rgba(200,80,192,0.25)' }}>
+            <div style={{ width:32, height:32, borderRadius:'50%', background:goldGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0, boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>
               {getInitials(profile?.name, session.user.email)}
             </div>
             <div style={{ overflow:'hidden', flex:1 }}>
@@ -929,7 +935,7 @@ export default function Brain({ session }) {
         {/* Top bar */}
         <div className="main-topbar" style={{ padding:'11px 16px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:10, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2 }}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ background:'none', border:'none', cursor:'pointer', padding:'6px 8px', borderRadius:8, fontSize:16, color:t.text3, transition:'background 0.15s', flexShrink:0 }}
-            onMouseEnter={e=>e.currentTarget.style.background='rgba(200,80,192,0.08)'}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
             onMouseLeave={e=>e.currentTarget.style.background='none'}
           >☰</button>
 
@@ -955,7 +961,7 @@ export default function Brain({ session }) {
           {/* Dark mode toggle */}
           <button onClick={toggle} style={{
             width:44, height:24, borderRadius:12, border:'none', cursor:'pointer', position:'relative',
-            background: dark ? goldGrad : '#E8E3D5',
+            background: dark ? 'linear-gradient(135deg,#4F46E5,#6366F1)' : '#E2E2EA',
             transition:'background 0.3s', flexShrink:0,
           }}>
             <div style={{
@@ -986,14 +992,14 @@ export default function Brain({ session }) {
           <div style={{ background:t.summarise, borderBottom:`1px solid ${t.summariseBdr}`, padding:'9px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:13, flexShrink:0, position:'relative', zIndex:2, flexWrap:'wrap', gap:8 }}>
             <span style={{ color:t.summariseTxt }}>⚡ Getting long — summarise to keep it sharp?</span>
             <div style={{ display:'flex', gap:8 }}>
-              <button onClick={handleSummarise} disabled={isSummarising} style={{ padding:'5px 14px', background:goldGrad, border:'none', borderRadius:8, color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>{isSummarising?'Summarising…':'Summarise'}</button>
+              <button onClick={handleSummarise} disabled={isSummarising} style={{ padding:'5px 14px', background:'#4F46E5', border:'none', borderRadius:8, color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>{isSummarising?'Summarising…':'Summarise'}</button>
               <button onClick={()=>setShowSummarise(false)} style={{ padding:'5px 12px', background:'none', border:`1px solid ${t.summariseBdr}`, borderRadius:8, color:t.summariseTxt, fontSize:12, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>Dismiss</button>
             </div>
           </div>
         )}
 
         {/* Views */}
-        {view==='home' && <HomeScreen conversations={conversations} t={t} onSelectTopic={(mod, topic, convId)=>{ if(convId) goChat(convId); else goTopic(mod, topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)}/>}
+        {view==='home' && <HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod, topic, convId)=>{ if(convId) goChat(convId); else goTopic(mod, topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)}/>}
         {view==='topic' && <TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId) goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat' && (
@@ -1014,7 +1020,7 @@ export default function Brain({ session }) {
                         {STARTERS[browseTopic].map((s,i)=>(
                           <div key={i} onClick={()=>setInput(s)}
                             style={{ padding:'7px 14px', background:t.surface, border:`1.5px solid ${t.border}`, borderRadius:20, fontSize:12, color:t.text3, cursor:'pointer', transition:'all 0.15s' }}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor='#C850C0';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}}
                             onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3;e.currentTarget.style.background=t.surface}}
                           >{s}</div>
                         ))}
@@ -1041,7 +1047,7 @@ export default function Brain({ session }) {
             <div className="chat-input-wrap" style={{ padding:'11px 16px 14px', borderTop:`1px solid ${t.border}`, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2 }}>
               <div style={{ maxWidth:720, margin:'0 auto' }}>
                 <div style={{ display:'flex', gap:10, alignItems:'flex-end', background:t.inputBg, border:`1.5px solid ${t.border2}`, borderRadius:14, padding:'10px 12px', transition:'border-color 0.2s, box-shadow 0.2s' }}
-                  onFocusCapture={e=>{e.currentTarget.style.borderColor='#C850C0';e.currentTarget.style.boxShadow='0 0 0 3px rgba(200,80,192,0.1)'}}
+                  onFocusCapture={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)'}}
                   onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow='none'}}
                 >
                   <textarea ref={inputRef} value={input}
@@ -1052,7 +1058,7 @@ export default function Brain({ session }) {
                     style={{ flex:1, background:'transparent', border:'none', resize:'none', fontSize:14, color:t.text, fontFamily:"'DM Sans',sans-serif", lineHeight:1.65, height:'24px', maxHeight:'160px', overflowY:'auto', padding:0, outline:'none' }}
                   />
                   <button onClick={handleSend} disabled={!input.trim()||isLoading||isStreaming}
-                    style={{ width:36, height:36, borderRadius:10, border:'none', flexShrink:0, background:input.trim()&&!isLoading&&!isStreaming?goldGrad:t.border, color:input.trim()&&!isLoading&&!isStreaming?'#fff':t.text4, cursor:input.trim()&&!isLoading&&!isStreaming?'pointer':'not-allowed', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.2s' }}
+                    style={{ width:36, height:36, borderRadius:10, border:'none', flexShrink:0, background:input.trim()&&!isLoading&&!isStreaming?'#4F46E5':t.border, color:input.trim()&&!isLoading&&!isStreaming?'#fff':t.text4, cursor:input.trim()&&!isLoading&&!isStreaming?'pointer':'not-allowed', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.2s' }}
                   >→</button>
                 </div>
                 <div style={{ fontSize:11, color:t.text4, textAlign:'right', marginTop:4 }}>
