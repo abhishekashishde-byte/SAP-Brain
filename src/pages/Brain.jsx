@@ -279,86 +279,304 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
   )
 }
 
-// ─── HomeScreen ───────────────────────────────────────────────────────────────
-function HomeScreen({ conversations, onSelectTopic, t }) {
-  return (
-    <div style={{ flex:1, overflowY:'auto', padding:'24px 16px', position:'relative', zIndex:1 }}>
-      <div style={{ maxWidth:860, margin:'0 auto' }}>
-        {/* Header */}
-        <div style={{ marginBottom:28, textAlign:'center' }}>
-          <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:14, marginBottom:14 }}>
-            <WaniLogo size={40} dark={false}/>
-            <WaniWordmark height={28} dark={false}/>
-          </div>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:600, color:t.text, marginBottom:6 }}>What would you like to explore?</div>
-          <p style={{ fontSize:13, color:t.text3, lineHeight:1.6 }}>Select a module to browse conversations or start a new one</p>
-        </div>
+// ─── HomeScreen — Card Stack ──────────────────────────────────────────────────
+const MODULE_STACK = [
+  {
+    key: 'PP – Production Planning',
+    mod: 'PP', sub: 'Production Planning',
+    acc: '#22c55e', glow: 'rgba(34,197,94,0.16)',
+    bg: 'radial-gradient(ellipse at 30% 60%,rgba(16,42,22,0.99),rgba(5,9,7,0.99))',
+    emoji: '⚙️',
+  },
+  {
+    key: 'PM – Plant Maintenance',
+    mod: 'PM', sub: 'Plant Maintenance',
+    acc: '#818cf8', glow: 'rgba(129,140,248,0.16)',
+    bg: 'radial-gradient(ellipse at 30% 60%,rgba(18,14,46,0.99),rgba(6,5,18,0.99))',
+    emoji: '🔧',
+  },
+  {
+    key: 'MM – Logistics',
+    mod: 'MM', sub: 'Logistics',
+    acc: '#fb923c', glow: 'rgba(251,146,60,0.16)',
+    bg: 'radial-gradient(ellipse at 30% 60%,rgba(38,16,4,0.99),rgba(10,5,2,0.99))',
+    emoji: '📦',
+  },
+  {
+    key: 'Fiori / UX',
+    mod: 'Fiori', sub: 'User Experience',
+    acc: '#38bdf8', glow: 'rgba(56,189,248,0.16)',
+    bg: 'radial-gradient(ellipse at 30% 60%,rgba(4,20,38,0.99),rgba(2,6,14,0.99))',
+    emoji: '◻',
+  },
+  {
+    key: 'S/4HANA General',
+    mod: 'S/4HANA', sub: 'General',
+    acc: '#fbbf24', glow: 'rgba(251,191,36,0.16)',
+    bg: 'radial-gradient(ellipse at 30% 60%,rgba(32,20,2,0.99),rgba(8,6,1,0.99))',
+    emoji: '◈',
+  },
+]
 
-        {/* Module grid — responsive */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:14, marginBottom:28 }}>
-          {Object.entries(TOPICS).map(([mod, topics]) => {
-            const colors = MODULE_COLORS[mod]
-            const count = conversations.filter(c=>c.module===mod).length
-            return (
-              <div key={mod}
-                style={{ borderRadius:16, background:`linear-gradient(135deg,${colors.from},${colors.to})`, padding:'18px 18px 14px', cursor:'pointer', boxShadow:'0 4px 20px rgba(0,0,0,0.15)', transition:'all 0.2s', position:'relative', overflow:'hidden' }}
-                onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow='0 8px 28px rgba(0,0,0,0.22)'}}
-                onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='0 4px 20px rgba(0,0,0,0.15)'}}
-                onClick={()=>onSelectTopic(mod, null)}
-              >
-                <div style={{ position:'absolute', width:80, height:80, borderRadius:'50%', background:'rgba(255,255,255,0.08)', top:-20, right:-20 }}/>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                  <span style={{ fontSize:20 }}>{colors.emoji}</span>
-                  {count > 0 && <span style={{ background:'rgba(255,255,255,0.25)', color:'#fff', fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20 }}>{count}</span>}
+const SCALE_STEP   = 0.055
+const Y_STEP       = 22
+const OPACITY_STEP = 0.17
+const N_CARDS      = MODULE_STACK.length
+
+function slotStyle(slot) {
+  if (slot === 0) return { transform:'translateY(0px) scale(1)', opacity:1, zIndex:N_CARDS, pointerEvents:'auto' }
+  const scale   = 1 - SCALE_STEP * slot
+  const y       = -Y_STEP * slot
+  const opacity = Math.max(0.05, 1 - OPACITY_STEP * slot)
+  return { transform:`translateY(${y}px) scale(${scale})`, opacity, zIndex:N_CARDS - slot, pointerEvents:'none' }
+}
+
+function HomeScreen({ conversations, onSelectTopic, t }) {
+  const [slots, setSlots]     = useState(MODULE_STACK.map((_,i) => i))
+  const [busy, setBusy]       = useState(false)
+  const cardRefs              = useRef([])
+  const touchY                = useRef(0)
+  const touchDragging         = useRef(false)
+  const mouseY                = useRef(0)
+  const mouseDragging         = useRef(false)
+  const mouseDown             = useRef(false)
+
+  // Apply transform directly to DOM node for drag-follow (no re-render lag)
+  const applyDirect = (idx, transform, opacity) => {
+    const el = cardRefs.current[idx]
+    if (!el) return
+    el.style.transition = 'none'
+    el.style.transform  = transform
+    el.style.opacity    = opacity
+  }
+
+  const applySlot = (idx, slot, transition) => {
+    const el = cardRefs.current[idx]
+    if (!el) return
+    const s = slotStyle(slot)
+    el.style.transition   = transition
+    el.style.transform    = s.transform
+    el.style.opacity      = s.opacity
+    el.style.zIndex       = s.zIndex
+    el.style.pointerEvents = s.pointerEvents
+  }
+
+  const renderAll = (newSlots, transition) => {
+    newSlots.forEach((slot, idx) => applySlot(idx, slot, transition))
+  }
+
+  const SPRING = 'transform 520ms cubic-bezier(0.22,1.4,0.36,1), opacity 420ms ease'
+  const SNAP   = 'transform 320ms cubic-bezier(0.34,1.3,0.64,1), opacity 280ms ease'
+
+  const advance = () => {
+    if (busy) return
+    setBusy(true)
+    const frontIdx = slots.indexOf(0)
+    const el = cardRefs.current[frontIdx]
+    if (el) {
+      el.style.transition = 'transform 260ms cubic-bezier(0.4,0,1,1), opacity 200ms ease'
+      el.style.transform  = 'translateY(60px) scale(0.84)'
+      el.style.opacity    = '0'
+      el.style.zIndex     = '0'
+    }
+    setTimeout(() => {
+      const newSlots = slots.map(s => s === 0 ? N_CARDS - 1 : s - 1)
+      // place ejected card at back instantly
+      applySlot(frontIdx, N_CARDS - 1, 'none')
+      // animate rest forward
+      newSlots.forEach((slot, idx) => {
+        if (idx !== frontIdx) applySlot(idx, slot, SPRING)
+      })
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          applySlot(frontIdx, newSlots[frontIdx], SPRING)
+          setSlots(newSlots)
+          setTimeout(() => setBusy(false), 540)
+        }, 60)
+      })
+    }, 200)
+  }
+
+  const retreat = () => {
+    if (busy) return
+    setBusy(true)
+    const newSlots = slots.map(s => s === N_CARDS - 1 ? 0 : s + 1)
+    setSlots(newSlots)
+    renderAll(newSlots, SPRING)
+    setTimeout(() => setBusy(false), 560)
+  }
+
+  // Sync DOM when slots state changes (covers retreat + initial)
+  useEffect(() => {
+    renderAll(slots, 'none')
+  }, []) // only on mount — advance/retreat manage DOM directly
+
+  const frontIdx = slots.indexOf(0)
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:'24px 16px 32px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', alignItems:'center' }}>
+      <style>{`
+        @keyframes deckIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        .deck-wrap { animation: deckIn 0.5s ease both; }
+        .topic-pill-hs { font-size:11px; padding:5px 12px; border-radius:20px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07); color:rgba(255,255,255,0.4); cursor:pointer; transition:border-color 0.2s,color 0.2s; white-space:nowrap; pointer-events:auto; position:relative; z-index:30; }
+        .topic-pill-hs:hover { color:var(--pill-acc); border-color:var(--pill-acc); }
+        .topic-pill-hs.lit { border-color:var(--pill-acc); color:var(--pill-acc); }
+        .cta-btn { font-size:11px; font-weight:600; padding:6px 16px; border-radius:20px; border:1px solid var(--cta-acc); background:transparent; color:var(--cta-acc); font-family:'DM Sans',sans-serif; cursor:pointer; pointer-events:auto; position:relative; z-index:30; transition:background 0.2s; }
+        .cta-btn:hover { background:rgba(255,255,255,0.06); }
+        .recent-item-hs { display:flex; align-items:center; gap:10px; padding:9px 13px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:10px; cursor:pointer; transition:background 0.15s,border-color 0.15s; }
+        .recent-item-hs:hover { background:rgba(200,80,192,0.06); border-color:rgba(200,80,192,0.2); }
+      `}</style>
+
+      {/* Title */}
+      <div style={{ textAlign:'center', marginBottom:28 }}>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#F0EEF8', marginBottom:5 }}>What would you like to explore?</div>
+        <p style={{ fontSize:12, color:'rgba(255,255,255,0.22)' }}>click card · swipe down to cycle · swipe up to go back</p>
+      </div>
+
+      {/* Card stack */}
+      <div
+        className="deck-wrap"
+        style={{ position:'relative', width:'min(100%, 34rem)', height:290, touchAction:'none', cursor:'pointer' }}
+        onClick={e => { if (e.target.closest('.cta-btn') || e.target.closest('.topic-pill-hs')) return; advance() }}
+        onMouseDown={e => { if (e.target.closest('.cta-btn') || e.target.closest('.topic-pill-hs')) return; mouseDown.current=true; mouseY.current=e.clientY; mouseDragging.current=false }}
+        onMouseMove={e => {
+          if (!mouseDown.current || busy) return
+          const dy = e.clientY - mouseY.current
+          if (Math.abs(dy) > 6) mouseDragging.current = true
+          if (!mouseDragging.current) return
+          const c = Math.max(-80, Math.min(100, dy))
+          const p = Math.abs(c) / 140
+          applyDirect(frontIdx, `translateY(${c*0.45}px) scale(${1-p*0.05})`, String(1-p*0.35))
+        }}
+        onMouseUp={e => {
+          if (!mouseDown.current) return
+          mouseDown.current = false
+          const dy = e.clientY - mouseY.current
+          if (mouseDragging.current) {
+            if (dy > 40) advance()
+            else if (dy < -40) retreat()
+            else { applySlot(frontIdx, 0, SNAP) }
+          }
+          mouseDragging.current = false
+        }}
+        onMouseLeave={() => {
+          if (mouseDown.current && !mouseDragging.current) mouseDown.current = false
+        }}
+        onTouchStart={e => { touchY.current=e.touches[0].clientY; touchDragging.current=false }}
+        onTouchMove={e => {
+          const dy = e.touches[0].clientY - touchY.current
+          if (!touchDragging.current && Math.abs(dy) > 8) touchDragging.current = true
+          if (!touchDragging.current || busy) return
+          const c = Math.max(-80, Math.min(100, dy))
+          const p = Math.abs(c) / 140
+          applyDirect(frontIdx, `translateY(${c*0.45}px) scale(${1-p*0.05})`, String(1-p*0.35))
+        }}
+        onTouchEnd={e => {
+          const dy = e.changedTouches[0].clientY - touchY.current
+          if (touchDragging.current) {
+            if (dy > 52) advance()
+            else if (dy < -52) retreat()
+            else { applySlot(frontIdx, 0, SNAP) }
+          }
+          touchDragging.current = false
+        }}
+      >
+        {MODULE_STACK.map((m, idx) => {
+          const count  = conversations.filter(c => c.module === m.key).length
+          const topics = TOPICS[m.key] || []
+          return (
+            <div
+              key={m.key}
+              ref={el => cardRefs.current[idx] = el}
+              style={{
+                position:'absolute', inset:0,
+                borderRadius:22, overflow:'hidden',
+                border:'1px solid rgba(255,255,255,0.07)',
+                background: m.bg,
+                willChange:'transform,opacity',
+              }}
+            >
+              {/* glow wash */}
+              <div style={{ position:'absolute', inset:0, borderRadius:22, pointerEvents:'none',
+                background:`radial-gradient(ellipse at 20% 55%,${m.glow} 0%,transparent 60%), radial-gradient(ellipse at 80% 15%,${m.glow} 0%,transparent 50%)` }}/>
+              {/* top accent */}
+              <div style={{ position:'absolute', top:0, left:0, right:0, height:2,
+                background:`linear-gradient(90deg,${m.acc} 0%,transparent 65%)`, zIndex:2 }}/>
+              {/* content */}
+              <div style={{ position:'relative', zIndex:1, height:'100%', display:'flex', flexDirection:'column', pointerEvents:'none' }}>
+                {/* head */}
+                <div style={{ padding:'1.1rem 1.3rem 0.9rem', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid rgba(255,255,255,0.05)', flexShrink:0 }}>
+                  <div style={{ width:40, height:40, borderRadius:11, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:19, flexShrink:0 }}>{m.emoji}</div>
+                  <div>
+                    <div style={{ fontFamily:"'Playfair Display',serif", fontSize:21, fontWeight:600, color:m.acc, lineHeight:1, textShadow:`0 0 22px ${m.glow}` }}>{m.mod}</div>
+                    <div style={{ fontSize:11, color:'rgba(255,255,255,0.28)', marginTop:3 }}>{m.sub}</div>
+                  </div>
+                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:600, padding:'3px 9px', borderRadius:20, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', color:'rgba(255,255,255,0.28)', whiteSpace:'nowrap' }}>
+                    {count} {count === 1 ? 'conv' : 'convs'}
+                  </span>
                 </div>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:15, fontWeight:600, color:'#fff', marginBottom:10, lineHeight:1.3 }}>
-                  {mod.split('–')[0].trim()}<br/>
-                  <span style={{ fontSize:11, opacity:0.7, fontFamily:"'DM Sans',sans-serif", fontWeight:400 }}>{mod.includes('–') ? mod.split('–')[1].trim() : ''}</span>
-                </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-                  {topics.slice(0,3).map(t2 => {
-                    const hasConv = conversations.some(c=>c.module===mod&&c.topic===t2)
-                    return (
-                      <span key={t2} onClick={e=>{e.stopPropagation();onSelectTopic(mod,t2)}}
-                        style={{ fontSize:10, padding:'3px 8px', background:hasConv?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.15)', color:'#fff', borderRadius:20, fontWeight:hasConv?600:400, cursor:'pointer', border:hasConv?'1px solid rgba(255,255,255,0.5)':'1px solid transparent', transition:'background 0.15s' }}
-                        onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.45)'}
-                        onMouseLeave={e=>e.currentTarget.style.background=hasConv?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.15)'}
-                      >{t2}</span>
-                    )
-                  })}
-                  {topics.length > 3 && <span style={{ fontSize:10, padding:'3px 8px', background:'rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.6)', borderRadius:20 }}>+{topics.length-3}</span>}
+                {/* body */}
+                <div style={{ padding:'0.9rem 1.3rem 1.1rem', display:'flex', flexDirection:'column', gap:11, flex:1 }}>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                    {topics.map((tp, ti) => {
+                      const hasConv = conversations.some(c => c.module===m.key && c.topic===tp)
+                      return (
+                        <span key={tp}
+                          className={`topic-pill-hs${hasConv?' lit':''}`}
+                          style={{ '--pill-acc': m.acc }}
+                          onClick={e => { e.stopPropagation(); onSelectTopic(m.key, tp) }}
+                        >{tp}</span>
+                      )
+                    })}
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:9, borderTop:'1px solid rgba(255,255,255,0.05)', marginTop:'auto' }}>
+                    <span style={{ fontSize:11, color:'rgba(255,255,255,0.16)' }}>click · swipe to cycle</span>
+                    <button
+                      className="cta-btn"
+                      style={{ '--cta-acc': m.acc, boxShadow:`0 0 12px ${m.glow}`, textShadow:`0 0 10px ${m.glow}` }}
+                      onClick={e => { e.stopPropagation(); onSelectTopic(m.key, null) }}
+                    >Open {m.mod} →</button>
+                  </div>
                 </div>
               </div>
-            )
-          })}
-        </div>
-
-        {/* Recent conversations */}
-        {conversations.length > 0 && (
-          <div>
-            <div style={{ fontSize:11, fontWeight:700, color:t.text4, letterSpacing:0.8, textTransform:'uppercase', marginBottom:10 }}>Recent</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:10 }}>
-              {conversations.slice(0,6).map(conv => {
-                const colors = MODULE_COLORS[conv.module] || { from:'#6B7280', to:'#4B5563' }
-                return (
-                  <div key={conv.id} onClick={()=>onSelectTopic(conv.module, conv.topic, conv.id)}
-                    style={{ padding:'12px 14px', borderRadius:12, background:t.surface, border:`1.5px solid ${t.border}`, cursor:'pointer', transition:'all 0.15s', boxShadow:`0 2px 8px rgba(0,0,0,0.06)` }}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor='#C850C0';e.currentTarget.style.boxShadow='0 4px 16px rgba(200,80,192,0.15)'}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.boxShadow=`0 2px 8px rgba(0,0,0,0.06)`}}
-                  >
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
-                      <div style={{ width:8, height:8, borderRadius:'50%', background:`linear-gradient(135deg,${colors.from},${colors.to})`, flexShrink:0 }}/>
-                      <span style={{ fontSize:10, color:t.text4, fontWeight:500 }}>{conv.module?.split('–')[0].trim()}</span>
-                    </div>
-                    <div style={{ fontSize:13, fontWeight:500, color:t.text, lineHeight:1.4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{conv.title}</div>
-                    <div style={{ fontSize:11, color:t.text4, marginTop:4 }}>{new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
-                  </div>
-                )
-              })}
             </div>
-          </div>
-        )}
+          )
+        })}
       </div>
+
+      {/* Dot indicators */}
+      <div style={{ display:'flex', gap:7, marginTop:16, alignItems:'center', justifyContent:'center' }}>
+        {MODULE_STACK.map((_, i) => (
+          <div key={i} style={{ width:6, height:6, borderRadius:'50%', transition:'background 0.35s, transform 0.35s',
+            background: slots.indexOf(0) === i ? '#ffffff' : 'rgba(255,255,255,0.14)',
+            transform: slots.indexOf(0) === i ? 'scale(1.35)' : 'scale(1)',
+          }}/>
+        ))}
+      </div>
+
+      {/* Recent conversations */}
+      {conversations.length > 0 && (
+        <div style={{ width:'min(100%, 34rem)', marginTop:24 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.2)', letterSpacing:0.9, textTransform:'uppercase', marginBottom:10 }}>Recent</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {conversations.slice(0,4).map(conv => {
+              const m = MODULE_STACK.find(x => x.key === conv.module)
+              return (
+                <div key={conv.id} className="recent-item-hs" onClick={() => onSelectTopic(conv.module, conv.topic, conv.id)}>
+                  <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:8,
+                    background: m ? `${m.acc}18` : 'rgba(255,255,255,0.06)',
+                    border: `1px solid ${m ? m.acc+'40' : 'rgba(255,255,255,0.1)'}`,
+                    color: m ? m.acc : 'rgba(255,255,255,0.4)', flexShrink:0 }}>
+                    {conv.module?.split('–')[0].trim() || 'SAP'}
+                  </span>
+                  <span style={{ fontSize:12, color:'rgba(255,255,255,0.55)', flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{conv.title}</span>
+                  <span style={{ fontSize:11, color:'rgba(255,255,255,0.2)', flexShrink:0 }}>{new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
