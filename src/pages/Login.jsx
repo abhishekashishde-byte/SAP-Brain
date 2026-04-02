@@ -1,37 +1,41 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-export const WaniLogo = ({ size = 56 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="lg1" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#C850C0"/>
-        <stop offset="100%" stopColor="#FFCC70"/>
-      </linearGradient>
-      <linearGradient id="lg2" x1="100%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stopColor="#FF6B35"/>
-        <stop offset="100%" stopColor="#C850C0"/>
-      </linearGradient>
-      <linearGradient id="lg3" x1="0%" y1="100%" x2="100%" y2="0%">
-        <stop offset="0%" stopColor="#FFCC70"/>
-        <stop offset="100%" stopColor="#FF6B35"/>
-      </linearGradient>
-      <linearGradient id="lg4" x1="100%" y1="100%" x2="0%" y2="0%">
-        <stop offset="0%" stopColor="#C850C0"/>
-        <stop offset="100%" stopColor="#FFCC70"/>
-      </linearGradient>
-    </defs>
-    <circle cx="32" cy="32" r="19" stroke="url(#lg1)" strokeWidth="8.5" fill="none"/>
-    <circle cx="68" cy="32" r="19" stroke="url(#lg2)" strokeWidth="8.5" fill="none"/>
-    <circle cx="32" cy="68" r="19" stroke="url(#lg3)" strokeWidth="8.5" fill="none"/>
-    <circle cx="68" cy="68" r="19" stroke="url(#lg4)" strokeWidth="8.5" fill="none"/>
-  </svg>
-)
+// ── Logo components
+export const WaniLogo = ({ size = 36, dark = false }) => {
+  const color = dark ? 'white' : 'black'
+  return (
+    <svg width={size} height={size * 0.6} viewBox="0 0 110 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0,25 Q0,5 15,5 Q30,5 30,25 L30,65 Q30,85 45,85 Q60,85 60,65 L60,5"
+        fill="none" stroke={color} strokeWidth="24" strokeLinecap="round"/>
+      <rect x="75" y="5" width="28" height="28" rx="6" fill={color}/>
+    </svg>
+  )
+}
 
-const labelStyle = {fontSize:10,fontWeight:600,color:'#8A8A8E',letterSpacing:0.8,textTransform:'uppercase',display:'block',marginBottom:6}
-const errorBox   = {marginTop:10,padding:'8px 12px',background:'#FEF2F2',border:'1px solid #FECACA',borderRadius:8,fontSize:12,color:'#DC2626'}
-const successBox = {marginTop:10,padding:'8px 12px',background:'#F0FDF4',border:'1px solid #BBF7D0',borderRadius:8,fontSize:12,color:'#15803D',lineHeight:1.5}
-const Spinner    = () => <div style={{width:16,height:16,border:'2px solid rgba(255,255,255,0.4)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+export const WaniWordmark = ({ height = 28, dark = false }) => {
+  const color = dark ? 'white' : 'black'
+  const width = height * 5.2
+  return (
+    <svg width={width} height={height} viewBox="0 0 300 58" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20,40 Q10,40 10,60 L10,110 Q10,125 25,125 Q40,125 40,110 L40,70 Q40,60 50,60 Q60,60 60,70 L60,110 Q60,125 75,125 Q90,125 90,110 L90,50 Q90,40 80,40 Q70,40 70,50 L70,90 Q70,100 65,100 Q60,100 60,90 L60,40"
+        fill={color} transform="scale(0.46) translate(0,-30)"/>
+      <rect x="53" y="16" width="13" height="13" rx="3" fill={color}/>
+      <path d="M75,54 L75,31 Q75,22 85,22 Q95,22 95,31 L95,54 M95,42 L75,42"
+        fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M106,54 L106,33 Q106,22 116,22 Q126,22 126,33 L126,54"
+        fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"/>
+      <rect x="136" y="22" width="10" height="32" rx="5" fill={color}/>
+      <rect x="135" y="8" width="11" height="11" rx="3" fill={color}/>
+    </svg>
+  )
+}
+
+// ── Shared styles
+const labelStyle = { fontSize:10, fontWeight:700, color:'#8A8A8E', letterSpacing:0.8, textTransform:'uppercase', display:'block', marginBottom:6 }
+const errorBox   = { marginTop:10, padding:'8px 12px', background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:8, fontSize:12, color:'#DC2626' }
+const successBox = { marginTop:10, padding:'8px 12px', background:'#F0FDF4', border:'1px solid #BBF7D0', borderRadius:8, fontSize:12, color:'#15803D', lineHeight:1.5 }
+const Spinner    = () => <div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
 
 function SignInForm({ onSwitch }) {
   const [email, setEmail]       = useState('')
@@ -42,31 +46,25 @@ function SignInForm({ onSwitch }) {
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) return setError('Please enter email and password.')
     setLoading(true); setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email:email.trim(), password })
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     setLoading(false)
     if (error) setError('Incorrect email or password.')
   }
 
   const handleGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    })
+    await supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
   }
 
   return (
-    <div style={{width:'100%',maxWidth:280}}>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:600,color:'#1C1C1E',textAlign:'center',marginBottom:4}}>Sign In</div>
-      <p style={{fontSize:12,color:'#AEAEB2',textAlign:'center',marginBottom:20}}>Welcome back to Wani</p>
-
-      {/* Google button */}
+    <div style={{ width:'100%', maxWidth:300 }}>
+      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#1C1C1E', textAlign:'center', marginBottom:4 }}>Sign In</div>
+      <p style={{ fontSize:12, color:'#AEAEB2', textAlign:'center', marginBottom:20 }}>Welcome back to Wani</p>
       <button onClick={handleGoogle} style={{
-        width:'100%',padding:'11px',border:'1.5px solid #E8E3D5',borderRadius:12,
-        background:'#fff',color:'#3A3A3C',fontSize:13,fontWeight:500,
-        fontFamily:"'DM Sans',sans-serif",cursor:'pointer',
-        display:'flex',alignItems:'center',justifyContent:'center',gap:10,
-        marginBottom:16,transition:'all 0.2s',
-        boxShadow:'2px 2px 6px rgba(0,0,0,0.06)',
+        width:'100%', padding:'11px', border:'1.5px solid #E8E3D5', borderRadius:12,
+        background:'#fff', color:'#3A3A3C', fontSize:13, fontWeight:500,
+        fontFamily:"'DM Sans',sans-serif", cursor:'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+        marginBottom:16, transition:'all 0.2s', boxShadow:'2px 2px 6px rgba(0,0,0,0.06)',
       }}
         onMouseEnter={e=>e.currentTarget.style.background='#FAFAF8'}
         onMouseLeave={e=>e.currentTarget.style.background='#fff'}
@@ -79,34 +77,22 @@ function SignInForm({ onSwitch }) {
         </svg>
         Continue with Google
       </button>
-
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-        <div style={{flex:1,height:1,background:'#E8E3D5'}}/>
-        <span style={{fontSize:11,color:'#AEAEB2'}}>or</span>
-        <div style={{flex:1,height:1,background:'#E8E3D5'}}/>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+        <div style={{ flex:1, height:1, background:'#E8E3D5' }}/><span style={{ fontSize:11, color:'#AEAEB2' }}>or</span><div style={{ flex:1, height:1, background:'#E8E3D5' }}/>
       </div>
-
-      <div style={{display:'flex',flexDirection:'column',gap:12}}>
-        <div>
-          <label style={labelStyle}>Email</label>
-          <input className="nm-input" type="email" value={email}
-            onChange={e=>{setEmail(e.target.value);setError('')}}
-            onKeyDown={e=>e.key==='Enter'&&handleSignIn()}
-            placeholder="you@company.com"/>
+      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        <div><label style={labelStyle}>Email</label>
+          <input className="nm-input" type="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}} onKeyDown={e=>e.key==='Enter'&&handleSignIn()} placeholder="you@company.com"/>
         </div>
-        <div>
-          <label style={labelStyle}>Password</label>
-          <input className="nm-input" type="password" value={password}
-            onChange={e=>{setPassword(e.target.value);setError('')}}
-            onKeyDown={e=>e.key==='Enter'&&handleSignIn()}
-            placeholder="••••••••"/>
+        <div><label style={labelStyle}>Password</label>
+          <input className="nm-input" type="password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}} onKeyDown={e=>e.key==='Enter'&&handleSignIn()} placeholder="••••••••"/>
         </div>
       </div>
       {error && <div style={errorBox}>{error}</div>}
-      <button className="gold-btn" onClick={handleSignIn} disabled={loading} style={{marginTop:20}}>
+      <button className="grad-btn" onClick={handleSignIn} disabled={loading} style={{ marginTop:20 }}>
         {loading ? <Spinner/> : 'SIGN IN →'}
       </button>
-      <div style={{textAlign:'center',marginTop:14,fontSize:12,color:'#AEAEB2'}}>
+      <div style={{ textAlign:'center', marginTop:14, fontSize:12, color:'#AEAEB2' }}>
         No account? <button className="ghost-link" onClick={onSwitch}>Sign up free</button>
       </div>
     </div>
@@ -114,47 +100,39 @@ function SignInForm({ onSwitch }) {
 }
 
 function SignUpForm({ onSwitch }) {
-  const [name, setName]           = useState('')
-  const [email, setEmail]         = useState('')
-  const [password, setPassword]   = useState('')
-  const [confirm, setConfirm]     = useState('')
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
-  const [success, setSuccess]     = useState('')
+  const [name, setName]         = useState('')
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm]   = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
+  const [success, setSuccess]   = useState('')
 
   const handleSignUp = async () => {
     if (!email.trim() || !password.trim()) return setError('Please fill in all fields.')
     if (password.length < 6) return setError('Password must be at least 6 characters.')
     if (password !== confirm) return setError('Passwords do not match.')
     setLoading(true); setError('')
-    const { error } = await supabase.auth.signUp({
-      email: email.trim(), password,
-      options: { data: { name: name.trim() } }
-    })
+    const { error } = await supabase.auth.signUp({ email:email.trim(), password, options:{ data:{ name:name.trim() } } })
     setLoading(false)
     if (error) setError(error.message)
     else setSuccess('Account created! You can now sign in.')
   }
 
   const handleGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    })
+    await supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
   }
 
   return (
-    <div style={{width:'100%',maxWidth:280}}>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:600,color:'#1C1C1E',textAlign:'center',marginBottom:4}}>Create Account</div>
-      <p style={{fontSize:12,color:'#AEAEB2',textAlign:'center',marginBottom:16}}>Your private SAP knowledge base</p>
-
+    <div style={{ width:'100%', maxWidth:300 }}>
+      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#1C1C1E', textAlign:'center', marginBottom:4 }}>Create Account</div>
+      <p style={{ fontSize:12, color:'#AEAEB2', textAlign:'center', marginBottom:16 }}>Your private SAP knowledge base</p>
       <button onClick={handleGoogle} style={{
-        width:'100%',padding:'11px',border:'1.5px solid #E8E3D5',borderRadius:12,
-        background:'#fff',color:'#3A3A3C',fontSize:13,fontWeight:500,
-        fontFamily:"'DM Sans',sans-serif",cursor:'pointer',
-        display:'flex',alignItems:'center',justifyContent:'center',gap:10,
-        marginBottom:14,transition:'all 0.2s',
-        boxShadow:'2px 2px 6px rgba(0,0,0,0.06)',
+        width:'100%', padding:'11px', border:'1.5px solid #E8E3D5', borderRadius:12,
+        background:'#fff', color:'#3A3A3C', fontSize:13, fontWeight:500,
+        fontFamily:"'DM Sans',sans-serif", cursor:'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+        marginBottom:14, transition:'all 0.2s', boxShadow:'2px 2px 6px rgba(0,0,0,0.06)',
       }}
         onMouseEnter={e=>e.currentTarget.style.background='#FAFAF8'}
         onMouseLeave={e=>e.currentTarget.style.background='#fff'}
@@ -167,43 +145,21 @@ function SignUpForm({ onSwitch }) {
         </svg>
         Continue with Google
       </button>
-
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
-        <div style={{flex:1,height:1,background:'#E8E3D5'}}/>
-        <span style={{fontSize:11,color:'#AEAEB2'}}>or</span>
-        <div style={{flex:1,height:1,background:'#E8E3D5'}}/>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+        <div style={{ flex:1, height:1, background:'#E8E3D5' }}/><span style={{ fontSize:11, color:'#AEAEB2' }}>or</span><div style={{ flex:1, height:1, background:'#E8E3D5' }}/>
       </div>
-
-      <div style={{display:'flex',flexDirection:'column',gap:9}}>
-        <div>
-          <label style={labelStyle}>Name</label>
-          <input className="nm-input" type="text" value={name}
-            onChange={e=>{setName(e.target.value);setError('')}} placeholder="Your name"/>
-        </div>
-        <div>
-          <label style={labelStyle}>Email</label>
-          <input className="nm-input" type="email" value={email}
-            onChange={e=>{setEmail(e.target.value);setError('')}} placeholder="you@company.com"/>
-        </div>
-        <div>
-          <label style={labelStyle}>Password</label>
-          <input className="nm-input" type="password" value={password}
-            onChange={e=>{setPassword(e.target.value);setError('')}} placeholder="Min. 6 characters"/>
-        </div>
-        <div>
-          <label style={labelStyle}>Confirm Password</label>
-          <input className="nm-input" type="password" value={confirm}
-            onChange={e=>{setConfirm(e.target.value);setError('')}}
-            onKeyDown={e=>e.key==='Enter'&&handleSignUp()}
-            placeholder="Repeat password"/>
-        </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+        <div><label style={labelStyle}>Name</label><input className="nm-input" type="text" value={name} onChange={e=>{setName(e.target.value);setError('')}} placeholder="Your name"/></div>
+        <div><label style={labelStyle}>Email</label><input className="nm-input" type="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}} placeholder="you@company.com"/></div>
+        <div><label style={labelStyle}>Password</label><input className="nm-input" type="password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}} placeholder="Min. 6 characters"/></div>
+        <div><label style={labelStyle}>Confirm Password</label><input className="nm-input" type="password" value={confirm} onChange={e=>{setConfirm(e.target.value);setError('')}} onKeyDown={e=>e.key==='Enter'&&handleSignUp()} placeholder="Repeat password"/></div>
       </div>
       {error   && <div style={errorBox}>{error}</div>}
       {success && <div style={successBox}>{success}</div>}
-      <button className="gold-btn" onClick={handleSignUp} disabled={loading} style={{marginTop:14}}>
+      <button className="grad-btn" onClick={handleSignUp} disabled={loading} style={{ marginTop:14 }}>
         {loading ? <Spinner/> : 'CREATE ACCOUNT →'}
       </button>
-      <div style={{textAlign:'center',marginTop:10,fontSize:12,color:'#AEAEB2'}}>
+      <div style={{ textAlign:'center', marginTop:10, fontSize:12, color:'#AEAEB2' }}>
         Have an account? <button className="ghost-link" onClick={onSwitch}>Sign in</button>
       </div>
     </div>
@@ -215,83 +171,89 @@ export default function Login() {
 
   return (
     <div style={{
-      height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',
+      minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
       background:'linear-gradient(135deg,#F0EDE8 0%,#E8E3DA 50%,#F0EDE8 100%)',
-      fontFamily:"'DM Sans',sans-serif",overflow:'hidden',
+      fontFamily:"'DM Sans',sans-serif", padding:'20px',
     }}>
       <style>{`
         @keyframes slideUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes float1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-20px) scale(1.05)}}
-        @keyframes float2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-25px,30px) scale(0.95)}}
-        @keyframes float3{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,20px)}}
+        @keyframes floatA{0%,100%{transform:translate(0,0)}50%{transform:translate(30px,-25px)}}
+        @keyframes floatB{0%,100%{transform:translate(0,0)}50%{transform:translate(-25px,20px)}}
+        @keyframes floatC{0%,100%{transform:translate(0,0)}50%{transform:translate(15px,25px)}}
         .nm-input{width:100%;padding:11px 14px;box-sizing:border-box;background:#EEE9E0;border:none;border-radius:12px;font-size:13px;color:#1C1C1E;font-family:'DM Sans',sans-serif;box-shadow:inset 3px 3px 7px rgba(0,0,0,0.13),inset -2px -2px 5px rgba(255,255,255,0.75);outline:none;transition:box-shadow 0.2s;}
-        .nm-input:focus{box-shadow:inset 4px 4px 9px rgba(0,0,0,0.15),inset -2px -2px 5px rgba(255,255,255,0.75),0 0 0 2px rgba(200,80,192,0.2);}
+        .nm-input:focus{box-shadow:inset 4px 4px 9px rgba(0,0,0,0.15),inset -2px -2px 5px rgba(255,255,255,0.75),0 0 0 2px rgba(200,80,192,0.22);}
         .nm-input::placeholder{color:#AEAEB2;}
-        .gold-btn{width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#C850C0,#FF6B35,#FFCC70);color:#fff;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:0.3px;box-shadow:0 4px 14px rgba(200,80,192,0.35);transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px;}
-        .gold-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(200,80,192,0.45);}
-        .gold-btn:disabled{opacity:0.55;cursor:not-allowed;}
-        .ghost-link{background:none;border:none;cursor:pointer;color:#C850C0;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;text-decoration:underline;text-underline-offset:3px;transition:opacity 0.15s;}
+        .grad-btn{width:100%;padding:13px;border:none;border-radius:12px;background:linear-gradient(135deg,#C850C0,#FF6B35,#FFCC70);color:#fff;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;box-shadow:0 4px 16px rgba(200,80,192,0.3);transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px;letter-spacing:0.3px;}
+        .grad-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 22px rgba(200,80,192,0.4);}
+        .grad-btn:disabled{opacity:0.55;cursor:not-allowed;}
+        .ghost-link{background:none;border:none;cursor:pointer;color:#C850C0;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;text-decoration:underline;text-underline-offset:3px;}
         .ghost-link:hover{opacity:0.72;}
-        .panel-btn{padding:10px 28px;background:transparent;border:2px solid rgba(255,255,255,0.55);border-radius:24px;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.6px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.2s;}
-        .panel-btn:hover{background:rgba(255,255,255,0.12);transform:translateY(-1px);}
+        .panel-btn{padding:10px 28px;background:transparent;border:2px solid rgba(255,255,255,0.6);border-radius:24px;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.6px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.2s;}
+        .panel-btn:hover{background:rgba(255,255,255,0.15);transform:translateY(-1px);}
+        @media(max-width:640px){.login-card{flex-direction:column!important;height:auto!important;width:100%!important;}.navy-panel{width:100%!important;min-height:180px;position:relative!important;left:auto!important;top:auto!important;border-radius:16px 16px 0 0!important;}.form-panel{width:100%!important;position:relative!important;top:auto!important;left:auto!important;right:auto!important;opacity:1!important;pointer-events:all!important;padding:28px 24px!important;}}
       `}</style>
 
-      {/* Animated background blobs */}
-      <div style={{position:'fixed',inset:0,pointerEvents:'none',overflow:'hidden'}}>
-        <div style={{position:'absolute',width:600,height:600,borderRadius:'50%',background:'radial-gradient(circle,rgba(200,80,192,0.12) 0%,transparent 65%)',top:'-10%',left:'-5%',animation:'float1 8s ease-in-out infinite'}}/>
-        <div style={{position:'absolute',width:500,height:500,borderRadius:'50%',background:'radial-gradient(circle,rgba(255,107,53,0.1) 0%,transparent 65%)',bottom:'-10%',right:'-5%',animation:'float2 10s ease-in-out infinite'}}/>
-        <div style={{position:'absolute',width:350,height:350,borderRadius:'50%',background:'radial-gradient(circle,rgba(255,204,112,0.1) 0%,transparent 65%)',top:'40%',right:'20%',animation:'float3 7s ease-in-out infinite'}}/>
+      {/* Animated blobs */}
+      <div style={{ position:'fixed', inset:0, pointerEvents:'none', overflow:'hidden' }}>
+        <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.12) 0%,transparent 70%)', top:'-5%', left:'5%', animation:'floatA 9s ease-in-out infinite' }}/>
+        <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.1) 0%,transparent 70%)', bottom:'5%', right:'5%', animation:'floatB 11s ease-in-out infinite' }}/>
+        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,204,112,0.1) 0%,transparent 70%)', top:'40%', right:'20%', animation:'floatC 7s ease-in-out infinite' }}/>
       </div>
 
       {/* Card */}
-      <div style={{
-        position:'relative',width:860,maxWidth:'96vw',height:540,
-        borderRadius:24,overflow:'hidden',
+      <div className="login-card" style={{
+        position:'relative', width:840, maxWidth:'100%', height:520,
+        borderRadius:24, overflow:'hidden', display:'flex',
         background:'#EEE9E0',
         boxShadow:'20px 20px 52px rgba(0,0,0,0.13),-8px -8px 24px rgba(255,255,255,0.84)',
         animation:'slideUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards',
       }}>
-
-        {/* Sign In — RIGHT half */}
-        <div style={{position:'absolute',top:0,bottom:0,right:0,width:'50%',display:'flex',alignItems:'center',justifyContent:'center',padding:'32px 44px',zIndex:1}}>
+        {/* Sign In form — RIGHT */}
+        <div className="form-panel" style={{
+          position:'absolute', top:0, bottom:0, right:0, width:'50%',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          padding:'32px 44px', zIndex:1,
+          opacity: isSignUp ? 0 : 1, transition:'opacity 0.25s',
+          pointerEvents: isSignUp ? 'none' : 'all',
+        }}>
           <SignInForm onSwitch={()=>setIsSignUp(true)}/>
         </div>
 
-        {/* Sign Up — LEFT half */}
-        <div style={{position:'absolute',top:0,bottom:0,left:0,width:'50%',display:'flex',alignItems:'center',justifyContent:'center',padding:'28px 44px',zIndex:1}}>
+        {/* Sign Up form — LEFT */}
+        <div className="form-panel" style={{
+          position:'absolute', top:0, bottom:0, left:0, width:'50%',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          padding:'28px 44px', zIndex:1,
+          opacity: isSignUp ? 1 : 0, transition:'opacity 0.25s',
+          pointerEvents: isSignUp ? 'all' : 'none',
+        }}>
           <SignUpForm onSwitch={()=>setIsSignUp(false)}/>
         </div>
 
         {/* Sliding navy panel */}
-        <div style={{
-          position:'absolute',top:0,bottom:0,width:'50%',
+        <div className="navy-panel" style={{
+          position:'absolute', top:0, bottom:0, width:'50%',
           background:'linear-gradient(145deg,#1A1035 0%,#0F0A2A 50%,#08061A 100%)',
-          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
-          padding:'40px 32px',zIndex:20,overflow:'hidden',
+          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+          padding:'40px 32px', zIndex:20, overflow:'hidden',
           transition:'left 0.7s cubic-bezier(0.68,-0.1,0.27,1.1)',
           left: isSignUp ? '50%' : '0%',
         }}>
-          {/* Glow rings on navy panel */}
-          <div style={{position:'absolute',width:280,height:280,borderRadius:'50%',background:'radial-gradient(circle,rgba(200,80,192,0.12) 0%,transparent 70%)',top:-60,right:-60}}/>
-          <div style={{position:'absolute',width:200,height:200,borderRadius:'50%',background:'radial-gradient(circle,rgba(255,107,53,0.1) 0%,transparent 70%)',bottom:20,left:-60}}/>
-          <div style={{position:'absolute',width:120,height:120,borderRadius:'50%',border:'1px solid rgba(200,80,192,0.2)',top:'38%',right:'18%'}}/>
-          <div style={{position:'absolute',width:80,height:80,borderRadius:'50%',border:'1px solid rgba(255,204,112,0.15)',bottom:'25%',left:'15%'}}/>
+          <div style={{ position:'absolute', width:260, height:260, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.15) 0%,transparent 70%)', top:-60, right:-60 }}/>
+          <div style={{ position:'absolute', width:180, height:180, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.12) 0%,transparent 70%)', bottom:20, left:-50 }}/>
 
-          {/* Logo */}
-          <div style={{marginBottom:22,display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
-            <WaniLogo size={60}/>
-            <span style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:600,color:'#fff',letterSpacing:1,background:'linear-gradient(135deg,#FFCC70,#FF6B35,#C850C0)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Wani</span>
+          <div style={{ marginBottom:24, display:'flex', flexDirection:'column', alignItems:'center', gap:14 }}>
+            <WaniLogo size={52} dark={true}/>
+            <WaniWordmark height={24} dark={true}/>
           </div>
 
-          <div style={{textAlign:'center',marginBottom:28}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:600,color:'#fff',marginBottom:10,lineHeight:1.3}}>
+          <div style={{ textAlign:'center', marginBottom:28 }}>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#fff', marginBottom:10, lineHeight:1.3 }}>
               {isSignUp ? 'Welcome Back!' : 'Hello!'}
             </div>
-            <p style={{fontSize:12,color:'rgba(255,255,255,0.45)',lineHeight:1.8,maxWidth:185}}>
-              {isSignUp
-                ? 'Already have an account? Sign in to continue.'
-                : 'New here? Create your private SAP knowledge base.'}
+            <p style={{ fontSize:12, color:'rgba(255,255,255,0.5)', lineHeight:1.8, maxWidth:190 }}>
+              {isSignUp ? 'Already have an account? Sign in to continue.' : 'New here? Create your private SAP knowledge base.'}
             </p>
           </div>
 
@@ -299,7 +261,6 @@ export default function Login() {
             {isSignUp ? 'SIGN IN' : 'CREATE ACCOUNT'}
           </button>
         </div>
-
       </div>
     </div>
   )
