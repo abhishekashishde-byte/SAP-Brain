@@ -1,17 +1,39 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { supabase, signOut, loadConversations, createConversation, updateConversation, deleteConversation } from '../supabaseClient'
-import { TOPICS, MODULE_META, STARTERS } from '../constants'
-import { WaniLogo, WaniWordmark } from './Login'
+import { useState, useEffect, useRef } from 'react'
+import { TOPICS, MODULE_META, STARTERS, SUMMARISE_THRESHOLD } from '../constants'
+import { WaniLogo, WaniWordmark } from './Login.jsx'
+import { useTheme } from '../App.jsx'
+import {
+  supabase, signOut,
+  loadConversations, createConversation, updateConversation, deleteConversation,
+  getProfile, upsertProfile,
+} from '../supabaseClient'
+
+// ─── Theme tokens (KEEPING YOUR EXACT DESIGN) ────────────────────────────────
+const T = {
+  light: {
+    bg: '#FAFAF8', surface: '#FFFFFF', surface2: '#F5F0FA', border: '#EDEDE8', text: '#1C1C1E',
+    msgUser: '#FDF4FF', msgUserBdr: '#E8C8F0', msgAI: '#FFFFFF', msgAIBdr: '#EDEDED',
+    bgGrad: 'linear-gradient(160deg,#FDF8FF 0%,#FFF5F0 40%,#FFFBF0 100%)',
+  },
+  dark: {
+    bg: '#0A0A12', surface: '#12101E', surface2: '#1A1530', border: '#2A2440', text: '#F0EEF8',
+    msgUser: '#1E1535', msgUserBdr: '#4A2060', msgAI: '#16132A', msgAIBdr: '#2A2440',
+    bgGrad: 'linear-gradient(160deg,#0E0C1E 0%,#120A18 40%,#0C0E18 100%)',
+  }
+}
+
+const goldGrad = 'linear-gradient(135deg,#C850C0,#FF6B35,#FFCC70)'
 
 export default function Brain({ session }) {
+  const { dark } = useTheme()
+  const t = dark ? T.dark : T.light
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [activeModule, setActiveModule] = useState('PP – Production Planning')
-  const [activeTopic, setActiveTopic] = useState('Production Orders')
   const scrollRef = useRef(null)
 
-  // FIX: Smooth Glide Scrolling
+  // FIX 1: Smooth Auto-Scroll (No jumping)
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
@@ -27,112 +49,87 @@ export default function Brain({ session }) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMsg], module: activeModule, topic: activeTopic })
+        body: JSON.stringify({ messages: [...messages, userMsg], module: activeModule })
       })
       const data = await res.json()
       if (data.reply) setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { console.error(err) } finally { setLoading(false) }
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#0F172A', color: '#F8FAFC', fontFamily: 'sans-serif' }}>
-      {/* MODERN CSS ANIMATIONS */}
+    <div style={{ display: 'flex', height: '100vh', background: t.bg, color: t.text, overflow: 'hidden' }}>
+      
+      {/* FIX 2: Modern Animation Keyframes */}
       <style>{`
-        @keyframes floatUp {
-          from { opacity: 0; transform: translateY(15px); }
-          to { opacity: 1; transform: translateY(0); }
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateY(20px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .msg-animate { animation: floatUp 0.4s ease-out forwards; }
-        .sap-card { transition: all 0.2s; border: 1px solid rgba(255,255,255,0.05); }
-        .sap-card:hover { border-color: #3B82F6; background: rgba(59, 130, 246, 0.05); }
+        .message-entry { animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        .sidebar-item { transition: all 0.2s ease; }
+        .sidebar-item:hover { transform: translateX(4px); }
       `}</style>
 
-      {/* LEFT SIDEBAR */}
-      <aside style={{ width: 280, borderRight: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', background: '#111827' }}>
-        <div style={{ padding: 24 }}>
-          <WaniWordmark height={18} dark={true} />
-          <p style={{ fontSize: 10, color: '#64748B', marginTop: 8, letterSpacing: 1 }}>SAP CONSULTANT AI</p>
+      {/* SIDEBAR (Your Original Style) */}
+      <aside style={{ width: 280, borderRight: `1px solid ${t.border}`, background: t.surface, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '24px 20px' }}>
+          <WaniWordmark height={18} dark={dark} />
         </div>
-        
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px' }}>
           {Object.keys(MODULE_META).map(m => (
-            <button 
-              key={m}
-              onClick={() => setActiveModule(m)}
+            <button key={m} onClick={() => setActiveModule(m)} className="sidebar-item"
               style={{
-                width: '100%', textAlign: 'left', padding: '10px 12px', marginBottom: 4, borderRadius: 8, border: 'none',
-                background: activeModule === m ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                color: activeModule === m ? '#60A5FA' : '#94A3B8', fontSize: 13, cursor: 'pointer'
-              }}
-            >
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: MODULE_META[m].color, marginRight: 10 }} />
-              {MODULE_META[m].label} Module
+                width: '100%', textAlign: 'left', padding: '12px', marginBottom: 6, borderRadius: 12, border: 'none',
+                background: activeModule === m ? t.surface2 : 'transparent',
+                color: activeModule === m ? t.text : t.text3, cursor: 'pointer', fontSize: 13, fontWeight: activeModule === m ? 600 : 400
+              }}>
+              <span style={{ color: MODULE_META[m].color, marginRight: 10 }}>●</span>
+              {MODULE_META[m].label}
             </button>
           ))}
         </div>
-
-        <div style={{ padding: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <button onClick={() => signOut()} style={{ width: '100%', padding: 10, background: 'transparent', border: '1px solid #334155', color: '#94A3B8', borderRadius: 6 }}>Sign Out</button>
-        </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        <header style={{ height: 64, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', px: 24, padding: '0 24px', background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(10px)' }}>
-          <span style={{ fontSize: 12, fontWeight: 'bold', color: MODULE_META[activeModule].color }}>{activeModule}</span>
-        </header>
-
+      {/* CHAT AREA */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', background: t.bgGrad }}>
         <div style={{ flex: 1, overflowY: 'auto', padding: '40px 20px' }}>
-          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+          <div style={{ maxWidth: 760, margin: '0 auto' }}>
             {messages.length === 0 ? (
-              <div className="msg-animate">
-                <h1 style={{ fontSize: 32, fontWeight: 300, marginBottom: 8 }}>How can I assist?</h1>
-                <p style={{ color: '#64748B', marginBottom: 32 }}>Select a starting point for the {activeModule} module.</p>
+              <div className="message-entry">
+                <h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 12 }}>Ready for SAP {activeModule.split(' ')[0]}?</h2>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  {(STARTERS[activeTopic] || STARTERS["Production Orders"]).map(s => (
-                    <button key={s} onClick={() => handleSend(s)} className="sap-card" style={{ padding: 16, background: '#1E293B', borderRadius: 12, color: '#CBD5E1', textAlign: 'left', fontSize: 14, cursor: 'pointer' }}>
-                      {s}
-                    </button>
+                  {STARTERS["Production Orders"].map(s => (
+                    <button key={s} onClick={() => handleSend(s)} style={{ padding: 16, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, textAlign: 'left', cursor: 'pointer', fontSize: 14 }}>{s}</button>
                   ))}
                 </div>
               </div>
             ) : (
               messages.map((m, i) => (
-                <div key={i} className="msg-animate" style={{ marginBottom: 32, display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                <div key={i} className="message-entry" style={{ marginBottom: 24, display: 'flex', flexDirection: m.role === 'user' ? 'row-reverse' : 'row', gap: 12 }}>
                   <div style={{ 
-                    maxWidth: '85%', padding: '16px 20px', borderRadius: 16, fontSize: 15, lineHeight: 1.6,
-                    background: m.role === 'user' ? '#2563EB' : '#1E293B',
-                    color: '#FFFFFF',
-                    borderBottomRightRadius: m.role === 'user' ? 4 : 16,
-                    borderBottomLeftRadius: m.role === 'user' ? 16 : 4,
+                    maxWidth: '80%', padding: '14px 18px', borderRadius: 18, fontSize: 15,
+                    background: m.role === 'user' ? t.msgUser : t.msgAI,
+                    border: `1px solid ${m.role === 'user' ? t.msgUserBdr : t.msgAIBdr}`,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
                   }}>
                     {m.content}
                   </div>
                 </div>
               ))
             )}
-            {loading && <div style={{ color: '#64748B', fontSize: 12, fontStyle: 'italic' }}>Wani is analyzing...</div>}
             <div ref={scrollRef} />
           </div>
         </div>
 
-        {/* INPUT AREA */}
-        <div style={{ padding: '24px 0', background: 'linear-gradient(transparent, #0F172A 20%)' }}>
-          <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 20px' }}>
-            <div style={{ background: '#1E293B', borderRadius: 16, padding: '8px 16px', display: 'flex', alignItems: 'center', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <input 
-                value={input} 
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder="Ask a technical SAP question..."
-                style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', padding: '12px 0', fontSize: 15, outline: 'none' }}
-              />
-              <button onClick={() => handleSend()} style={{ background: '#2563EB', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, fontWeight: 'bold', cursor: 'pointer' }}>Send</button>
-            </div>
+        {/* INPUT BOX */}
+        <div style={{ padding: '20px 0', borderTop: `1px solid ${t.border}`, background: t.surface }}>
+          <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 20px', display: 'flex', gap: 12 }}>
+            <input 
+              value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()}
+              placeholder="Query SAP database..."
+              style={{ flex: 1, padding: '14px 20px', borderRadius: 14, border: `1px solid ${t.border}`, background: t.bg, outline: 'none', color: t.text }}
+            />
+            <button onClick={() => handleSend()} style={{ background: goldGrad, color: 'white', border: 'none', padding: '0 24px', borderRadius: 14, fontWeight: 700, cursor: 'pointer' }}>Send</button>
           </div>
         </div>
       </main>
