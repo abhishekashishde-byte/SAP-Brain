@@ -72,7 +72,9 @@ const T = {
   }
 }
 
-const goldGrad = 'linear-gradient(135deg,#4F46E5,#6366F1)'
+const goldGrad = (dark) => dark
+  ? 'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)'
+  : 'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)'
 
 const MODULE_COLORS = {
   "PP – Production Planning": { from:'#16a34a', to:'#059669', emoji:'⚙️' },
@@ -226,7 +228,7 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
         animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards',
       }} onClick={e=>e.stopPropagation()}>
         <div style={{ textAlign:'center', marginBottom:24 }}>
-          <div style={{ width:72, height:72, borderRadius:'50%', background:goldGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:700, color:'#fff', margin:'0 auto 12px', boxShadow:'0 4px 20px rgba(79,70,229,0.25)' }}>{initials}</div>
+          <div style={{ width:72, height:72, borderRadius:'50%', background:'linear-gradient(135deg,#1a1a2e,#4F46E5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:700, color:'#fff', margin:'0 auto 12px', boxShadow:'0 4px 20px rgba(79,70,229,0.25)' }}>{initials}</div>
           <div style={{ fontSize:13, color:'rgba(255,255,255,0.5)' }}>{session.user.email}</div>
         </div>
         <div style={{ marginBottom:20 }}>
@@ -237,7 +239,7 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
             onBlur={e=>e.target.style.borderColor='rgba(79,70,229,0.25)'}
           />
         </div>
-        <button onClick={async()=>{ setSaving(true); await onSave({name}); setSaving(false); onClose() }} style={{ width:'100%', padding:13, background:goldGrad, border:'none', borderRadius:12, color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", marginBottom:12, boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
+        <button onClick={async()=>{ setSaving(true); await onSave({name}); setSaving(false); onClose() }} style={{ width:'100%', padding:13, background:'linear-gradient(135deg,#1a1a2e,#4F46E5)', border:'none', borderRadius:12, color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", marginBottom:12, boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
           {saving ? 'Saving...' : 'Save Profile'}
         </button>
         <button onClick={onSignOut} style={{ width:'100%', padding:12, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:12, color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}
@@ -279,212 +281,226 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
   )
 }
 
-// ─── HomeScreen — Card Stack ──────────────────────────────────────────────────
-// One unified corporate accent — indigo. Cards differ only in their dark/light bg shade.
-// bgDark: used in dark mode. bgLight: used in light mode.
+// ─── HomeScreen — Samsung Wallet-style card stack ────────────────────────────
 const MODULE_STACK = [
   {
-    key: 'PP – Production Planning',
-    mod: 'PP', sub: 'Production Planning',
-    emoji: '⚙️',
-    bgDark:  '#12111F',
-    bgLight: '#F4F4F8',
+    key:'PP – Production Planning',   mod:'PP',     sub:'Production Planning', emoji:'⚙️',
+    gradDark:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#60A5FA 100%)',
+    gradLight:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#93C5FD 100%)',
   },
   {
-    key: 'PM – Plant Maintenance',
-    mod: 'PM', sub: 'Plant Maintenance',
-    emoji: '🔧',
-    bgDark:  '#111220',
-    bgLight: '#F3F4F8',
+    key:'PM – Plant Maintenance',     mod:'PM',     sub:'Plant Maintenance',   emoji:'🔧',
+    gradDark:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)',
+    gradLight:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)',
   },
   {
-    key: 'MM – Logistics',
-    mod: 'MM', sub: 'Logistics',
-    emoji: '📦',
-    bgDark:  '#131118',
-    bgLight: '#F5F4F8',
+    key:'MM – Logistics',             mod:'MM',     sub:'Logistics',           emoji:'📦',
+    gradDark:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)',
+    gradLight:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)',
   },
   {
-    key: 'Fiori / UX',
-    mod: 'Fiori', sub: 'User Experience',
-    emoji: '◻',
-    bgDark:  '#101320',
-    bgLight: '#F2F4F9',
+    key:'Fiori / UX',                 mod:'Fiori',  sub:'User Experience',     emoji:'◻',
+    gradDark:'linear-gradient(140deg,#1E3A5F 0%,#1D4ED8 55%,#93C5FD 100%)',
+    gradLight:'linear-gradient(140deg,#1E3A5F 0%,#1D4ED8 55%,#93C5FD 100%)',
   },
   {
-    key: 'S/4HANA General',
-    mod: 'S/4HANA', sub: 'General',
-    emoji: '◈',
-    bgDark:  '#14111A',
-    bgLight: '#F5F3F8',
+    key:'S/4HANA General',            mod:'S/4HANA',sub:'General',             emoji:'◈',
+    gradDark:'linear-gradient(140deg,#3B0764 0%,#7C3AED 55%,#DDD6FE 100%)',
+    gradLight:'linear-gradient(140deg,#3B0764 0%,#7C3AED 55%,#DDD6FE 100%)',
   },
 ]
 
-// Single corporate accent used everywhere
-const CORP_ACC     = '#4F46E5'
-const CORP_ACC_MUT = 'rgba(79,70,229,0.12)'
+const N_CARDS  = MODULE_STACK.length
+const CARD_H   = 170   // px — full card height
+const PEEK     = 26    // px each back card peeks below
 
-const SCALE_STEP   = 0.055
-const Y_STEP       = 22
-const OPACITY_STEP = 0.17
-const N_CARDS      = MODULE_STACK.length
+function topFor(slot)     { return slot === 0 ? 0 : CARD_H + (slot-1) * PEEK }
+function scaleFor(slot)   { return 1 - slot * 0.022 }
+function opacityFor(slot) { return slot===0?1:slot===1?0.52:slot===2?0.32:0.15 }
 
-function slotStyle(slot) {
-  if (slot === 0) return { transform:'translateY(0px) scale(1)', opacity:1, zIndex:N_CARDS, pointerEvents:'auto' }
-  const scale   = 1 - SCALE_STEP * slot
-  const y       = -Y_STEP * slot
-  const opacity = Math.max(0.05, 1 - OPACITY_STEP * slot)
-  return { transform:`translateY(${y}px) scale(${scale})`, opacity, zIndex:N_CARDS - slot, pointerEvents:'none' }
-}
+function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
+  const cardRefs      = useRef([])
+  const slotsRef      = useRef(MODULE_STACK.map((_,i) => i))
+  const busyRef       = useRef(false)
+  const [dotIdx, setDotIdx] = useState(0)
 
-function HomeScreen({ conversations, onSelectTopic, t, dark }) {
-  const [slots, setSlots]     = useState(MODULE_STACK.map((_,i) => i))
-  const [busy, setBusy]       = useState(false)
-  const cardRefs              = useRef([])
-  const touchY                = useRef(0)
-  const touchDragging         = useRef(false)
-  const mouseY                = useRef(0)
-  const mouseDragging         = useRef(false)
-  const mouseDown             = useRef(false)
+  // Touch / mouse refs
+  const ty0    = useRef(0); const tdrag = useRef(false)
+  const my0    = useRef(0); const mdrag = useRef(false); const mdown = useRef(false)
 
-  // Apply transform directly to DOM node for drag-follow (no re-render lag)
-  const applyDirect = (idx, transform, opacity) => {
+  const SPRING = 'top 500ms cubic-bezier(0.22,1.4,0.36,1), transform 500ms cubic-bezier(0.22,1.4,0.36,1), opacity 380ms ease'
+  const SNAP   = 'top 300ms cubic-bezier(0.34,1.3,0.64,1), opacity 260ms ease'
+
+  const applyCard = (idx, slot, tr) => {
     const el = cardRefs.current[idx]
     if (!el) return
-    el.style.transition = 'none'
-    el.style.transform  = transform
-    el.style.opacity    = opacity
+    el.style.transition    = tr
+    el.style.top           = `${topFor(slot)}px`
+    el.style.transform     = `scale(${scaleFor(slot)})`
+    el.style.opacity       = opacityFor(slot)
+    el.style.zIndex        = N_CARDS - slot
+    el.style.pointerEvents = slot === 0 ? 'auto' : 'none'
   }
 
-  const applySlot = (idx, slot, transition) => {
-    const el = cardRefs.current[idx]
-    if (!el) return
-    const s = slotStyle(slot)
-    el.style.transition   = transition
-    el.style.transform    = s.transform
-    el.style.opacity      = s.opacity
-    el.style.zIndex       = s.zIndex
-    el.style.pointerEvents = s.pointerEvents
+  const renderAll = (sl, tr) => {
+    sl.forEach((slot, idx) => applyCard(idx, slot, tr))
+    setDotIdx(sl.indexOf(0))
   }
 
-  const renderAll = (newSlots, transition) => {
-    newSlots.forEach((slot, idx) => applySlot(idx, slot, transition))
-  }
-
-  const SPRING = 'transform 520ms cubic-bezier(0.22,1.4,0.36,1), opacity 420ms ease'
-  const SNAP   = 'transform 320ms cubic-bezier(0.34,1.3,0.64,1), opacity 280ms ease'
+  useEffect(() => { renderAll(slotsRef.current, 'none') }, [])
 
   const advance = () => {
-    if (busy) return
-    setBusy(true)
-    const frontIdx = slots.indexOf(0)
-    const el = cardRefs.current[frontIdx]
-    if (el) {
-      el.style.transition = 'transform 260ms cubic-bezier(0.4,0,1,1), opacity 200ms ease'
-      el.style.transform  = 'translateY(60px) scale(0.84)'
-      el.style.opacity    = '0'
-      el.style.zIndex     = '0'
+    if (busyRef.current) return
+    busyRef.current = true
+    const slots = slotsRef.current
+    const fi    = slots.indexOf(0)
+    const front = cardRefs.current[fi]
+
+    // Exit front card upward
+    if (front) {
+      front.style.transition = 'top 260ms cubic-bezier(0.4,0,1,1), opacity 200ms ease, transform 260ms ease'
+      front.style.top        = '-200px'
+      front.style.opacity    = '0'
+      front.style.transform  = 'scale(0.88)'
+      front.style.zIndex     = '0'
     }
+
     setTimeout(() => {
-      const newSlots = slots.map(s => s === 0 ? N_CARDS - 1 : s - 1)
-      // place ejected card at back instantly
-      applySlot(frontIdx, N_CARDS - 1, 'none')
-      // animate rest forward
-      newSlots.forEach((slot, idx) => {
-        if (idx !== frontIdx) applySlot(idx, slot, SPRING)
-      })
+      const newSlots = slots.map(s => s===0 ? N_CARDS-1 : s-1)
+      slotsRef.current = newSlots
+
+      // Silently place at back
+      const bs = N_CARDS - 1
+      if (front) {
+        front.style.transition    = 'none'
+        front.style.top           = `${topFor(bs)}px`
+        front.style.transform     = `scale(${scaleFor(bs)})`
+        front.style.opacity       = opacityFor(bs)
+        front.style.zIndex        = `${N_CARDS - bs}`
+        front.style.pointerEvents = 'none'
+      }
+
+      // Animate others forward
       requestAnimationFrame(() => {
+        newSlots.forEach((slot, idx) => {
+          if (idx !== fi) applyCard(idx, slot, SPRING)
+        })
         setTimeout(() => {
-          applySlot(frontIdx, newSlots[frontIdx], SPRING)
-          setSlots(newSlots)
-          setTimeout(() => setBusy(false), 540)
-        }, 60)
+          applyCard(fi, newSlots[fi], SPRING)
+          setDotIdx(newSlots.indexOf(0))
+          setTimeout(() => { busyRef.current = false }, 530)
+        }, 80)
       })
-    }, 200)
+    }, 240)
   }
 
   const retreat = () => {
-    if (busy) return
-    setBusy(true)
-    const newSlots = slots.map(s => s === N_CARDS - 1 ? 0 : s + 1)
-    setSlots(newSlots)
+    if (busyRef.current) return
+    busyRef.current = true
+    const newSlots = slotsRef.current.map(s => s===N_CARDS-1 ? 0 : s+1)
+    slotsRef.current = newSlots
     renderAll(newSlots, SPRING)
-    setTimeout(() => setBusy(false), 560)
+    setTimeout(() => { busyRef.current = false }, 550)
   }
 
-  // Sync DOM when slots state changes (covers retreat + initial)
-  useEffect(() => {
-    renderAll(slots, 'none')
-  }, []) // only on mount — advance/retreat manage DOM directly
+  const dragFollow = (fi, dy) => {
+    const el = cardRefs.current[fi]
+    if (!el) return
+    const c = Math.max(-80, Math.min(100, dy))
+    const p = Math.abs(c) / 130
+    el.style.transition = 'none'
+    el.style.top        = `${c * 0.38}px`
+    el.style.opacity    = `${1 - p * 0.35}`
+  }
+  const snapFront = (fi) => {
+    const el = cardRefs.current[fi]
+    if (!el) return
+    el.style.transition = SNAP
+    el.style.top        = '0px'
+    el.style.opacity    = '1'
+  }
 
-  const frontIdx = slots.indexOf(0)
+  // New Conversation button gradient — theme-aware
+  const newBtnGrad = dark
+    ? 'linear-gradient(135deg,#ffffff 0%,#9ca3af 100%)'
+    : 'linear-gradient(135deg,#1a1a2e 0%,#111827 100%)'
+  const newBtnColor = dark ? '#0D0D1A' : '#ffffff'
 
   return (
-    <div style={{ flex:1, overflowY:'auto', padding:'24px 16px 32px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', alignItems:'center' }}>
+    <div style={{ flex:1, overflowY:'auto', position:'relative', zIndex:1, display:'flex', flexDirection:'column', alignItems:'center', padding:'2rem 1rem 2.5rem' }}>
+
+      {/* Animated background — dark mode only */}
+      {dark && (
+        <div style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', background:'#0D0D1A' }}>
+          <div style={{ position:'absolute', inset:0,
+            background:'radial-gradient(ellipse 70% 50% at 15% 25%,rgba(79,70,229,0.22) 0%,transparent 60%), radial-gradient(ellipse 55% 45% at 85% 65%,rgba(124,58,237,0.16) 0%,transparent 55%), radial-gradient(ellipse 45% 55% at 55% 5%,rgba(59,130,246,0.12) 0%,transparent 50%)',
+            animation:'auroraHS 14s ease-in-out infinite alternate' }}/>
+          <div style={{ position:'absolute', inset:0,
+            backgroundImage:'radial-gradient(rgba(255,255,255,0.05) 1px,transparent 1px)',
+            backgroundSize:'26px 26px',
+            animation:'gridHS 22s linear infinite' }}/>
+        </div>
+      )}
+
       <style>{`
-        @keyframes deckIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-        .deck-wrap { animation: deckIn 0.5s ease both; }
-        .topic-pill-hs { font-size:11px; padding:5px 12px; border-radius:20px; background:${dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'}; border:1px solid ${dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'}; color:${dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.45)'}; cursor:pointer; transition:border-color 0.2s,color 0.2s; white-space:nowrap; pointer-events:auto; position:relative; z-index:30; }
-        .topic-pill-hs:hover { color:#4F46E5; border-color:#4F46E5; }
-        .topic-pill-hs.lit { border-color:#4F46E5; color:#4F46E5; background:rgba(79,70,229,0.08); }
-        .cta-btn { font-size:11px; font-weight:600; padding:6px 16px; border-radius:6px; border:1px solid ${dark?'rgba(255,255,255,0.15)':'rgba(0,0,0,0.15)'}; background:transparent; color:${dark?'rgba(255,255,255,0.7)':'rgba(0,0,0,0.6)'}; font-family:'DM Sans',sans-serif; cursor:pointer; pointer-events:auto; position:relative; z-index:30; transition:background 0.2s,border-color 0.2s; }
-        .cta-btn:hover { background:rgba(79,70,229,0.08); border-color:#4F46E5; color:#4F46E5; }
-        .recent-item-hs { display:flex; align-items:center; gap:10px; padding:9px 13px; background:transparent; border:1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}; border-radius:10px; cursor:pointer; transition:background 0.15s,border-color 0.15s; }
-        .recent-item-hs:hover { background:rgba(79,70,229,0.06); border-color:rgba(79,70,229,0.3); }
+        @keyframes auroraHS {
+          0%   { transform:scale(1) translateY(0);     opacity:1;   }
+          50%  { transform:scale(1.07) translateY(-18px); opacity:0.7; }
+          100% { transform:scale(1) translateY(0);     opacity:1;   }
+        }
+        @keyframes gridHS {
+          from { background-position:0 0; }
+          to   { background-position:26px 26px; }
+        }
+        @keyframes deckIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+        .hs-card-wrap { animation: deckIn 0.45s ease both; }
+        .hs-topic { font-size:10px; padding:3px 10px; border-radius:20px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.18); color:rgba(255,255,255,0.85); white-space:nowrap; }
+        .hs-open-btn { font-size:11px; font-weight:600; padding:5px 14px; border-radius:6px; border:1px solid rgba(255,255,255,0.35); background:rgba(0,0,0,0.15); color:rgba(255,255,255,0.9); font-family:'DM Sans',sans-serif; cursor:pointer; pointer-events:auto; position:relative; z-index:30; transition:background 0.2s; }
+        .hs-open-btn:hover { background:rgba(0,0,0,0.28); }
+        .hs-recent-row { display:flex; align-items:center; gap:10px; padding:9px 13px; background:${dark?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)'}; border:1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}; border-radius:10px; cursor:pointer; transition:background 0.15s,border-color 0.15s; }
+        .hs-recent-row:hover { background:${dark?'rgba(79,70,229,0.08)':'rgba(79,70,229,0.05)'}; border-color:rgba(79,70,229,0.28); }
       `}</style>
 
       {/* Title */}
-      <div style={{ textAlign:'center', marginBottom:28 }}>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:t.text, marginBottom:5 }}>What would you like to explore?</div>
-        <p style={{ fontSize:12, color:t.text3 }}>click card · swipe down to cycle · swipe up to go back</p>
+      <div style={{ position:'relative', zIndex:1, textAlign:'center', marginBottom:28 }}>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:21, fontWeight:600, color:t.text, marginBottom:5 }}>What would you like to explore?</div>
+        <p style={{ fontSize:11, color:t.text3 }}>click card · swipe to cycle modules</p>
       </div>
 
-      {/* Card stack */}
+      {/* ── Card stack ── */}
       <div
-        className="deck-wrap"
-        style={{ position:'relative', width:'min(100%, 34rem)', height:290, touchAction:'none', cursor:'pointer' }}
-        onClick={e => { if (e.target.closest('.cta-btn') || e.target.closest('.topic-pill-hs')) return; advance() }}
-        onMouseDown={e => { if (e.target.closest('.cta-btn') || e.target.closest('.topic-pill-hs')) return; mouseDown.current=true; mouseY.current=e.clientY; mouseDragging.current=false }}
+        className="hs-card-wrap"
+        style={{ position:'relative', zIndex:1, width:'min(100%,420px)', height:`${CARD_H + (N_CARDS-1)*PEEK}px`, touchAction:'none', cursor:'pointer', flexShrink:0 }}
+        onClick={e => { if (e.target.closest('.hs-open-btn') || e.target.closest('.hs-topic')) return; advance() }}
+        onMouseDown={e => { if (e.target.closest('.hs-open-btn') || e.target.closest('.hs-topic')) return; mdown.current=true; my0.current=e.clientY; mdrag.current=false }}
         onMouseMove={e => {
-          if (!mouseDown.current || busy) return
-          const dy = e.clientY - mouseY.current
-          if (Math.abs(dy) > 6) mouseDragging.current = true
-          if (!mouseDragging.current) return
-          const c = Math.max(-80, Math.min(100, dy))
-          const p = Math.abs(c) / 140
-          applyDirect(frontIdx, `translateY(${c*0.45}px) scale(${1-p*0.05})`, String(1-p*0.35))
+          if (!mdown.current || busyRef.current) return
+          const dy = e.clientY - my0.current
+          if (Math.abs(dy) > 6) mdrag.current = true
+          if (!mdrag.current) return
+          dragFollow(slotsRef.current.indexOf(0), dy)
         }}
         onMouseUp={e => {
-          if (!mouseDown.current) return
-          mouseDown.current = false
-          const dy = e.clientY - mouseY.current
-          if (mouseDragging.current) {
-            if (dy > 40) advance()
-            else if (dy < -40) retreat()
-            else { applySlot(frontIdx, 0, SNAP) }
-          }
-          mouseDragging.current = false
+          if (!mdown.current) return
+          mdown.current = false
+          const dy = e.clientY - my0.current
+          const fi = slotsRef.current.indexOf(0)
+          if (mdrag.current) { dy > 40 ? advance() : dy < -40 ? retreat() : snapFront(fi) }
+          mdrag.current = false
         }}
-        onMouseLeave={() => {
-          if (mouseDown.current && !mouseDragging.current) mouseDown.current = false
-        }}
-        onTouchStart={e => { touchY.current=e.touches[0].clientY; touchDragging.current=false }}
+        onMouseLeave={() => { if (mdown.current && !mdrag.current) mdown.current = false }}
+        onTouchStart={e => { ty0.current=e.touches[0].clientY; tdrag.current=false }}
         onTouchMove={e => {
-          const dy = e.touches[0].clientY - touchY.current
-          if (!touchDragging.current && Math.abs(dy) > 8) touchDragging.current = true
-          if (!touchDragging.current || busy) return
-          const c = Math.max(-80, Math.min(100, dy))
-          const p = Math.abs(c) / 140
-          applyDirect(frontIdx, `translateY(${c*0.45}px) scale(${1-p*0.05})`, String(1-p*0.35))
+          const dy = e.touches[0].clientY - ty0.current
+          if (Math.abs(dy) > 8) tdrag.current = true
+          if (!tdrag.current || busyRef.current) return
+          dragFollow(slotsRef.current.indexOf(0), dy)
         }}
         onTouchEnd={e => {
-          const dy = e.changedTouches[0].clientY - touchY.current
-          if (touchDragging.current) {
-            if (dy > 52) advance()
-            else if (dy < -52) retreat()
-            else { applySlot(frontIdx, 0, SNAP) }
-          }
-          touchDragging.current = false
+          const dy = e.changedTouches[0].clientY - ty0.current
+          const fi = slotsRef.current.indexOf(0)
+          if (tdrag.current) { dy > 55 ? advance() : dy < -55 ? retreat() : snapFront(fi) }
+          tdrag.current = false
         }}
       >
         {MODULE_STACK.map((m, idx) => {
@@ -495,55 +511,48 @@ function HomeScreen({ conversations, onSelectTopic, t, dark }) {
               key={m.key}
               ref={el => cardRefs.current[idx] = el}
               style={{
-                position:'absolute', inset:0,
-                borderRadius:22, overflow:'hidden',
-                border:`1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}`,
-                background: dark ? m.bgDark : m.bgLight,
-                willChange:'transform,opacity',
+                position:'absolute', left:0, right:0,
+                height:CARD_H, borderRadius:22,
+                background: dark ? m.gradDark : m.gradLight,
+                boxShadow:'0 10px 36px rgba(0,0,0,0.38)',
+                overflow:'hidden',
+                display:'flex', flexDirection:'column', justifyContent:'space-between',
+                padding:'17px 22px 15px',
+                willChange:'top,transform,opacity',
               }}
             >
-              {/* subtle top-left wash — dark only */}
-              {dark && <div style={{ position:'absolute', inset:0, borderRadius:22, pointerEvents:'none',
-                background:'radial-gradient(ellipse at 20% 40%, rgba(79,70,229,0.08) 0%, transparent 60%)' }}/>}
-              {/* top accent */}
-              <div style={{ position:'absolute', top:0, left:0, right:0, height:2,
-                background:`linear-gradient(90deg,${dark?'rgba(79,70,229,0.5)':'rgba(79,70,229,0.35)'} 0%,transparent 65%)`, zIndex:2 }}/>
-              {/* content */}
-              <div style={{ position:'relative', zIndex:1, height:'100%', display:'flex', flexDirection:'column', pointerEvents:'none' }}>
-                {/* head */}
-                <div style={{ padding:'1.1rem 1.3rem 0.9rem', display:'flex', alignItems:'center', gap:12, borderBottom:`1px solid ${dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.06)'}`, flexShrink:0 }}>
-                  <div style={{ width:40, height:40, borderRadius:11, background:dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.04)', border:`1px solid ${dark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:19, flexShrink:0 }}>{m.emoji}</div>
+              {/* gloss top sheen */}
+              <div style={{ position:'absolute', top:0, left:0, right:0, height:'50%', background:'linear-gradient(180deg,rgba(255,255,255,0.13) 0%,transparent 100%)', borderRadius:'22px 22px 0 0', pointerEvents:'none' }}/>
+              {/* depth bottom */}
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'28%', background:'linear-gradient(0deg,rgba(0,0,0,0.18) 0%,transparent 100%)', pointerEvents:'none' }}/>
+
+              {/* Card content */}
+              <div style={{ position:'relative', zIndex:1, display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:13 }}>
+                  <div style={{ width:48, height:48, borderRadius:14, background:'rgba(255,255,255,0.2)', border:'1px solid rgba(255,255,255,0.28)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{m.emoji}</div>
                   <div>
-                    <div style={{ fontFamily:"'Playfair Display',serif", fontSize:21, fontWeight:600, color:'#4F46E5', lineHeight:1 }}>{m.mod}</div>
-                    <div style={{ fontSize:11, color:t.text3, marginTop:3 }}>{m.sub}</div>
-                  </div>
-                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:600, padding:'3px 9px', borderRadius:20, background:'rgba(255,255,255,0.04)', border:`1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}`, color:'rgba(255,255,255,0.28)', whiteSpace:'nowrap' }}>
-                    {count} {count === 1 ? 'conv' : 'convs'}
-                  </span>
-                </div>
-                {/* body */}
-                <div style={{ padding:'0.9rem 1.3rem 1.1rem', display:'flex', flexDirection:'column', gap:11, flex:1 }}>
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                    {topics.map((tp, ti) => {
-                      const hasConv = conversations.some(c => c.module===m.key && c.topic===tp)
-                      return (
-                        <span key={tp}
-                          className={`topic-pill-hs${hasConv?' lit':''}`}
-                          style={{ '--pill-acc': '#4F46E5' }}
-                          onClick={e => { e.stopPropagation(); onSelectTopic(m.key, tp) }}
-                        >{tp}</span>
-                      )
-                    })}
-                  </div>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:9, borderTop:`1px solid ${dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.06)'}`, marginTop:'auto' }}>
-                    <span style={{ fontSize:11, color:t.text4 }}>click · swipe to cycle</span>
-                    <button
-                      className="cta-btn"
-                      style={{}}
-                      onClick={e => { e.stopPropagation(); onSelectTopic(m.key, null) }}
-                    >Open {m.mod} →</button>
+                    <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#fff', letterSpacing:'-0.3px', lineHeight:1 }}>{m.mod}</div>
+                    <div style={{ fontSize:11, color:'rgba(255,255,255,0.68)', marginTop:4 }}>{m.sub}</div>
                   </div>
                 </div>
+                <span style={{ fontSize:10, fontWeight:600, padding:'4px 10px', borderRadius:20, background:'rgba(0,0,0,0.22)', border:'1px solid rgba(255,255,255,0.15)', color:'rgba(255,255,255,0.82)', whiteSpace:'nowrap', flexShrink:0 }}>
+                  {count} {count===1?'conv':'convs'}
+                </span>
+              </div>
+
+              {/* Topics row */}
+              <div style={{ position:'relative', zIndex:1, display:'flex', flexWrap:'wrap', gap:5, pointerEvents:'none' }}>
+                {topics.slice(0,4).map(tp => (
+                  <span key={tp} className="hs-topic">{tp}</span>
+                ))}
+                {topics.length > 4 && <span className="hs-topic">+{topics.length-4} more</span>}
+              </div>
+
+              {/* Open button row */}
+              <div style={{ position:'relative', zIndex:1, display:'flex', alignItems:'center', justifyContent:'flex-end' }}>
+                <button className="hs-open-btn" onClick={e => { e.stopPropagation(); onSelectTopic(m.key, null) }}>
+                  Open {m.mod} →
+                </button>
               </div>
             </div>
           )
@@ -551,36 +560,60 @@ function HomeScreen({ conversations, onSelectTopic, t, dark }) {
       </div>
 
       {/* Dot indicators */}
-      <div style={{ display:'flex', gap:7, marginTop:16, alignItems:'center', justifyContent:'center' }}>
+      <div style={{ position:'relative', zIndex:1, display:'flex', gap:7, marginTop:14, alignItems:'center', justifyContent:'center' }}>
         {MODULE_STACK.map((_, i) => (
-          <div key={i} style={{ width:6, height:6, borderRadius:'50%', transition:'background 0.35s, transform 0.35s',
-            background: slots.indexOf(0) === i ? (dark?'#ffffff':'#4F46E5') : (dark?'rgba(255,255,255,0.14)':'rgba(0,0,0,0.12)'),
-            transform: slots.indexOf(0) === i ? 'scale(1.35)' : 'scale(1)',
+          <div key={i} style={{
+            width:6, height:6, borderRadius:'50%',
+            transition:'background 0.35s,transform 0.35s',
+            background: dotIdx===i ? (dark?'#ffffff':'#1a1a2e') : (dark?'rgba(255,255,255,0.18)':'rgba(0,0,0,0.14)'),
+            transform: dotIdx===i ? 'scale(1.4)' : 'scale(1)',
           }}/>
         ))}
       </div>
 
-      {/* Recent conversations */}
+      {/* ── Divider ── */}
+      <div style={{ position:'relative', zIndex:1, width:'min(100%,420px)', margin:'22px 0 0', display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ flex:1, height:1, background:`linear-gradient(90deg,transparent,${dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'},transparent)` }}/>
+        <span style={{ fontSize:10, fontWeight:700, color:t.text4, letterSpacing:0.9, textTransform:'uppercase', whiteSpace:'nowrap' }}>Recent conversations</span>
+        <div style={{ flex:1, height:1, background:`linear-gradient(90deg,${dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'},transparent)` }}/>
+      </div>
+
+      {/* ── New Conversation button ── */}
+      <div style={{ position:'relative', zIndex:1, width:'min(100%,420px)', marginTop:14 }}>
+        <button
+          onClick={() => onNewChat(null, null)}
+          style={{
+            width:'100%', padding:'12px 20px', borderRadius:13, border:'none',
+            background: newBtnGrad,
+            color: newBtnColor,
+            fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
+            cursor:'pointer', letterSpacing:0.2,
+            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+            boxShadow: dark ? '0 4px 18px rgba(0,0,0,0.4)' : '0 4px 18px rgba(0,0,0,0.2)',
+            transition:'box-shadow 0.2s,transform 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = dark?'0 6px 26px rgba(0,0,0,0.55)':'0 6px 26px rgba(0,0,0,0.3)'; e.currentTarget.style.transform='translateY(-1px)' }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = dark?'0 4px 18px rgba(0,0,0,0.4)':'0 4px 18px rgba(0,0,0,0.2)'; e.currentTarget.style.transform='translateY(0)' }}
+        >
+          <span style={{ fontSize:16 }}>+</span> New Conversation
+        </button>
+      </div>
+
+      {/* ── Recent list ── */}
       {conversations.length > 0 && (
-        <div style={{ width:'min(100%, 34rem)', marginTop:24 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:t.text4, letterSpacing:0.9, textTransform:'uppercase', marginBottom:10 }}>Recent</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            {conversations.slice(0,4).map(conv => {
-              const m = MODULE_STACK.find(x => x.key === conv.module)
-              return (
-                <div key={conv.id} className="recent-item-hs" onClick={() => onSelectTopic(conv.module, conv.topic, conv.id)}>
-                  <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:8,
-                    background: 'rgba(79,70,229,0.1)',
-                    border: '1px solid rgba(79,70,229,0.2)',
-                    color: '#4F46E5', flexShrink:0 }}>
-                    {conv.module?.split('–')[0].trim() || 'SAP'}
-                  </span>
-                  <span style={{ fontSize:12, color:t.text2, flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{conv.title}</span>
-                  <span style={{ fontSize:11, color:t.text4, flexShrink:0 }}>{new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
-                </div>
-              )
-            })}
-          </div>
+        <div style={{ position:'relative', zIndex:1, width:'min(100%,420px)', marginTop:10, display:'flex', flexDirection:'column', gap:7 }}>
+          {conversations.slice(0,4).map(conv => {
+            const m = MODULE_STACK.find(x => x.key === conv.module)
+            return (
+              <div key={conv.id} className="hs-recent-row" onClick={() => onSelectTopic(conv.module, conv.topic, conv.id)}>
+                <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6, background:'rgba(79,70,229,0.12)', border:'1px solid rgba(79,70,229,0.22)', color:'#818cf8', flexShrink:0 }}>
+                  {conv.module?.split('–')[0].trim() || 'SAP'}
+                </span>
+                <span style={{ fontSize:12, color:t.text2, flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{conv.title}</span>
+                <span style={{ fontSize:11, color:t.text4, flexShrink:0 }}>{new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -856,14 +889,14 @@ export default function Brain({ session }) {
             <WaniWordmark height={16} dark={dark}/>
           </div>
           <button onClick={()=>goChat(null,null,null)} style={{
-            width:'100%', padding:'10px 14px', background:goldGrad, border:'none', borderRadius:10,
+            width:'100%', padding:'10px 14px', background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)', border:'none', borderRadius:10,
             color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif",
             display:'flex', alignItems:'center', justifyContent:'center', gap:8,
             boxShadow:'0 2px 10px rgba(79,70,229,0.2)', transition:'all 0.2s',
           }}
             onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
             onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
-          ><span style={{ fontSize:16 }}>+</span> New Conversation</button>
+          ><span style={{ fontSize:16, color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}> New Conversation</span></button>
         </div>
 
         {/* Search */}
@@ -911,7 +944,7 @@ export default function Brain({ session }) {
             onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
             onMouseLeave={e=>e.currentTarget.style.background='transparent'}
           >
-            <div style={{ width:32, height:32, borderRadius:'50%', background:goldGrad, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0, boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>
+            <div style={{ width:32, height:32, borderRadius:'50%', background:'linear-gradient(135deg,#1a1a2e,#4F46E5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', flexShrink:0, boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>
               {getInitials(profile?.name, session.user.email)}
             </div>
             <div style={{ overflow:'hidden', flex:1 }}>
