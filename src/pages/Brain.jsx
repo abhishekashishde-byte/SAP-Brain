@@ -312,11 +312,11 @@ const MODULE_STACK = [
 
 const N_CARDS  = MODULE_STACK.length
 const CARD_H   = 170   // px — full card height
-const PEEK     = 26    // px each back card peeks below
+const PEEK     = 14    // px each back card peeks below — just a sliver
 
 function topFor(slot)     { return slot === 0 ? 0 : CARD_H + (slot-1) * PEEK }
 function scaleFor(slot)   { return 1 - slot * 0.022 }
-function opacityFor(slot) { return slot===0?1:slot===1?0.52:slot===2?0.32:0.15 }
+function opacityFor(slot) { return slot===0?1:slot===1?0.45:0 }
 
 function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
   const cardRefs      = useRef([])
@@ -470,7 +470,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
       {/* ── Card stack ── */}
       <div
         className="hs-card-wrap"
-        style={{ position:'relative', zIndex:1, width:'min(100%,420px)', height:`${CARD_H + (N_CARDS-1)*PEEK}px`, touchAction:'none', cursor:'pointer', flexShrink:0 }}
+        style={{ position:'relative', zIndex:1, width:'min(100%,420px)', height:`${CARD_H + 20}px`, touchAction:'none', cursor:'pointer', flexShrink:0, overflow:'hidden', borderRadius:22 }}
         onClick={e => { if (e.target.closest('.hs-open-btn') || e.target.closest('.hs-topic')) return; advance() }}
         onMouseDown={e => { if (e.target.closest('.hs-open-btn') || e.target.closest('.hs-topic')) return; mdown.current=true; my0.current=e.clientY; mdrag.current=false }}
         onMouseMove={e => {
