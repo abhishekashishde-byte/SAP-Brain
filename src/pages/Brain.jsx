@@ -173,19 +173,35 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
         const tl = []; while (i < lines.length && lines[i].includes('|')) { tl.push(lines[i]); i++ }
         const headers = tl[0].split('|').filter(c=>c.trim())
         const rows = tl.slice(2).map(r=>r.split('|').filter(c=>c.trim()))
-        els.push(<div key={`t${i}`} style={{ overflowX:'auto', margin:'10px 0' }}>
-          <table style={{ borderCollapse:'collapse', width:'100%', fontSize:13 }}>
-            <thead><tr>{headers.map((h,j)=><th key={j} style={{ padding:'8px 12px', background:'rgba(79,70,229,0.08)', borderBottom:'2px solid rgba(79,70,229,0.2)', textAlign:'left', fontWeight:600, color:t.text, whiteSpace:'nowrap' }}>{h.trim()}</th>)}</tr></thead>
-            <tbody>{rows.map((row,j)=><tr key={j} style={{ borderBottom:`1px solid ${t.border}`, background: j%2===0?t.surface:t.surface2 }}>{row.map((cell,k)=><td key={k} style={{ padding:'7px 12px', color:t.text2 }}>{inlineFormat(cell.trim())}</td>)}</tr>)}</tbody>
-          </table></div>)
+        const tblHeaders = headers
+          const tblRows = rows
+          const copyTableAsCSV = () => {
+            const csv = [tblHeaders.map(h=>h.trim()).join(','), ...tblRows.map(r=>r.map(c=>c.trim()).join(','))].join('\n')
+            navigator.clipboard?.writeText(csv)
+          }
+          const downloadCSV = () => {
+            const csv = [tblHeaders.map(h=>h.trim()).join(','), ...tblRows.map(r=>r.map(c=>c.trim()).join(','))].join('\n')
+            const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv)
+            a.download = 'wani-table.csv'; a.click()
+          }
+          els.push(<div key={`t${i}`} style={{ margin:'10px 0' }}>
+          <div style={{ display:'flex', gap:6, marginBottom:6, justifyContent:'flex-end' }}>
+            <button onClick={copyTableAsCSV} style={{ fontSize:11, padding:'3px 10px', borderRadius:6, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>Copy CSV</button>
+            <button onClick={downloadCSV} style={{ fontSize:11, padding:'3px 10px', borderRadius:6, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>↓ Download CSV</button>
+          </div>
+          <div style={{ overflowX:'auto' }}>
+          <table style={{ borderCollapse:'collapse', width:'100%', fontSize:15 }}>
+            <thead><tr>{tblHeaders.map((h,j)=><th key={j} style={{ padding:'8px 12px', background:'rgba(79,70,229,0.08)', borderBottom:'2px solid rgba(79,70,229,0.2)', textAlign:'left', fontWeight:600, color:t.text, whiteSpace:'nowrap' }}>{h.trim()}</th>)}</tr></thead>
+            <tbody>{tblRows.map((row,j)=><tr key={j} style={{ borderBottom:`1px solid ${t.border}`, background: j%2===0?t.surface:t.surface2 }}>{row.map((cell,k)=><td key={k} style={{ padding:'7px 12px', color:t.text2 }}>{inlineFormat(cell.trim())}</td>)}</tr>)}</tbody>
+          </table></div></div>)
         continue
       }
-      if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700, fontSize:15, color:t.text, margin:'12px 0 4px', fontFamily:"'Playfair Display',serif" }}>{line.slice(3)}</div>); i++; continue }
-      if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600, fontSize:14, color:t.text, margin:'10px 0 3px' }}>{line.slice(4)}</div>); i++; continue }
-      if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex', gap:8, margin:'4px 0', paddingLeft:4 }}><span style={{ color:'#4F46E5', marginTop:1, flexShrink:0, fontSize:14 }}>•</span><span style={{ lineHeight:1.65, color:t.text2 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
+      if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700, fontSize:18, color:t.text, margin:'14px 0 6px', fontFamily:"'Playfair Display',serif" }}>{line.slice(3)}</div>); i++; continue }
+      if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600, fontSize:16, color:t.text, margin:'10px 0 4px' }}>{line.slice(4)}</div>); i++; continue }
+      if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex', gap:8, margin:'4px 0', paddingLeft:4 }}><span style={{ color:'#4F46E5', marginTop:1, flexShrink:0, fontSize:14 }}>•</span><span style={{ lineHeight:1.7, color:t.text2, fontSize:16 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
       if (/^\s+[\+\-\*] /.test(line)) {
         const txt = line.replace(/^\s+[\+\-\*] /,'')
-        els.push(<div key={i} style={{ display:'flex', gap:8, margin:'3px 0', paddingLeft:20 }}><span style={{ color:'#6366F1', fontSize:12, marginTop:3, flexShrink:0 }}>–</span><span style={{ fontSize:13, lineHeight:1.6, color:t.text3 }}>{inlineFormat(txt)}</span></div>); i++; continue
+        els.push(<div key={i} style={{ display:'flex', gap:8, margin:'3px 0', paddingLeft:20 }}><span style={{ color:'#6366F1', fontSize:12, marginTop:3, flexShrink:0 }}>–</span><span style={{ fontSize:15, lineHeight:1.65, color:t.text3 }}>{inlineFormat(txt)}</span></div>); i++; continue
       }
       if (/^---+$/.test(line.trim())) { els.push(<hr key={i} style={{ border:'none', borderTop:`1px solid ${t.border}`, margin:'10px 0' }}/>); i++; continue }
       if (line.trim() === '')         { els.push(<div key={i} style={{ height:6 }}/>); i++; continue }
@@ -234,7 +250,7 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
           background: t.msgUser,
           border:`1px solid ${t.msgUserBdr}`,
           borderRadius:'16px 4px 16px 16px',
-          padding:'10px 14px', fontSize:14, lineHeight:1.65,
+          padding:'10px 14px', fontSize:16, lineHeight:1.7,
           color:t.text, wordBreak:'break-word',
         }}>
           <span style={{ whiteSpace:'pre-wrap' }}>{content}</span>
@@ -253,7 +269,7 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
         <WaniLogo size={26} dark={dark}/>
       </div>
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:14, lineHeight:1.75, wordBreak:'break-word' }}>
+        <div style={{ fontSize:16, lineHeight:1.8, wordBreak:'break-word' }}>
           {renderMarkdown(content)}
           {isStreaming && <span style={{ display:'inline-block', width:2, height:'1em', background:'#4F46E5', marginLeft:2, animation:'cursorBlink 0.8s infinite', verticalAlign:'middle' }}/>}
         </div>
@@ -805,7 +821,20 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
           tdrag.current = false
         }}
       >
-        {MODULE_STACK.map((m, idx) => {
+        {(()=>{
+          // Only render modules the user has actually used
+          // On first login (no convs) render a single placeholder card
+          const usedModules = MODULE_STACK.filter(m => conversations.some(c => c.module === m.key))
+          const stackToShow = usedModules.length > 0 ? usedModules : null
+          if (!stackToShow) return (
+            <div style={{ position:'absolute', inset:0, borderRadius:22, background: dark?'#1A1830':'#F0EEF8', border:`1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, padding:24 }}>
+              <div style={{ fontSize:36, opacity:0.3 }}>💬</div>
+              <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:600, color:t.text, textAlign:'center' }}>Start your first conversation</div>
+              <p style={{ fontSize:14, color:t.text3, textAlign:'center', maxWidth:260, lineHeight:1.6 }}>Ask any SAP question — your modules will appear here as you explore</p>
+              <button onClick={()=>onNewChat(null,null)} style={{ marginTop:8, padding:'10px 24px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#1a1a2e,#4F46E5)', color:'#fff', fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:'pointer' }}>Ask Wani →</button>
+            </div>
+          )
+          return stackToShow.map((m, idx) => {
           const count  = conversations.filter(c => c.module === m.key).length
           const topics = TOPICS[m.key] || []
           return (
@@ -858,7 +887,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
               </div>
             </div>
           )
-        })}
+          })
+        })()}
       </div>
 
       {/* Dot indicators */}
@@ -1112,7 +1142,30 @@ export default function Brain({ session }) {
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let buf = '', streamedText = '', fullReply = '', modelUsed = ''
+      let buf = '', fullReply = '', modelUsed = ''
+
+      // Smooth reveal buffer — chunks arrive fast from Groq, we drip them out naturally
+      let revealBuffer = ''   // text waiting to be revealed
+      let revealed     = ''   // text already shown to user
+      let revealing    = false
+
+      const drip = () => {
+        if (revealing || revealBuffer === revealed) return
+        revealing = true
+        const tick = () => {
+          if (revealed.length < revealBuffer.length) {
+            // Reveal one character at a time, slightly faster at mid-word
+            revealed += revealBuffer[revealed.length]
+            setStreamingText(revealed)
+            const c = revealed[revealed.length-1]
+            const delay = '.!?'.includes(c)?45:',;:'.includes(c)?25:c==='\n'?35:12
+            setTimeout(tick, delay)
+          } else {
+            revealing = false
+          }
+        }
+        tick()
+      }
 
       while (true) {
         const { done, value } = await reader.read()
@@ -1126,16 +1179,21 @@ export default function Brain({ session }) {
           try {
             const evt = JSON.parse(raw)
             if (evt.type === 'chunk') {
-              streamedText += evt.text
-              setStreamingText(streamedText)
+              revealBuffer += evt.text
+              drip()
             } else if (evt.type === 'done') {
-              fullReply  = evt.full
-              modelUsed  = evt.model
+              fullReply = evt.full
+              modelUsed = evt.model
             } else if (evt.type === 'error') {
               throw new Error(evt.error)
             }
           } catch {}
         }
+      }
+
+      // Flush any remaining buffer instantly after stream ends
+      if (revealBuffer !== revealed) {
+        setStreamingText(revealBuffer)
       }
 
       const modelTag = modelUsed==='claude' ? '\n\n_✦ Claude_' : '\n\n_⚡ Groq_'
@@ -1306,7 +1364,7 @@ export default function Brain({ session }) {
         </div>
 
         {/* Top bar */}
-        <div className="main-topbar" style={{ padding:'11px 16px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:10, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2 }}>
+        <div className="main-topbar" style={{ padding:'9px 12px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:8, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2, minHeight:48 }}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ background:'none', border:'none', cursor:'pointer', padding:'6px 8px', borderRadius:8, fontSize:16, color:t.text3, transition:'background 0.15s', flexShrink:0 }}
             onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
             onMouseLeave={e=>e.currentTarget.style.background='none'}
@@ -1363,12 +1421,12 @@ export default function Brain({ session }) {
 
         {/* Tone bar — chat only */}
         {view==='chat' && (
-          <div style={{ padding:'6px 16px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:8, background:t.topbar, backdropFilter:'blur(6px)', flexShrink:0, position:'relative', zIndex:2, flexWrap:'wrap' }}>
-            <span style={{ fontSize:11, color:t.text4, marginRight:2, fontWeight:500 }}>Tone:</span>
+          <div style={{ padding:'5px 14px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:6, background:t.topbar, backdropFilter:'blur(6px)', flexShrink:0, position:'relative', zIndex:2, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+            <span style={{ fontSize:11, color:t.text4, fontWeight:500, flexShrink:0 }}>Tone:</span>
             {[{key:'balanced',label:'⚖️ Balanced'},{key:'direct',label:'⚡ Direct'},{key:'friendly',label:'😊 Friendly'},{key:'formal',label:'📋 Formal'}].map(to => (
               <button key={to.key} className={`tone-btn${tone===to.key?' active':''}`}
                 onClick={()=>setTone(to.key)}
-                style={{ border:`1.5px solid ${tone===to.key?'transparent':t.toneBtnBdr}`, background:tone===to.key?undefined:t.toneBtn, color:tone===to.key?undefined:t.toneBtnTxt }}
+                style={{ border:`1.5px solid ${tone===to.key?'transparent':t.toneBtnBdr}`, background:tone===to.key?undefined:t.toneBtn, color:tone===to.key?undefined:t.toneBtnTxt, flexShrink:0 }}
               >{to.label}</button>
             ))}
           </div>
@@ -1449,9 +1507,9 @@ export default function Brain({ session }) {
                   <textarea ref={inputRef} value={input}
                     onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px'}}
                     onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
-                    placeholder="Ask your SAP question… (Enter to send)"
+                    placeholder="Ask your SAP question…"
                     rows={1}
-                    style={{ flex:1, background:'transparent', border:'none', resize:'none', fontSize:14, color:t.text, fontFamily:"'DM Sans',sans-serif", lineHeight:1.65, height:'24px', maxHeight:'160px', overflowY:'auto', padding:0, outline:'none' }}
+                    style={{ flex:1, background:'transparent', border:'none', resize:'none', fontSize:16, color:t.text, fontFamily:"'DM Sans',sans-serif", lineHeight:1.65, height:'26px', maxHeight:'160px', overflowY:'auto', padding:0, outline:'none' }}
                   />
                   <button onClick={handleSend} disabled={!input.trim()||isLoading||isStreaming}
                     style={{ width:36, height:36, borderRadius:10, border:'none', flexShrink:0, background:input.trim()&&!isLoading&&!isStreaming?'#4F46E5':t.border, color:input.trim()&&!isLoading&&!isStreaming?'#fff':t.text4, cursor:input.trim()&&!isLoading&&!isStreaming?'pointer':'not-allowed', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.2s' }}
