@@ -58,7 +58,7 @@ async function callGroqDirect(systemPrompt, messages, maxTokens=800) {
 // ── Gemini Flash call (facts only) ───────────────────────────────────────────
 // SAP knowledge anchors — Gemini fallback for well-known T-codes
 const SAP_ANCHORS = {
-  'maintenance order': '**T-codes:** `IW31` (create), `IW32` (change), `IW33` (display), `IW38` (mass change)\n**Order types:** PM01 (corrective), PM02 (refurbishment), PM03 (inspection)\n**Key table:** AUFK (order header)',
+  'maintenance order': '**T-codes:** `IW31` (create), `IW32` (change), `IW33` (display), `IW38` (mass change)\n**Order types:** PM01 (corrective), PM03 (inspection), PM04 (refurbishment) — exact types depend on implementation\n**Key table:** AUFK (order header)',
   'production order': '**T-codes:** `CO01` (create), `CO02` (change), `CO03` (display), `COHV` (mass processing)\n**Key table:** AUFK (order header), AFKO (order header PP)',
   'purchase order': '**T-codes:** `ME21N` (create), `ME22N` (change), `ME23N` (display), `ME2N` (list)\n**Key table:** EKKO (header), EKPO (item)',
   'goods receipt': '**T-codes:** `MIGO` (goods movement), `MB51` (material document list)\n**Key table:** MKPF (header), MSEG (item)',
@@ -86,8 +86,11 @@ function getAnchorFacts(question) {
 async function callGeminiFacts(question, context) {
   const key = process.env.GEMINI_API_KEY
 
-  // First check our own anchors — instant, no API call needed
-  const anchorFacts = getAnchorFacts(question)
+  // Only use anchors for very specific single-object questions
+  // Avoid injecting wrong T-codes for complex multi-object questions
+  const questionLower = question.toLowerCase()
+  const wordCount = question.trim().split(/\s+/).length
+  const anchorFacts = wordCount <= 8 ? getAnchorFacts(question) : ''
 
   if (!key) return anchorFacts  // no Gemini key — use anchors only
 
@@ -135,14 +138,16 @@ Question: ${question}`
 async function mergeWithGroq(theoryAnswer, factsAnswer, userName) {
   const nameNote = userName ? `Address the user as ${userName} naturally if appropriate.` : ''
   const mergePrompt = `You are a merger. You will receive two parts of an SAP answer:
-PART 1: Theory/explanation (written by an AI)
-PART 2: Specific facts — T-codes, tables, app names (verified facts)
+PART 1: Theory/explanation
+PART 2: Specific facts — T-codes, tables, app names
 
-Your job: Combine them into ONE clean, natural answer. 
-RULES:
+Your job: Combine them into ONE clean, natural answer.
+CRITICAL RULES:
+- Only include facts from Part 2 that are DIRECTLY relevant to the specific objects mentioned in Part 1
+- If Part 2 contains T-codes for a different SAP object than what Part 1 is explaining — IGNORE those facts
 - Do NOT add any new information not present in Part 1 or Part 2
 - Do NOT invent any T-codes, app names or table names
-- Weave the facts from Part 2 naturally into the explanation from Part 1
+- Weave ONLY the relevant facts naturally into the explanation
 - Keep the combined answer concise — no longer than Part 1
 - Use **bold** for T-codes and key terms
 - ${nameNote}
