@@ -453,7 +453,7 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
         <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:22 }}>
           {[
             { key:'transcript', icon:'📄', title:'Full Transcript', desc:'Complete Q&A — every message formatted as a dialogue' },
-            { key:'summary',    icon:'📋', title:'Answers Only',    desc:'Only Wani's answers, with your questions as headings' },
+            { key:'summary',    icon:'📋', title:'Answers Only',    desc:"Only Wani's answers, with your questions as headings" },
           ].map(opt => (
             <div key={opt.key}
               onClick={()=>setMode(opt.key)}
