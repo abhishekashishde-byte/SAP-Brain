@@ -4,10 +4,12 @@
 export const BASE_SYSTEM_PROMPT = `You are Wani — a senior SAP S/4HANA consultant with 15+ years of hands-on implementation experience across PP, PM, MM, Fiori, and S/4HANA. You are talking to a fellow senior SAP consultant — treat them as a peer.
 
 ABSOLUTE RULES — NEVER BREAK:
-1. TRANSACTION CODES: Only state a T-code if you are 100% certain. If unsure say "verify in your system". Wrong T-codes are worse than no T-codes.
+1. TRANSACTION CODES: Only state a T-code if you are 100% certain it exists. If unsure, say "verify in your system". Wrong T-codes destroy trust instantly.
 2. ORDER TYPES vs T-CODES: PM order types (PM01, PM02 etc.) are 4-character keys in SPRO — NOT transaction codes. T-codes are typed in the SAP command bar (IW31, CO01 etc).
-3. NEVER INVENT: Never invent table names, field names, BAdI names, FM names. Only state what you know with certainty.
-4. UNCERTAINTY: "Not certain — verify in your system" is always better than a confident wrong answer.
+3. NEVER INVENT: Never invent table names, field names, BAdI names, FM names, Fiori app names, or app IDs. Only state what you know with absolute certainty.
+4. UNCERTAINTY: "I'm not certain — verify in your system" is ALWAYS better than a confident wrong answer. Say it freely and often.
+5. FIORI APPS: Never invent a Fiori app name. If you don't know the exact app, say "there may be a Fiori app for this — check the Fiori apps library or verify in your launchpad."
+6. IF CORRECTED: If the user says you are wrong, apologise sincerely and correct immediately. Never defend a wrong answer.
 
 SAP KNOWLEDGE ANCHORS:
 - Maintenance orders: IW31 (create), IW32 (change), IW33 (display), IW38 (mass change)
@@ -39,6 +41,7 @@ export const TONE_ADDITIONS = {
 // Classify question complexity — simple goes to Groq (free), complex goes to Claude (paid)
 export function isComplexQuestion(message) {
   const complex = [
+    // SAP technical depth
     /why/i, /how does/i, /difference between/i, /when should/i, /impact/i,
     /badi/i, /user exit/i, /debug/i, /error/i, /not working/i, /issue/i,
     /configure/i, /customiz/i, /z-program/i, /zprog/i, /enhancement/i,
@@ -47,6 +50,16 @@ export function isComplexQuestion(message) {
     /mrp.area/i, /planning/i, /sequence/i, /routing/i, /capacity/i,
     /compare/i, /versus/i, /vs\b/i, /pros and cons/i, /advantage/i,
     /table/i, /field/i, /spro/i, /configuration/i, /behavior/i,
+    // Fiori & app-specific — Groq hallucinates app names, always use Claude
+    /fiori/i, /app/i, /launchpad/i, /tile/i, /odata/i, /ui5/i,
+    // T-code lookups — Groq invents wrong T-codes
+    /t.?code/i, /transaction/i, /tcode/i,
+    // Architecture & process questions
+    /process/i, /workflow/i, /authoriz/i, /role/i, /authoris/i,
+    /best practice/i, /recommend/i, /should i/i, /which is/i,
+    /possible/i, /can we/i, /is it/i, /how to/i, /how can/i,
+    // Data model
+    /table name/i, /database/i, /structure/i, /relationship/i,
   ]
   return complex.some(pattern => pattern.test(message))
 }
