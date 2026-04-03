@@ -1010,13 +1010,13 @@ export default function Brain({ session }) {
   const [isSummarising, setIsSummarising] = useState(false)
   const [sidebarOpen, setSidebarOpen]     = useState(!isMobileWidth())
   const [tone, setTone]                   = useState('balanced')
+  const [isMobile, setIsMobile]           = useState(isMobileWidth())
   const [showExport, setShowExport]       = useState(false)
 
   const bottomRef      = useRef(null)
   const inputRef       = useRef(null)
   const abortRef       = useRef(null)
   const chatScrollRef  = useRef(null)
-  const userScrolled   = useRef(false)
 
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
@@ -1044,11 +1044,13 @@ export default function Brain({ session }) {
     ]).then(([convs, prof]) => { setConversations(convs||[]); setProfile(prof); setDbLoading(false) })
   }, [session])
 
-  // Smart scroll — only auto-scroll if user hasn't manually scrolled up
+  // Scroll to bottom ONLY when user sends a new message — never during streaming
+  // User reads at their own pace, no forced scrolling
   useEffect(() => {
-    if (userScrolled.current) return
-    bottomRef.current?.scrollIntoView({ behavior:'smooth' })
-  }, [messages, streamingText])
+    const el = chatScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [messages.length])  // Only fires when message COUNT changes, not content
   // Handle native back gesture — navigate within app instead of exiting
   useEffect(() => {
     // Set initial history state
@@ -1074,7 +1076,15 @@ export default function Brain({ session }) {
     }
 
     window.addEventListener('popstate', handlePop)
-    return () => window.removeEventListener('popstate', handlePop)
+
+    // Keep isMobile state in sync with actual window width
+    const handleResize = () => setIsMobile(isMobileWidth())
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      window.removeEventListener('popstate', handlePop)
+      window.removeEventListener('resize', handleResize)
+    }
   }, [])
 
 
@@ -1110,7 +1120,6 @@ export default function Brain({ session }) {
     setInput('')
     if (inputRef.current) inputRef.current.style.height = '24px'
     setIsLoading(true)
-    userScrolled.current = false  // reset scroll lock on new send
 
     let convId = activeConvId
     let currentMod = activeConv?.module || browseModule
@@ -1287,7 +1296,7 @@ export default function Brain({ session }) {
       `}</style>
 
       {/* Mobile overlay */}
-      {sidebarOpen && isMobileWidth() && (
+      {sidebarOpen && isMobile && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:40, backdropFilter:'blur(2px)' }} onClick={()=>setSidebarOpen(false)}/>
       )}
 
@@ -1298,7 +1307,7 @@ export default function Brain({ session }) {
         display:'flex', flexDirection:'column', overflow:'hidden',
         transition:'transform 0.3s ease',
         transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
-        position: isMobileWidth() ? 'fixed' : 'relative',
+        position: isMobile ? 'fixed' : 'relative',
         top:0, bottom:0, left:0, zIndex:50,
       }}>
         <div style={{ padding:'16px 16px 12px', borderBottom:`1px solid ${t.border}` }}>
@@ -1347,7 +1356,7 @@ export default function Brain({ session }) {
                 <div style={{ fontSize:10, fontWeight:700, color:t.text4, letterSpacing:0.8, textTransform:'uppercase', padding:'10px 6px 4px' }}>{group}</div>
                 {convs.map(conv => (
                   <ConversationItem key={conv.id} conv={conv} isActive={conv.id===activeConvId} t={t}
-                    onClick={()=>{ setActiveConvId(conv.id); setView('chat'); setShowSummarise(false); if(isMobileWidth()) setSidebarOpen(false) }}
+                    onClick={()=>{ setActiveConvId(conv.id); setView('chat'); setShowSummarise(false); if(isMobile) setSidebarOpen(false) }}
                     onDelete={handleDelete}
                   />
                 ))}
@@ -1384,34 +1393,34 @@ export default function Brain({ session }) {
         </div>
 
         {/* Top bar */}
-        <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:isMobileWidth()?12:8, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2, padding: isMobileWidth()?'0 18px':'9px 12px', height: isMobileWidth()?68:48 }}>
+        <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:isMobile?12:8, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2, padding: isMobile?'0 18px':'9px 12px', height: isMobile?68:48 }}>
 
           {/* Mobile chat: ☰ opens sidebar. Desktop: same */}
           <button
             onClick={()=>setSidebarOpen(!sidebarOpen)}
-            style={{ background:'none', border:'none', cursor:'pointer', borderRadius:10, fontSize: isMobileWidth()?24:16, color:t.text, transition:'background 0.15s', flexShrink:0, width: isMobileWidth()?48:32, height: isMobileWidth()?48:32, display:'flex', alignItems:'center', justifyContent:'center' }}
+            style={{ background:'none', border:'none', cursor:'pointer', borderRadius:10, fontSize: isMobile?24:16, color:t.text, transition:'background 0.15s', flexShrink:0, width: isMobile?48:32, height: isMobile?48:32, display:'flex', alignItems:'center', justifyContent:'center' }}
             onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
             onMouseLeave={e=>e.currentTarget.style.background='none'}
           >☰</button>
 
           {/* Logo — hide on mobile in chat to save space */}
-          {!(isMobileWidth() && view==='chat') && (
+          {!(isMobile && view==='chat') && (
             <div style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', flexShrink:0 }} onClick={goHome}>
-              <WaniLogo size={isMobileWidth()?26:22} dark={dark}/>
-              {!isMobileWidth() && <WaniWordmark height={13} dark={dark}/>}
+              <WaniLogo size={isMobile?26:22} dark={dark}/>
+              {!isMobile && <WaniWordmark height={13} dark={dark}/>}
             </div>
           )}
 
           {/* Chat breadcrumb */}
           {view==='chat' && activeConv && (
             <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
-              <ModuleBadge module={activeConv.module} small={isMobileWidth()}/>
-              {!isMobileWidth() && (
+              <ModuleBadge module={activeConv.module} small={isMobile}/>
+              {!isMobile && (
                 <div style={{ fontSize:13, fontWeight:500, color:t.text2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', minWidth:0 }}>
                   {activeConv.title}
                 </div>
               )}
-              {isMobileWidth() && (
+              {isMobile && (
                 <div style={{ fontSize:14, fontWeight:500, color:t.text2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', minWidth:0, flex:1 }}>
                   {activeConv.topic || activeConv.module?.split('–')[0].trim()}
                 </div>
@@ -1422,7 +1431,7 @@ export default function Brain({ session }) {
           {view==='topic' && (
             <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
               <span style={{ color:t.text4, fontSize:16 }}>›</span>
-              <div style={{ fontSize: isMobileWidth()?15:13, fontWeight:500, color:t.text2 }}>{browseTopic || browseModule?.split('–')[0].trim()}</div>
+              <div style={{ fontSize: isMobile?15:13, fontWeight:500, color:t.text2 }}>{browseTopic || browseModule?.split('–')[0].trim()}</div>
             </div>
           )}
 
@@ -1434,11 +1443,11 @@ export default function Brain({ session }) {
               background:'none',
               border:`1.5px solid ${t.border}`,
               borderRadius:10,
-              width: isMobileWidth()?48:undefined,
-              height: isMobileWidth()?48:undefined,
-              padding: isMobileWidth()?0:'5px 10px',
+              width: isMobile?48:undefined,
+              height: isMobile?48:undefined,
+              padding: isMobile?0:'5px 10px',
               cursor:'pointer',
-              fontSize: isMobileWidth()?20:12,
+              fontSize: isMobile?20:12,
               color:t.text3,
               fontFamily:"'DM Sans',sans-serif",
               fontWeight:500,
@@ -1447,21 +1456,21 @@ export default function Brain({ session }) {
             }}
               onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}
-            >{isMobileWidth() ? '↓' : '↓ Export'}</button>
+            >{isMobile ? '↓' : '↓ Export'}</button>
           )}
 
           {/* Dark mode toggle */}
           <button onClick={toggle} style={{
-            width: isMobileWidth()?46:44, height: isMobileWidth()?28:24,
+            width: isMobile?46:44, height: isMobile?28:24,
             borderRadius:14, border:'none', cursor:'pointer', position:'relative',
             background: dark ? 'linear-gradient(135deg,#4F46E5,#6366F1)' : '#E2E2EA',
             transition:'background 0.3s', flexShrink:0,
           }}>
             <div style={{
-              position:'absolute', top: isMobileWidth()?4:2,
-              width: isMobileWidth()?20:20, height: isMobileWidth()?20:20,
+              position:'absolute', top: isMobile?4:2,
+              width: isMobile?20:20, height: isMobile?20:20,
               borderRadius:'50%', background:'#fff', transition:'left 0.3s',
-              left: dark ? (isMobileWidth()?22:22) : (isMobileWidth()?4:2),
+              left: dark ? (isMobile?22:22) : (isMobile?4:2),
               boxShadow:'0 2px 4px rgba(0,0,0,0.2)',
               display:'flex', alignItems:'center', justifyContent:'center', fontSize:11,
             }}>{dark ? '🌙' : '☀️'}</div>
@@ -1470,7 +1479,7 @@ export default function Brain({ session }) {
 
         {/* Tone bar — only after user has sent at least one message */}
         {view==='chat' && messages.some(m=>m.role==='user') && (
-          <div style={{ padding: isMobileWidth()?'0 18px':'5px 14px', height: isMobileWidth()?48:36, borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:8, background:t.topbar, backdropFilter:'blur(6px)', flexShrink:0, position:'relative', zIndex:2, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          <div style={{ padding: isMobile?'0 18px':'5px 14px', height: isMobile?48:36, borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:8, background:t.topbar, backdropFilter:'blur(6px)', flexShrink:0, position:'relative', zIndex:2, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
             <span style={{ fontSize:11, color:t.text4, fontWeight:500, flexShrink:0 }}>Tone:</span>
             {[{key:'balanced',label:'⚖️ Balanced'},{key:'direct',label:'⚡ Direct'},{key:'friendly',label:'😊 Friendly'},{key:'formal',label:'📋 Formal'}].map(to => (
               <button key={to.key} className={`tone-btn${tone===to.key?' active':''}`}
@@ -1502,11 +1511,7 @@ export default function Brain({ session }) {
               ref={chatScrollRef}
               className="chat-messages"
               style={{ flex:1, overflowY:'auto', padding:'20px 16px', position:'relative', zIndex:1 }}
-              onScroll={e => {
-                const el = e.currentTarget
-                const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-                userScrolled.current = !atBottom
-              }}
+
             >
               <div style={{ maxWidth:720, margin:'0 auto' }}>
                 {messages.length === 0 ? (
