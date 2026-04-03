@@ -1049,14 +1049,57 @@ export default function Brain({ session }) {
     if (userScrolled.current) return
     bottomRef.current?.scrollIntoView({ behavior:'smooth' })
   }, [messages, streamingText])
+  // Handle native back gesture — navigate within app instead of exiting
+  useEffect(() => {
+    // Set initial history state
+    window.history.replaceState({ view:'home' }, '')
+
+    const handlePop = (e) => {
+      const state = e.state
+      if (!state || state.view === 'home') {
+        setView('home'); setActiveConvId(null); setBrowseModule(null); setBrowseTopic(null); setShowSummarise(false)
+        if(isMobileWidth()) setSidebarOpen(false)
+        // Push state again so next back still stays in app
+        window.history.pushState({ view:'home' }, '')
+      } else if (state.view === 'topic') {
+        setBrowseModule(state.mod); setBrowseTopic(state.topic); setView('topic')
+      } else if (state.view === 'chat') {
+        if(state.convId) { setActiveConvId(state.convId); setView('chat') }
+        else { setActiveConvId(null); setBrowseModule(state.mod); setBrowseTopic(state.topic); setView('chat') }
+      } else {
+        // Fallback — go home and keep in app
+        setView('home')
+        window.history.pushState({ view:'home' }, '')
+      }
+    }
+
+    window.addEventListener('popstate', handlePop)
+    return () => window.removeEventListener('popstate', handlePop)
+  }, [])
+
+
   useEffect(() => { if (view==='chat') setTimeout(()=>inputRef.current?.focus(), 100) }, [view, activeConvId])
   useEffect(() => { if (messages.length >= SUMMARISE_THRESHOLD && !showSummarise) setShowSummarise(true) }, [messages.length])
 
-  const goHome = () => { setView('home'); setActiveConvId(null); setBrowseModule(null); setBrowseTopic(null); setShowSummarise(false); if(isMobileWidth()) setSidebarOpen(false) }
-  const goTopic = (mod, topic) => { setBrowseModule(mod); setBrowseTopic(topic); setView('topic'); if(isMobileWidth()) setSidebarOpen(false) }
+
+
+  const goHome = () => {
+    setView('home'); setActiveConvId(null); setBrowseModule(null); setBrowseTopic(null); setShowSummarise(false)
+    if(isMobileWidth()) setSidebarOpen(false)
+    // Replace history so back gesture from home exits naturally
+    window.history.replaceState({ view:'home' }, '')
+  }
+
+  const goTopic = (mod, topic) => {
+    setBrowseModule(mod); setBrowseTopic(topic); setView('topic')
+    if(isMobileWidth()) setSidebarOpen(false)
+    window.history.pushState({ view:'topic', mod, topic }, '')
+  }
+
   const goChat = (convId, mod=null, topic=null) => {
     if (convId) { setActiveConvId(convId); setView('chat'); setShowSummarise(false) }
     else { setActiveConvId(null); setBrowseModule(mod); setBrowseTopic(topic); setView('chat'); setShowSummarise(false) }
+    window.history.pushState({ view:'chat', convId, mod, topic }, '')
     if (isMobileWidth()) setSidebarOpen(false)
   }
 
@@ -1226,7 +1269,21 @@ export default function Brain({ session }) {
         .tone-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.18s;font-weight:500;}
         .tone-btn.active{background:#4F46E5;border-color:transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 10px rgba(79,70,229,0.25);}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(79,70,229,0.25);border-radius:4px}
-        @media(max-width:768px){.main-topbar{padding:10px 14px!important;}.chat-input-wrap{padding:10px 12px 14px!important;}.chat-messages{padding:16px 12px!important;}}
+        @media(max-width:768px){
+  .main-topbar{
+    padding:0 18px!important;
+    height:68px!important;
+    min-height:68px!important;
+  }
+  .main-topbar-safe{
+    height:env(safe-area-inset-top, 20px)!important;
+    min-height:20px!important;
+    background:inherit;
+  }
+  .chat-input-wrap{padding:10px 14px 20px!important;}
+  .chat-messages{padding:16px 14px!important;}
+  .tone-btn{padding:7px 14px!important;font-size:13px!important;}
+}
       `}</style>
 
       {/* Mobile overlay */}
@@ -1327,64 +1384,93 @@ export default function Brain({ session }) {
         </div>
 
         {/* Top bar */}
-        <div className="main-topbar" style={{ padding:'9px 12px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:8, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2, minHeight:48 }}>
-          <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ background:'none', border:'none', cursor:'pointer', padding:'6px 8px', borderRadius:8, fontSize:16, color:t.text3, transition:'background 0.15s', flexShrink:0 }}
+        <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:isMobileWidth()?12:8, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2, padding: isMobileWidth()?'0 18px':'9px 12px', height: isMobileWidth()?68:48 }}>
+
+          {/* Mobile chat: ☰ opens sidebar. Desktop: same */}
+          <button
+            onClick={()=>setSidebarOpen(!sidebarOpen)}
+            style={{ background:'none', border:'none', cursor:'pointer', borderRadius:10, fontSize: isMobileWidth()?24:16, color:t.text, transition:'background 0.15s', flexShrink:0, width: isMobileWidth()?48:32, height: isMobileWidth()?48:32, display:'flex', alignItems:'center', justifyContent:'center' }}
             onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
             onMouseLeave={e=>e.currentTarget.style.background='none'}
           >☰</button>
 
-          <div style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', flexShrink:0 }} onClick={goHome}>
-            <WaniLogo size={22} dark={dark}/>
-            <WaniWordmark height={13} dark={dark}/>
-          </div>
-
-          {view==='chat' && activeConv && (
-            <><span style={{ color:t.text4, fontSize:16 }}>›</span>
-            <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
-              <ModuleBadge module={activeConv.module}/>
-              <div style={{ minWidth:0, display:'none' }} className="conv-title-wrap">
-                <div style={{ fontSize:13, fontWeight:600, color:t.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{activeConv.title}</div>
-              </div>
-            </div></>
+          {/* Logo — hide on mobile in chat to save space */}
+          {!(isMobileWidth() && view==='chat') && (
+            <div style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', flexShrink:0 }} onClick={goHome}>
+              <WaniLogo size={isMobileWidth()?26:22} dark={dark}/>
+              {!isMobileWidth() && <WaniWordmark height={13} dark={dark}/>}
+            </div>
           )}
 
-          {view==='topic' && (<><span style={{ color:t.text4, fontSize:16 }}>›</span><div style={{ fontSize:13, fontWeight:500, color:t.text2 }}>{browseTopic || browseModule?.split('–')[0].trim()}</div></>)}
+          {/* Chat breadcrumb */}
+          {view==='chat' && activeConv && (
+            <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
+              <ModuleBadge module={activeConv.module} small={isMobileWidth()}/>
+              {!isMobileWidth() && (
+                <div style={{ fontSize:13, fontWeight:500, color:t.text2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', minWidth:0 }}>
+                  {activeConv.title}
+                </div>
+              )}
+              {isMobileWidth() && (
+                <div style={{ fontSize:14, fontWeight:500, color:t.text2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', minWidth:0, flex:1 }}>
+                  {activeConv.topic || activeConv.module?.split('–')[0].trim()}
+                </div>
+              )}
+            </div>
+          )}
 
-          <div style={{ flex:1 }}/>
+          {view==='topic' && (
+            <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:0 }}>
+              <span style={{ color:t.text4, fontSize:16 }}>›</span>
+              <div style={{ fontSize: isMobileWidth()?15:13, fontWeight:500, color:t.text2 }}>{browseTopic || browseModule?.split('–')[0].trim()}</div>
+            </div>
+          )}
 
-          {/* Export button — chat view with messages */}
-          {view==='chat' && messages.length > 0 && (
-            <button onClick={()=>setShowExport(true)} title="Export conversation" style={{
-              background:'none', border:`1px solid ${t.border}`, borderRadius:8,
-              padding:'5px 10px', cursor:'pointer', fontSize:12, color:t.text3,
-              fontFamily:"'DM Sans',sans-serif", fontWeight:500,
-              display:'flex', alignItems:'center', gap:5,
+          {!(view==='chat' || view==='topic') && <div style={{ flex:1 }}/>}
+
+          {/* Export — icon only on mobile */}
+          {view==='chat' && messages.some(m=>m.role==='user') && (
+            <button onClick={()=>setShowExport(true)} title="Export" style={{
+              background:'none',
+              border:`1.5px solid ${t.border}`,
+              borderRadius:10,
+              width: isMobileWidth()?48:undefined,
+              height: isMobileWidth()?48:undefined,
+              padding: isMobileWidth()?0:'5px 10px',
+              cursor:'pointer',
+              fontSize: isMobileWidth()?20:12,
+              color:t.text3,
+              fontFamily:"'DM Sans',sans-serif",
+              fontWeight:500,
+              display:'flex', alignItems:'center', justifyContent:'center', gap:4,
               transition:'all 0.15s', flexShrink:0,
             }}
               onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}
-            >↓ Export</button>
+            >{isMobileWidth() ? '↓' : '↓ Export'}</button>
           )}
 
           {/* Dark mode toggle */}
           <button onClick={toggle} style={{
-            width:44, height:24, borderRadius:12, border:'none', cursor:'pointer', position:'relative',
+            width: isMobileWidth()?46:44, height: isMobileWidth()?28:24,
+            borderRadius:14, border:'none', cursor:'pointer', position:'relative',
             background: dark ? 'linear-gradient(135deg,#4F46E5,#6366F1)' : '#E2E2EA',
             transition:'background 0.3s', flexShrink:0,
           }}>
             <div style={{
-              position:'absolute', top:2, width:20, height:20, borderRadius:'50%',
-              background:'#fff', transition:'left 0.3s',
-              left: dark ? 22 : 2,
+              position:'absolute', top: isMobileWidth()?4:2,
+              width: isMobileWidth()?20:20, height: isMobileWidth()?20:20,
+              borderRadius:'50%', background:'#fff', transition:'left 0.3s',
+              left: dark ? (isMobileWidth()?22:22) : (isMobileWidth()?4:2),
               boxShadow:'0 2px 4px rgba(0,0,0,0.2)',
               display:'flex', alignItems:'center', justifyContent:'center', fontSize:11,
             }}>{dark ? '🌙' : '☀️'}</div>
           </button>
         </div>
 
-        {/* Tone bar — chat only, only when conversation has messages */}
-        {view==='chat' && messages.length > 0 && (
-          <div style={{ padding:'5px 14px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:6, background:t.topbar, backdropFilter:'blur(6px)', flexShrink:0, position:'relative', zIndex:2, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+        {/* Tone bar — only after user has sent at least one message */}
+        {view==='chat' && messages.some(m=>m.role==='user') && (
+          <div style={{ padding: isMobileWidth()?'0 18px':'5px 14px', height: isMobileWidth()?48:36, borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:8, background:t.topbar, backdropFilter:'blur(6px)', flexShrink:0, position:'relative', zIndex:2, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
             <span style={{ fontSize:11, color:t.text4, fontWeight:500, flexShrink:0 }}>Tone:</span>
             {[{key:'balanced',label:'⚖️ Balanced'},{key:'direct',label:'⚡ Direct'},{key:'friendly',label:'😊 Friendly'},{key:'formal',label:'📋 Formal'}].map(to => (
               <button key={to.key} className={`tone-btn${tone===to.key?' active':''}`}
