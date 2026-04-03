@@ -38,28 +38,25 @@ export const TONE_ADDITIONS = {
   formal:   `\nTONE: Formal and precise. Complete sentences. Structured.`,
 }
 
-// Classify question complexity — simple goes to Groq (free), complex goes to Claude (paid)
+// Classify question complexity
+// NARROW routing — only genuine complexity goes to Claude
+// T-codes, Fiori apps, simple how-to → parallel specialist (Groq+Gemini)
 export function isComplexQuestion(message) {
   const complex = [
-    // SAP technical depth
-    /why/i, /how does/i, /difference between/i, /when should/i, /impact/i,
-    /badi/i, /user exit/i, /debug/i, /error/i, /not working/i, /issue/i,
-    /configure/i, /customiz/i, /z-program/i, /zprog/i, /enhancement/i,
-    /cross.module/i, /integration/i, /settlement/i, /valuation/i,
-    /refurbish/i, /split valuation/i, /costing/i, /variance/i,
-    /mrp.area/i, /planning/i, /sequence/i, /routing/i, /capacity/i,
-    /compare/i, /versus/i, /vs\b/i, /pros and cons/i, /advantage/i,
-    /table/i, /field/i, /spro/i, /configuration/i, /behavior/i,
-    // Fiori & app-specific — Groq hallucinates app names, always use Claude
-    /fiori/i, /app/i, /launchpad/i, /tile/i, /odata/i, /ui5/i,
-    // T-code lookups — Groq invents wrong T-codes
-    /t.?code/i, /transaction/i, /tcode/i,
-    // Architecture & process questions
-    /process/i, /workflow/i, /authoriz/i, /role/i, /authoris/i,
-    /best practice/i, /recommend/i, /should i/i, /which is/i,
-    /possible/i, /can we/i, /is it/i, /how to/i, /how can/i,
-    // Data model
-    /table name/i, /database/i, /structure/i, /relationship/i,
+    // Genuine technical depth — Claude needed
+    /badi/i, /user exit/i, /debug/i, /not working/i, /issue/i,
+    /enhancement/i, /cross.module/i, /integration/i,
+    /settlement/i, /split valuation/i, /costing/i, /variance/i,
+    /compare/i, /versus/i, /vs\b/i, /pros and cons/i,
+    /spro/i, /configuration step/i,
+    // Errors and troubleshooting
+    /error/i, /problem/i, /why is/i, /why does/i, /why not/i,
+    /not working/i, /doesn.t work/i, /failed/i, /incorrect/i,
+    // Architecture questions
+    /difference between/i, /when should/i, /impact of/i,
+    /best practice/i, /recommend/i,
+    // Data model depth
+    /table structure/i, /field name/i, /relationship between/i,
   ]
   return complex.some(pattern => pattern.test(message))
 }
