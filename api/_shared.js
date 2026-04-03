@@ -51,12 +51,13 @@ export function isComplexQuestion(message) {
     /spro/i, /configuration step/i,
     // Errors and troubleshooting
     /error/i, /problem/i, /why is/i, /why does/i, /why not/i,
-    /not working/i, /doesn.t work/i, /failed/i, /incorrect/i,
-    // Architecture questions
+    /doesn.t work/i, /failed/i,
+    // Architecture and dependency questions — multiple objects involved
     /difference between/i, /when should/i, /impact of/i,
     /best practice/i, /recommend/i,
-    // Data model depth
-    /table structure/i, /field name/i, /relationship between/i,
+    /prerequisite/i, /master data/i, /dependency/i, /dependent/i,
+    /relationship between/i, /what are the/i, /list all/i,
+    /table structure/i, /field name/i,
   ]
   return complex.some(pattern => pattern.test(message))
 }
