@@ -146,9 +146,11 @@ function TypingDots({ t }) {
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, isStreaming, streamingText, t }) {
+function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
+  const [copied, setCopied] = useState(false)
+  const [liked, setLiked]   = useState(null) // null | 'up' | 'down'
 
   const inlineFormat = (text) => {
     if (!text) return ''
@@ -193,25 +195,73 @@ function MessageBubble({ msg, isStreaming, streamingText, t }) {
     return els
   }
 
-  return (
-    <div style={{ display:'flex', flexDirection:isUser?'row-reverse':'row', gap:10, alignItems:'flex-start', marginBottom:20, animation:'msgSlide 0.25s ease forwards' }}>
-      {!isUser && <div style={{ width:32, height:32, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', marginTop:2 }}><WaniLogo size={28} dark={false}/></div>}
-      <div style={{
-        maxWidth:'72%',
-        background: isUser ? t.msgUser : t.msgAI,
-        border: `1px solid ${isUser ? t.msgUserBdr : t.msgAIBdr}`,
-        borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
-        padding:'12px 16px', fontSize:14, lineHeight:1.7, wordBreak:'break-word',
-        boxShadow: isUser ? '0 2px 8px rgba(79,70,229,0.08)' : '0 2px 6px rgba(0,0,0,0.08)',
-      }}>
-        {isUser ? <span style={{ whiteSpace:'pre-wrap', color:t.text }}>{content}</span> : renderMarkdown(content)}
-        {isStreaming && <span style={{ display:'inline-block', width:2, height:'1em', background:'#4F46E5', marginLeft:2, animation:'cursorBlink 0.8s infinite', verticalAlign:'middle' }}/>}
+  const handleCopy = () => {
+    const plain = (content||streamingText||'')      .replace(/\*\*([^*]+)\*\*/g,'$1')      .replace(/`([^`]+)`/g,'$1')      .replace(/_([^_]+)_/g,'$1')
+    navigator.clipboard?.writeText(plain)
+    setCopied(true)
+    setTimeout(()=>setCopied(false), 2000)
+  }
+
+  // Action bar shown below Wani messages
+  const ActionBar = () => (
+    <div style={{ display:'flex', gap:6, marginTop:6, alignItems:'center' }}>
+      {[
+        { id:'up',   icon:'👍', label:'Helpful' },
+        { id:'down', icon:'👎', label:'Not helpful' },
+      ].map(btn => (
+        <button key={btn.id} title={btn.label} onClick={()=>setLiked(liked===btn.id?null:btn.id)} style={{
+          background: liked===btn.id ? 'rgba(79,70,229,0.12)' : 'transparent',
+          border: `1px solid ${liked===btn.id?'rgba(79,70,229,0.4)':t.border}`,
+          borderRadius:8, padding:'3px 8px', cursor:'pointer', fontSize:13,
+          transition:'all 0.15s', color: liked===btn.id ? '#4F46E5' : t.text4,
+        }}>{btn.icon}</button>
+      ))}
+      <button title="Copy" onClick={handleCopy} style={{
+        background:'transparent', border:`1px solid ${t.border}`,
+        borderRadius:8, padding:'3px 9px', cursor:'pointer', fontSize:11,
+        color: copied ? '#4F46E5' : t.text4, transition:'all 0.15s',
+        fontFamily:"'DM Sans',sans-serif",
+      }}>{copied ? '✓ Copied' : 'Copy'}</button>
+    </div>
+  )
+
+  if (isUser) {
+    // User message — right-aligned highlight band, no bubble box
+    return (
+      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:18, animation:'msgSlide 0.25s ease forwards', gap:8, alignItems:'flex-start' }}>
+        <div style={{
+          maxWidth:'80%',
+          background: t.msgUser,
+          border:`1px solid ${t.msgUserBdr}`,
+          borderRadius:'16px 4px 16px 16px',
+          padding:'10px 14px', fontSize:14, lineHeight:1.65,
+          color:t.text, wordBreak:'break-word',
+        }}>
+          <span style={{ whiteSpace:'pre-wrap' }}>{content}</span>
+        </div>
+        <div style={{ width:30, height:30, borderRadius:8, flexShrink:0, background:'linear-gradient(135deg,#1E3A5F,#2563EB)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff', marginTop:2 }}>
+          {userInitial || 'A'}
+        </div>
       </div>
-      {isUser && <div style={{ width:32, height:32, borderRadius:10, flexShrink:0, background:'linear-gradient(135deg,#1E3A5F,#2563EB)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff', marginTop:2 }}>A</div>}
+    )
+  }
+
+  // Wani message — full width, no bubble box, clean reading layout
+  return (
+    <div style={{ display:'flex', gap:10, alignItems:'flex-start', marginBottom:22, animation:'msgSlide 0.25s ease forwards' }}>
+      <div style={{ width:30, height:30, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', marginTop:2 }}>
+        <WaniLogo size={26} dark={dark}/>
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:14, lineHeight:1.75, wordBreak:'break-word' }}>
+          {renderMarkdown(content)}
+          {isStreaming && <span style={{ display:'inline-block', width:2, height:'1em', background:'#4F46E5', marginLeft:2, animation:'cursorBlink 0.8s infinite', verticalAlign:'middle' }}/>}
+        </div>
+        {!isStreaming && <ActionBar/>}
+      </div>
     </div>
   )
 }
-
 // ─── ProfileModal ─────────────────────────────────────────────────────────────
 function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
   const [name, setName] = useState(profile?.name || '')
@@ -455,8 +505,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
         @keyframes deckIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
         .hs-card-wrap { animation: deckIn 0.45s ease both; }
         .hs-topic { font-size:10px; padding:3px 10px; border-radius:20px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.18); color:rgba(255,255,255,0.85); white-space:nowrap; }
-        .hs-open-btn { font-size:11px; font-weight:600; padding:5px 14px; border-radius:6px; border:1px solid rgba(255,255,255,0.35); background:rgba(0,0,0,0.15); color:rgba(255,255,255,0.9); font-family:'DM Sans',sans-serif; cursor:pointer; pointer-events:auto; position:relative; z-index:30; transition:background 0.2s; }
-        .hs-open-btn:hover { background:rgba(0,0,0,0.28); }
+        .hs-open-btn { font-size:13px; font-weight:600; padding:9px 20px; border-radius:8px; border:1px solid rgba(255,255,255,0.45); background:rgba(0,0,0,0.2); color:#fff; font-family:'DM Sans',sans-serif; cursor:pointer; pointer-events:auto; position:relative; z-index:30; transition:background 0.2s; min-width:100px; text-align:center; }
+        .hs-open-btn:hover { background:rgba(0,0,0,0.35); } .hs-open-btn:active { transform:scale(0.97); }
         .hs-recent-row { display:flex; align-items:center; gap:10px; padding:9px 13px; background:${dark?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)'}; border:1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}; border-radius:10px; cursor:pointer; transition:background 0.15s,border-color 0.15s; }
         .hs-recent-row:hover { background:${dark?'rgba(79,70,229,0.08)':'rgba(79,70,229,0.05)'}; border-color:rgba(79,70,229,0.28); }
       `}</style>
@@ -716,9 +766,11 @@ export default function Brain({ session }) {
   const [sidebarOpen, setSidebarOpen]     = useState(!isMobileWidth())
   const [tone, setTone]                   = useState('balanced')
 
-  const bottomRef = useRef(null)
-  const inputRef  = useRef(null)
-  const abortRef  = useRef(null)
+  const bottomRef      = useRef(null)
+  const inputRef       = useRef(null)
+  const abortRef       = useRef(null)
+  const chatScrollRef  = useRef(null)
+  const userScrolled   = useRef(false)
 
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
@@ -746,7 +798,11 @@ export default function Brain({ session }) {
     ]).then(([convs, prof]) => { setConversations(convs||[]); setProfile(prof); setDbLoading(false) })
   }, [session])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages, streamingText])
+  // Smart scroll — only auto-scroll if user hasn't manually scrolled up
+  useEffect(() => {
+    if (userScrolled.current) return
+    bottomRef.current?.scrollIntoView({ behavior:'smooth' })
+  }, [messages, streamingText])
   useEffect(() => { if (view==='chat') setTimeout(()=>inputRef.current?.focus(), 100) }, [view, activeConvId])
   useEffect(() => { if (messages.length >= SUMMARISE_THRESHOLD && !showSummarise) setShowSummarise(true) }, [messages.length])
 
@@ -765,6 +821,7 @@ export default function Brain({ session }) {
     setInput('')
     if (inputRef.current) inputRef.current.style.height = '24px'
     setIsLoading(true)
+    userScrolled.current = false  // reset scroll lock on new send
 
     let convId = activeConvId
     let currentMod = activeConv?.module || browseModule
@@ -783,17 +840,56 @@ export default function Brain({ session }) {
     }
 
     try {
-      const res = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userId:session.user.id }) })
-      const { reply, error, model } = await res.json()
-      if (error) throw new Error(error)
+      // True SSE streaming — words appear as they arrive from LLM
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          messages: currentMsgs,
+          module: currentMod, topic: currentTopic,
+          tone, userId: session.user.id,
+          userName: profile?.name || null,
+        }),
+      })
 
-      const modelTag = model==='claude' ? '\n\n_✦ Claude_' : '\n\n_⚡ Groq_'
-      const replyWithTag = reply + modelTag
+      if (!res.ok) throw new Error('Network error')
 
-      setIsLoading(false); setIsStreaming(true)
-      abortRef.current = new AbortController()
-      await simulateTyping(replyWithTag, setStreamingText, abortRef.current.signal)
-      setIsStreaming(false); setStreamingText('')
+      setIsLoading(false)
+      setIsStreaming(true)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = '', streamedText = '', fullReply = '', modelUsed = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop()
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const raw = line.slice(5).trim()
+          try {
+            const evt = JSON.parse(raw)
+            if (evt.type === 'chunk') {
+              streamedText += evt.text
+              setStreamingText(streamedText)
+            } else if (evt.type === 'done') {
+              fullReply  = evt.full
+              modelUsed  = evt.model
+            } else if (evt.type === 'error') {
+              throw new Error(evt.error)
+            }
+          } catch {}
+        }
+      }
+
+      const modelTag = modelUsed==='claude' ? '\n\n_✦ Claude_' : '\n\n_⚡ Groq_'
+      const replyWithTag = (fullReply || streamedText) + modelTag
+
+      setIsStreaming(false)
+      setStreamingText('')
 
       const finalMsgs = [...currentMsgs, { role:'assistant', content:replyWithTag }]
       await updateConversation(convId, { messages:finalMsgs })
@@ -806,19 +902,10 @@ export default function Brain({ session }) {
           }).catch(()=>{})
       }
 
-      // Silent memory extraction — fire-and-forget, never surfaces errors to user
       fetch('/api/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId:       session.user.id,
-          convId,
-          module:       currentMod   || null,
-          topic:        currentTopic || null,
-          userMsg:      msgText,
-          assistantMsg: reply,
-        }),
-      }).catch(() => {})
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ userId:session.user.id, convId, module:currentMod||null, topic:currentTopic||null, userMsg:msgText, assistantMsg:fullReply||streamedText }),
+      }).catch(()=>{})
 
     } catch (err) {
       setIsLoading(false); setIsStreaming(false); setStreamingText('')
@@ -1037,7 +1124,16 @@ export default function Brain({ session }) {
 
         {view==='chat' && (
           <>
-            <div className="chat-messages" style={{ flex:1, overflowY:'auto', padding:'20px 16px', position:'relative', zIndex:1 }}>
+            <div
+              ref={chatScrollRef}
+              className="chat-messages"
+              style={{ flex:1, overflowY:'auto', padding:'20px 16px', position:'relative', zIndex:1 }}
+              onScroll={e => {
+                const el = e.currentTarget
+                const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+                userScrolled.current = !atBottom
+              }}
+            >
               <div style={{ maxWidth:720, margin:'0 auto' }}>
                 {messages.length === 0 ? (
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'calc(100vh - 280px)', textAlign:'center', animation:'fadeIn 0.4s ease' }}>
@@ -1062,14 +1158,14 @@ export default function Brain({ session }) {
                   </div>
                 ) : (
                   <>
-                    {messages.map((msg,i)=><MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t}/>)}
+                    {messages.map((msg,i)=><MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>)}
                     {isLoading && !isStreaming && (
                       <div style={{ display:'flex', gap:10, alignItems:'flex-start', marginBottom:20 }}>
                         <div style={{ width:32, height:32, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}><WaniLogo size={28} dark={dark}/></div>
                         <div style={{ background:t.msgAI, border:`1px solid ${t.msgAIBdr}`, borderRadius:'4px 16px 16px 16px' }}><TypingDots t={t}/></div>
                       </div>
                     )}
-                    {isStreaming && <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t}/>}
+                    {isStreaming && <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>}
                     <div ref={bottomRef}/>
                   </>
                 )}
