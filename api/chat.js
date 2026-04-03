@@ -235,9 +235,25 @@ export default async function handler(req, res) {
   }
 
   // Add topic context to last message
+  // BUT: if user is asking about a different module, don't inject stored module context
+  const MODULE_HINTS = {
+    'pp': 'PP – Production Planning', 'production': 'PP – Production Planning',
+    'pm': 'PM – Plant Maintenance', 'maintenance': 'PM – Plant Maintenance',
+    'mm': 'MM – Logistics', 'logistics': 'MM – Logistics', 'purchase': 'MM – Logistics',
+    'fiori': 'Fiori / UX', 'launchpad': 'Fiori / UX',
+    's/4': 'S/4HANA General', 's4hana': 'S/4HANA General',
+  }
+  const lastMsgLower = lastMsg.toLowerCase()
+  let effectiveMod = mod
+  for (const [hint, moduleName] of Object.entries(MODULE_HINTS)) {
+    if (lastMsgLower.includes(hint) && moduleName !== mod) {
+      effectiveMod = moduleName  // user is asking about a different module — use that
+      break
+    }
+  }
   const withContext = messages.map((m,i) =>
     i===messages.length-1 && m.role==='user'
-      ? { ...m, content:`SAP context: module="${mod||'General'}", topic="${topic||'General'}"\n\n${m.content}` }
+      ? { ...m, content:`SAP context: module="${effectiveMod||'General'}", topic="${topic||'General'}"\n\n${m.content}` }
       : m
   )
   const { anonymised, map } = tokenize(withContext)
