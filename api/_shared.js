@@ -64,6 +64,29 @@ export function isComplexQuestion(message) {
   return complex.some(pattern => pattern.test(message))
 }
 
+// Ultra-simple questions — pure definitions, no T-codes needed from Groq
+export function isUltraSimple(message) {
+  const msg = message.toLowerCase().trim()
+  // Short question + definitional pattern
+  if (msg.split(' ').length > 12) return false  // longer questions need specialist
+  const simple = [
+    /^what is/i, /^what are/i, /^what does/i, /^what means/i,
+    /^define/i, /^explain/i, /^meaning of/i,
+  ]
+  return simple.some(p => p.test(msg))
+}
+
+// Detect user correcting Wani — force Claude
+export function isCorrecting(message) {
+  const corrections = [
+    /wrong/i, /incorrect/i, /not right/i, /are you sure/i,
+    /check again/i, /i don.t think/i, /actually/i, /that.s not/i,
+    /verify this/i, /mistake/i, /hallucin/i, /made up/i, /invented/i,
+    /doesn.t exist/i, /does not exist/i, /not correct/i,
+  ]
+  return corrections.some(p => p.test(message))
+}
+
 export function tokenize(messages) {
   const map = {}, rev = {}
   let n = 1
