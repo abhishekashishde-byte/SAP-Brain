@@ -280,7 +280,7 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
 }
 // ─── ExportModal ──────────────────────────────────────────────────────────────
 function ExportModal({ conversation, messages, onClose, t, dark }) {
-  const [mode, setMode]       = useState(null)   // null | 'transcript' | 'summary'
+  const [mode, setMode]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
@@ -293,7 +293,6 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
   const generateDocx = async (type) => {
     setLoading(true); setError('')
     try {
-      // Load docx library from CDN
       if (!window.docx) {
         await new Promise((resolve, reject) => {
           const s = document.createElement('script')
@@ -302,145 +301,130 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
           document.head.appendChild(s)
         })
       }
-      const {
-        Document, Packer, Paragraph, TextRun, HeadingLevel,
-        AlignmentType, LevelFormat, BorderStyle,
-      } = window.docx
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat, BorderStyle } = window.docx
 
       const title = conversation?.title || 'SAP Conversation'
       const mod   = conversation?.module || ''
       const topic = conversation?.topic  || ''
       const date  = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })
       const userMsgs = messages.filter(m => m.role==='user')
-      const aIMsgs   = messages.filter(m => m.role==='assistant')
+      const aiMsgs   = messages.filter(m => m.role==='assistant')
 
-      // Parse markdown-like text into docx runs
       const parseRuns = (text) => {
         if (!text) return [new TextRun({ text:'', font:'Arial', size:24 })]
         const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
         return parts.map(part => {
-          if (part.startsWith('**') && part.endsWith('**'))
-            return new TextRun({ text:part.slice(2,-2), bold:true, font:'Arial', size:24 })
-          if (part.startsWith('`') && part.endsWith('`'))
-            return new TextRun({ text:part.slice(1,-1), font:'Courier New', size:22 })
+          if (part.startsWith('**') && part.endsWith('**')) return new TextRun({ text:part.slice(2,-2), bold:true, font:'Arial', size:24 })
+          if (part.startsWith('`') && part.endsWith('`'))  return new TextRun({ text:part.slice(1,-1), font:'Courier New', size:22 })
           return new TextRun({ text:part, font:'Arial', size:24 })
         })
       }
 
-      // Convert a message body into Paragraphs
-      const bodyToParagraphs = (text, numbering) => {
+      const bodyToParagraphs = (text) => {
         const paras = []
         const lines = text.split('\n')
         lines.forEach(line => {
           if (!line.trim()) { paras.push(new Paragraph({ children:[new TextRun({ text:'', font:'Arial', size:24 })], spacing:{ after:60 } })); return }
-          if (/^[*-] /.test(line)) {
-            paras.push(new Paragraph({ numbering:{ reference:'bullets', level:0 }, children:parseRuns(line.slice(2)), spacing:{ after:80 } }))
-          } else if (line.startsWith('## ')) {
-            paras.push(new Paragraph({ heading:HeadingLevel.HEADING_2, children:[new TextRun({ text:line.slice(3), font:'Arial', size:26, bold:true })], spacing:{ before:200, after:100 } }))
-          } else {
-            paras.push(new Paragraph({ children:parseRuns(line), spacing:{ after:80 } }))
-          }
+          if (/^[*-] /.test(line)) paras.push(new Paragraph({ numbering:{ reference:'bullets', level:0 }, children:parseRuns(line.slice(2)), spacing:{ after:80 } }))
+          else if (line.startsWith('## ')) paras.push(new Paragraph({ heading:HeadingLevel.HEADING_2, children:[new TextRun({ text:line.slice(3), font:'Arial', size:26, bold:true })], spacing:{ before:200, after:100 } }))
+          else paras.push(new Paragraph({ children:parseRuns(line), spacing:{ after:80 } }))
         })
         return paras
       }
 
-      let sections_children = []
+      const divider = (color='E5E7EB', size=2) =>
+        new Paragraph({ border:{ bottom:{ style:BorderStyle.SINGLE, size, color, space:1 } }, children:[new TextRun({ text:'', font:'Arial', size:4 })], spacing:{ before:200, after:200 } })
 
-      // ── Header block ──
-      sections_children.push(
-        new Paragraph({ heading:HeadingLevel.HEADING_1, children:[new TextRun({ text:title, font:'Arial', size:36, bold:true, color:'1E3A8A' })], spacing:{ before:0, after:200 } }),
+      const children = []
+
+      // ── Common header ──
+      children.push(
+        new Paragraph({ heading:HeadingLevel.HEADING_1, children:[new TextRun({ text:title, font:'Arial', size:36, bold:true, color:'1E3A8A' })], spacing:{ before:0, after:160 } }),
         new Paragraph({ children:[
-          new TextRun({ text:`Module: `, font:'Arial', size:22, bold:true, color:'4F46E5' }),
+          new TextRun({ text:'Module: ', font:'Arial', size:22, bold:true, color:'4F46E5' }),
           new TextRun({ text:`${mod}   `, font:'Arial', size:22 }),
-          new TextRun({ text:`Topic: `, font:'Arial', size:22, bold:true, color:'4F46E5' }),
+          new TextRun({ text:'Topic: ', font:'Arial', size:22, bold:true, color:'4F46E5' }),
           new TextRun({ text:topic, font:'Arial', size:22 }),
         ], spacing:{ after:80 } }),
-        new Paragraph({ children:[
-          new TextRun({ text:`Exported: `, font:'Arial', size:20, color:'888888' }),
-          new TextRun({ text:date, font:'Arial', size:20, color:'888888' }),
-        ], spacing:{ after:300 } }),
-        // Divider
-        new Paragraph({ border:{ bottom:{ style:BorderStyle.SINGLE, size:6, color:'4F46E5', space:1 } }, children:[new TextRun({ text:'', font:'Arial', size:4 })], spacing:{ after:300 } }),
+        new Paragraph({ children:[new TextRun({ text:`Prepared by Wani  ·  ${date}`, font:'Arial', size:20, color:'888888', italics:true })], spacing:{ after:280 } }),
+        divider('4F46E5', 6),
       )
 
       if (type === 'transcript') {
-        // Full Q&A transcript
+        // ── Full Q&A transcript ──
         messages.forEach((msg, idx) => {
           if (msg.role === 'user') {
-            sections_children.push(
-              new Paragraph({ children:[new TextRun({ text:'You', font:'Arial', size:22, bold:true, color:'1D4ED8' })], spacing:{ before:260, after:80 } }),
+            children.push(
+              new Paragraph({ children:[new TextRun({ text:'You asked:', font:'Arial', size:22, bold:true, color:'1D4ED8' })], spacing:{ before:280, after:80 } }),
               ...bodyToParagraphs(stripMeta(msg.content))
             )
           } else {
-            sections_children.push(
-              new Paragraph({ children:[new TextRun({ text:'Wani', font:'Arial', size:22, bold:true, color:'059669' })], spacing:{ before:260, after:80 } }),
+            children.push(
+              new Paragraph({ children:[new TextRun({ text:'Wani answered:', font:'Arial', size:22, bold:true, color:'059669' })], spacing:{ before:200, after:80 } }),
               ...bodyToParagraphs(stripMeta(msg.content))
             )
-          }
-          // Light separator between exchanges
-          if (idx < messages.length - 1 && msg.role === 'assistant') {
-            sections_children.push(
-              new Paragraph({ border:{ bottom:{ style:BorderStyle.SINGLE, size:2, color:'E5E7EB', space:1 } }, children:[new TextRun({ text:'', font:'Arial', size:4 })], spacing:{ before:200, after:200 } })
-            )
+            if (idx < messages.length - 1) children.push(divider())
           }
         })
+
       } else {
-        // Wani answers only — clean report format
-        sections_children.push(
-          new Paragraph({ children:[new TextRun({ text:'Key Answers & Insights', font:'Arial', size:28, bold:true, color:'1E3A8A' })], spacing:{ before:0, after:200 } })
+        // ── SAP Resolution Note format ──
+        // Problem Statement
+        const firstQuestion = userMsgs[0] ? stripMeta(userMsgs[0].content) : ''
+        children.push(
+          new Paragraph({ children:[new TextRun({ text:'Problem Statement', font:'Arial', size:28, bold:true, color:'1E3A8A' })], spacing:{ before:0, after:120 } }),
+          new Paragraph({ children:parseRuns(firstQuestion), spacing:{ after:200 } }),
+          divider(),
         )
-        aIMsgs.forEach((msg, idx) => {
-          const question = userMsgs[idx] ? stripMeta(userMsgs[idx].content) : ''
-          if (question) {
-            sections_children.push(
-              new Paragraph({ children:[new TextRun({ text:`Q${idx+1}: ${question}`, font:'Arial', size:22, bold:true, color:'4F46E5', italics:true })], spacing:{ before:280, after:100 } })
-            )
-          }
-          sections_children.push(...bodyToParagraphs(stripMeta(msg.content)))
-          sections_children.push(
-            new Paragraph({ border:{ bottom:{ style:BorderStyle.SINGLE, size:2, color:'E5E7EB', space:1 } }, children:[new TextRun({ text:'', font:'Arial', size:4 })], spacing:{ before:200, after:200 } })
+
+        // Solution — last AI message is usually the most complete answer
+        const lastAI = aiMsgs[aiMsgs.length - 1]
+        if (lastAI) {
+          children.push(
+            new Paragraph({ children:[new TextRun({ text:'Solution', font:'Arial', size:28, bold:true, color:'059669' })], spacing:{ before:0, after:120 } }),
+            ...bodyToParagraphs(stripMeta(lastAI.content)),
+            divider(),
           )
-        })
+        }
+
+        // Additional context — any follow-up Q&A beyond the first exchange
+        const followUps = userMsgs.slice(1)
+        if (followUps.length > 0) {
+          children.push(
+            new Paragraph({ children:[new TextRun({ text:'Additional Context', font:'Arial', size:28, bold:true, color:'1E3A8A' })], spacing:{ before:0, after:120 } }),
+          )
+          followUps.forEach((q, i) => {
+            const ans = aiMsgs[i+1]
+            children.push(
+              new Paragraph({ children:[new TextRun({ text:`Q: ${stripMeta(q.content)}`, font:'Arial', size:22, bold:true, color:'4F46E5', italics:true })], spacing:{ before:200, after:80 } }),
+            )
+            if (ans) children.push(...bodyToParagraphs(stripMeta(ans.content)))
+            if (i < followUps.length - 1) children.push(divider())
+          })
+        }
       }
 
-      // Footer note
-      sections_children.push(
+      children.push(
         new Paragraph({ children:[new TextRun({ text:'Generated by Wani — ask-wani.com', font:'Arial', size:18, color:'AAAAAA', italics:true })], alignment:AlignmentType.CENTER, spacing:{ before:400 } })
       )
 
       const doc = new Document({
-        numbering: {
-          config:[{
-            reference:'bullets',
-            levels:[{ level:0, format:LevelFormat.BULLET, text:'•', alignment:AlignmentType.LEFT,
-              style:{ paragraph:{ indent:{ left:720, hanging:360 } } } }]
-          }]
-        },
+        numbering: { config:[{ reference:'bullets', levels:[{ level:0, format:LevelFormat.BULLET, text:'•', alignment:AlignmentType.LEFT, style:{ paragraph:{ indent:{ left:720, hanging:360 } } } }] }] },
         styles: {
           default:{ document:{ run:{ font:'Arial', size:24 } } },
           paragraphStyles:[
-            { id:'Heading1', name:'Heading 1', basedOn:'Normal', next:'Normal', quickFormat:true,
-              run:{ size:36, bold:true, font:'Arial' },
-              paragraph:{ spacing:{ before:0, after:200 }, outlineLevel:0 } },
-            { id:'Heading2', name:'Heading 2', basedOn:'Normal', next:'Normal', quickFormat:true,
-              run:{ size:26, bold:true, font:'Arial' },
-              paragraph:{ spacing:{ before:200, after:100 }, outlineLevel:1 } },
+            { id:'Heading1', name:'Heading 1', basedOn:'Normal', next:'Normal', quickFormat:true, run:{ size:36, bold:true, font:'Arial' }, paragraph:{ spacing:{ before:0, after:200 }, outlineLevel:0 } },
+            { id:'Heading2', name:'Heading 2', basedOn:'Normal', next:'Normal', quickFormat:true, run:{ size:26, bold:true, font:'Arial' }, paragraph:{ spacing:{ before:200, after:100 }, outlineLevel:1 } },
           ]
         },
-        sections:[{
-          properties:{ page:{
-            size:{ width:11906, height:16838 },
-            margin:{ top:1440, right:1440, bottom:1440, left:1440 }
-          }},
-          children: sections_children,
-        }]
+        sections:[{ properties:{ page:{ size:{ width:11906, height:16838 }, margin:{ top:1440, right:1440, bottom:1440, left:1440 } } }, children }]
       })
 
       const blob = await Packer.toBlob(doc)
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
-      a.href     = url
-      a.download = `${title.replace(/[^a-z0-9]/gi,'_').slice(0,40)}_wani_${type}.docx`
+      a.href = url
+      a.download = `${title.replace(/[^a-z0-9]/gi,'_').slice(0,40)}_wani_${type==='summary'?'resolution_note':'transcript'}.docx`
       a.click()
       URL.revokeObjectURL(url)
       onClose()
@@ -456,41 +440,32 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
       onClick={e=>{ if(e.target===e.currentTarget) onClose() }}>
       <div style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius:18, padding:'28px 28px 24px', width:'min(90vw,400px)', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
 
-        {/* Header */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
           <div>
             <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:600, color:t.text }}>Export Conversation</div>
-            <div style={{ fontSize:12, color:t.text3, marginTop:3 }}>Choose what to include in the Word doc</div>
+            <div style={{ fontSize:12, color:t.text3, marginTop:3 }}>Choose your document format</div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:t.text3, padding:'4px 8px' }}>×</button>
         </div>
 
-        {/* Options */}
         <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:22 }}>
           {[
-            { key:'transcript', icon:'📄', title:'Full Transcript', desc:'Complete Q&A — every message formatted as a dialogue' },
-            { key:'summary',    icon:'📋', title:'Answers Only',    desc:"Only Wani's answers, with your questions as headings" },
+            { key:'summary',    icon:'📋', title:'SAP Resolution Note', desc:'Problem statement + solution + key steps. Ready to send to a client or keep as documentation.' },
+            { key:'transcript', icon:'📄', title:'Full Transcript',      desc:'Complete Q&A dialogue — every message in order.' },
           ].map(opt => (
-            <div key={opt.key}
-              onClick={()=>setMode(opt.key)}
-              style={{
-                padding:'14px 16px', borderRadius:12, cursor:'pointer',
-                border:`2px solid ${mode===opt.key?'#4F46E5':t.border}`,
-                background: mode===opt.key ? 'rgba(79,70,229,0.06)' : t.surface2,
-                transition:'all 0.15s',
-              }}
-            >
+            <div key={opt.key} onClick={()=>setMode(opt.key)} style={{
+              padding:'14px 16px', borderRadius:12, cursor:'pointer',
+              border:`2px solid ${mode===opt.key?'#4F46E5':t.border}`,
+              background: mode===opt.key ? 'rgba(79,70,229,0.06)' : t.surface2,
+              transition:'all 0.15s',
+            }}>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <span style={{ fontSize:20 }}>{opt.icon}</span>
                 <div>
                   <div style={{ fontSize:13, fontWeight:600, color:mode===opt.key?'#4F46E5':t.text }}>{opt.title}</div>
-                  <div style={{ fontSize:11, color:t.text3, marginTop:2 }}>{opt.desc}</div>
+                  <div style={{ fontSize:11, color:t.text3, marginTop:2, lineHeight:1.5 }}>{opt.desc}</div>
                 </div>
-                <div style={{ marginLeft:'auto', width:18, height:18, borderRadius:'50%',
-                  border:`2px solid ${mode===opt.key?'#4F46E5':t.border}`,
-                  background: mode===opt.key?'#4F46E5':'transparent',
-                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
-                }}>
+                <div style={{ marginLeft:'auto', width:18, height:18, borderRadius:'50%', border:`2px solid ${mode===opt.key?'#4F46E5':t.border}`, background:mode===opt.key?'#4F46E5':'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                   {mode===opt.key && <div style={{ width:8, height:8, borderRadius:'50%', background:'#fff' }}/>}
                 </div>
               </div>
@@ -500,35 +475,23 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
 
         {error && <div style={{ fontSize:12, color:'#DC2626', marginBottom:12 }}>{error}</div>}
 
-        {/* Download button */}
-        <button
-          onClick={()=>mode && generateDocx(mode)}
-          disabled={!mode || loading}
-          style={{
-            width:'100%', padding:'12px', borderRadius:10, border:'none',
-            background: mode && !loading ? 'linear-gradient(135deg,#1a1a2e,#4F46E5)' : t.border,
-            color: mode && !loading ? '#fff' : t.text4,
-            fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
-            cursor: mode && !loading ? 'pointer' : 'not-allowed',
-            transition:'all 0.2s',
-            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-          }}
-        >
-          {loading ? (
-            <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/> Generating…</>
-          ) : (
-            <>↓ Download Word Document</>
-          )}
+        <button onClick={()=>mode && generateDocx(mode)} disabled={!mode||loading} style={{
+          width:'100%', padding:'12px', borderRadius:10, border:'none',
+          background: mode&&!loading ? 'linear-gradient(135deg,#1a1a2e,#4F46E5)' : t.border,
+          color: mode&&!loading ? '#fff' : t.text4,
+          fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
+          cursor: mode&&!loading ? 'pointer' : 'not-allowed',
+          transition:'all 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+        }}>
+          {loading
+            ? <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/> Generating…</>
+            : <>↓ Download Word Document</>}
         </button>
-
-        <div style={{ fontSize:11, color:t.text4, textAlign:'center', marginTop:10 }}>
-          .docx — opens in Word, Google Docs, LibreOffice
-        </div>
+        <div style={{ fontSize:11, color:t.text4, textAlign:'center', marginTop:10 }}>.docx — opens in Word, Google Docs, LibreOffice</div>
       </div>
     </div>
   )
 }
-
 
 // ─── ProfileModal ─────────────────────────────────────────────────────────────
 function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
@@ -1419,8 +1382,8 @@ export default function Brain({ session }) {
           </button>
         </div>
 
-        {/* Tone bar — chat only */}
-        {view==='chat' && (
+        {/* Tone bar — chat only, only when conversation has messages */}
+        {view==='chat' && messages.length > 0 && (
           <div style={{ padding:'5px 14px', borderBottom:`1px solid ${t.border}`, display:'flex', alignItems:'center', gap:6, background:t.topbar, backdropFilter:'blur(6px)', flexShrink:0, position:'relative', zIndex:2, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
             <span style={{ fontSize:11, color:t.text4, fontWeight:500, flexShrink:0 }}>Tone:</span>
             {[{key:'balanced',label:'⚖️ Balanced'},{key:'direct',label:'⚡ Direct'},{key:'friendly',label:'😊 Friendly'},{key:'formal',label:'📋 Formal'}].map(to => (
@@ -1466,8 +1429,14 @@ export default function Brain({ session }) {
                     <div style={{ marginTop:16, marginBottom:8 }}>
                       <WaniWordmark height={window.innerWidth < 768 ? 24 : 40} dark={dark}/>
                     </div>
-                    <p style={{ fontSize:14, color:t.text3, maxWidth:300, lineHeight:1.7, marginBottom:22, marginTop:8 }}>
-                      {browseTopic ? `Ask anything about ${browseTopic}` : 'Ask any SAP question'}
+                    {/* Personal greeting */}
+                    {profile?.name && (
+                      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:window.innerWidth < 768 ? 18 : 22, fontWeight:600, color:t.text, marginTop:12, marginBottom:4 }}>
+                        Hello, {profile.name.split(' ')[0]} 👋
+                      </div>
+                    )}
+                    <p style={{ fontSize:15, color:t.text3, maxWidth:300, lineHeight:1.7, marginBottom:22, marginTop:8 }}>
+                      {browseTopic ? `Ask anything about ${browseTopic}` : 'What SAP question can I help with?'}
                     </p>
                     {browseTopic && STARTERS[browseTopic] && (
                       <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center', maxWidth:420 }}>
