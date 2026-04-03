@@ -1211,7 +1211,7 @@ export default function Brain({ session }) {
         setStreamingText(revealBuffer)
       }
 
-      const modelTag = modelUsed==='claude' ? '\n\n_✦ Claude_' : '\n\n_⚡ Groq_'
+      const modelTag = modelUsed==='claude' ? '\n\n_✦ Claude_' : modelUsed==='specialist' ? '\n\n_⚡ Groq + ✦ Gemini_' : '\n\n_⚡ Groq_'
       const replyWithTag = (fullReply || streamedText) + modelTag
 
       setIsStreaming(false)
