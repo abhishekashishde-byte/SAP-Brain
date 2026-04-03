@@ -56,21 +56,54 @@ async function callGroqDirect(systemPrompt, messages, maxTokens=800) {
 }
 
 // ── Gemini Flash call (facts only) ───────────────────────────────────────────
+// SAP knowledge anchors — Gemini fallback for well-known T-codes
+const SAP_ANCHORS = {
+  'maintenance order': '**T-codes:** `IW31` (create), `IW32` (change), `IW33` (display), `IW38` (mass change)\n**Order types:** PM01 (corrective), PM02 (refurbishment), PM03 (inspection)\n**Key table:** AUFK (order header)',
+  'production order': '**T-codes:** `CO01` (create), `CO02` (change), `CO03` (display), `COHV` (mass processing)\n**Key table:** AUFK (order header), AFKO (order header PP)',
+  'purchase order': '**T-codes:** `ME21N` (create), `ME22N` (change), `ME23N` (display), `ME2N` (list)\n**Key table:** EKKO (header), EKPO (item)',
+  'goods receipt': '**T-codes:** `MIGO` (goods movement), `MB51` (material document list)\n**Key table:** MKPF (header), MSEG (item)',
+  'material master': '**T-codes:** `MM01` (create), `MM02` (change), `MM03` (display), `MM60` (where-used)\n**Key table:** MARA (general), MARC (plant), MARD (storage location)',
+  'bom': '**T-codes:** `CS01` (create), `CS02` (change), `CS03` (display), `CS15` (where-used)\n**Key table:** MAST, STKO, STPO',
+  'routing': '**T-codes:** `CA01` (create), `CA02` (change), `CA03` (display)\n**Key table:** PLKO (header), PLPO (operations)',
+  'work center': '**T-codes:** `CR01` (create), `CR02` (change), `CR03` (display)\n**Key table:** CRHD',
+  'functional location': '**T-codes:** `IL01` (create), `IL02` (change), `IL03` (display)\n**Key table:** IFLOT',
+  'equipment': '**T-codes:** `IE01` (create), `IE02` (change), `IE03` (display)\n**Key table:** EQUI, EQUZ',
+  'notification': '**T-codes:** `IW21` (create PM), `IW22` (change), `IW23` (display), `IW28` (list)\n**Key table:** QMEL',
+  'mrp': '**T-codes:** `MD01` (run), `MD02` (single item), `MD04` (stock/req list), `MD05` (MRP list)\n**Key table:** MDKP, MDTB',
+  'teco': '**T-codes:** `IW32` (PM orders), `CO02` (production orders), `IW38`/`COHV` (mass TECO)\n**Status:** TECO = technically complete, CLSD = closed',
+  'goods issue': '**T-codes:** `MIGO` (goods movement - 261 for order), `MB1A` (classic)\n**Key table:** MSEG',
+  'settlement': '**T-codes:** `KO88` (individual), `KO8G` (collective), `KSU5` (actual settlement)\n**Key table:** COBRA, COBRB',
+}
+
+function getAnchorFacts(question) {
+  const lower = question.toLowerCase()
+  for (const [key, facts] of Object.entries(SAP_ANCHORS)) {
+    if (lower.includes(key)) return facts
+  }
+  return ''
+}
+
 async function callGeminiFacts(question, context) {
   const key = process.env.GEMINI_API_KEY
-  if (!key) return ''
-  const prompt = `You are an SAP facts extractor. For this SAP question, list ONLY:
-- Relevant T-codes (e.g. IW31, CO01)
-- Relevant table names (e.g. AUFK, MARA)  
-- Relevant BAdI or user exit names if applicable
-- Relevant Fiori app names ONLY if you are 100% certain they exist
-- Key configuration paths if applicable
 
-RULES:
-- If you are not 100% certain a T-code or app name exists, DO NOT include it
-- Do not write explanations — only facts
-- Format as a short bullet list
-- If nothing specific applies, reply with exactly: NO_FACTS
+  // First check our own anchors — instant, no API call needed
+  const anchorFacts = getAnchorFacts(question)
+
+  if (!key) return anchorFacts  // no Gemini key — use anchors only
+
+  const prompt = `You are an SAP S/4HANA facts specialist. For this SAP question provide ONLY:
+- The most important T-codes (be confident — include well-known ones like IW31, CO01, ME21N)
+- Key table names if relevant
+- BAdI or user exit names if the question involves enhancement
+- Fiori app names only if well-known (e.g. "Manage Production Orders")
+- SPRO path if it is a configuration question
+
+IMPORTANT:
+- For standard SAP objects (orders, materials, BOM etc.) ALWAYS include the primary T-codes — do not be overly cautious
+- Format as short bullet points with **bold** for T-codes
+- Do not write explanations — facts only
+- Maximum 6 bullet points
+- If truly nothing applies, reply: NO_FACTS
 
 SAP Context: ${context}
 Question: ${question}`
@@ -85,10 +118,17 @@ Question: ${question}`
       }),
     })
     const data = await res.json()
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    if (text.trim() === 'NO_FACTS') return ''
-    return text.trim()
-  } catch { return '' }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+
+    if (!text || text === 'NO_FACTS') {
+      // Gemini returned nothing — fall back to our anchors
+      return anchorFacts
+    }
+    return text
+  } catch {
+    // API error — fall back to anchors
+    return anchorFacts
+  }
 }
 
 // ── Groq merge — clubs theory + facts into one clean answer ──────────────────
