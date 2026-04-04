@@ -73,24 +73,35 @@ const SAP_ANCHORS = {
   'teco': '**T-codes:** `IW32` (PM orders), `CO02` (production orders), `IW38`/`COHV` (mass TECO)\n**Status:** TECO = technically complete, CLSD = closed',
   'goods issue': '**T-codes:** `MIGO` (goods movement - 261 for order), `MB1A` (classic)\n**Key table:** MSEG',
   'settlement': '**T-codes:** `KO88` (individual), `KO8G` (collective), `KSU5` (actual settlement)\n**Key table:** COBRA, COBRB',
+  'production version': '**T-codes:** `C223` (mass maintenance), `C220` (individual), `MM02` (via material master MRP4 view)\n**Key fields:** BOM usage, routing, plant, lot size validity',
+  'sales order': '**T-codes:** `VA01` (create), `VA02` (change), `VA03` (display), `VA05` (list)\n**Key table:** VBAK (header), VBAP (item)',
+  'delivery': '**T-codes:** `VL01N` (create outbound), `VL02N` (change), `VL03N` (display)\n**Key table:** LIKP (header), LIPS (item)',
+  'invoice': '**T-codes:** `VF01` (create billing), `MIRO` (logistics invoice verification)\n**Key table:** VBRK (billing header)',
+  'plant maintenance plan': '**T-codes:** `IP01` (create), `IP02` (change), `IP10` (schedule), `IP30` (deadline monitoring)\n**Key table:** MPLA',
+  'measuring point': '**T-codes:** `IK01` (create), `IK02` (change), `IK11` (enter measurement)\n**Key table:** IMPTT',
 }
 
 function getAnchorFacts(question) {
   const lower = question.toLowerCase()
+  // Find the MOST SPECIFIC (longest) matching anchor key
+  // This avoids "maintenance order" matching when question is about "production order"
+  let bestMatch = ''
+  let bestFacts = ''
   for (const [key, facts] of Object.entries(SAP_ANCHORS)) {
-    if (lower.includes(key)) return facts
+    if (lower.includes(key) && key.length > bestMatch.length) {
+      bestMatch = key
+      bestFacts = facts
+    }
   }
-  return ''
+  return bestFacts
 }
 
 async function callGeminiFacts(question, context) {
   const key = process.env.GEMINI_API_KEY
 
-  // Only use anchors for very specific single-object questions
-  // Avoid injecting wrong T-codes for complex multi-object questions
-  const questionLower = question.toLowerCase()
-  const wordCount = question.trim().split(/\s+/).length
-  const anchorFacts = wordCount <= 8 ? getAnchorFacts(question) : ''
+  // Check anchors — but only if question is about a single specific object
+  // Multi-object questions (prerequisite, master data, list all) go to Claude so this is safe
+  const anchorFacts = getAnchorFacts(question)
 
   if (!key) return anchorFacts  // no Gemini key — use anchors only
 
