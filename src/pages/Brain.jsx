@@ -1289,7 +1289,7 @@ export default function Brain({ session }) {
     min-height:20px!important;
     background:inherit;
   }
-  .chat-input-wrap{padding:10px 14px calc(28px + env(safe-area-inset-bottom, 20px))!important;}
+  .chat-input-wrap{padding:10px 14px 16px!important;margin-bottom:0!important;}
   .chat-messages{padding:16px 14px!important;}
   .tone-btn{padding:7px 14px!important;font-size:13px!important;}
 }
