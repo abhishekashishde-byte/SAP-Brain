@@ -155,12 +155,23 @@ function SignUpForm({ onSwitch }) {
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false)
+  // Aggressive mobile detection — check multiple signals
+  // Android WebView with useWideViewPort can report wrong innerWidth
+  const isMobile = (
+    window.innerWidth <= 768 ||
+    window.screen.width <= 768 ||
+    /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ||
+    ('ontouchstart' in window)
+  )
 
   return (
     <div style={{
-      minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto',
+      minHeight:'100dvh', display:'flex',
+      alignItems: isMobile ? 'flex-start' : 'center',
+      justifyContent:'center', overflowY:'auto',
       background:'linear-gradient(135deg,#F0EDE8 0%,#E8E3DA 50%,#F0EDE8 100%)',
-      fontFamily:"'DM Sans',sans-serif", padding:'20px',
+      fontFamily:"'DM Sans',sans-serif", padding: isMobile ? '0' : '20px',
+      WebkitOverflowScrolling:'touch', position:'relative', zIndex:1,
     }}>
       <style>{`
         @keyframes slideUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
@@ -178,10 +189,55 @@ export default function Login() {
         .ghost-link:hover{opacity:0.72;}
         .panel-btn{padding:10px 28px;background:transparent;border:2px solid rgba(255,255,255,0.6);border-radius:24px;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.6px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.2s;}
         .panel-btn:hover{background:rgba(255,255,255,0.15);transform:translateY(-1px);}
+        /* Android WebView app — applied only when running inside Wani Android app */
+        .android-app .login-blobs{display:none!important;}
+        .android-app .login-card{height:auto!important;overflow:visible!important;}
+        .android-app .navy-panel{position:relative!important;left:auto!important;top:auto!important;width:100%!important;min-height:160px!important;border-radius:16px 16px 0 0!important;}
+        .android-app .form-panel{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;opacity:1!important;pointer-events:all!important;height:auto!important;overflow:visible!important;display:block!important;padding:28px 24px 48px!important;}
+        .android-app{overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
         @media(max-width:640px){
-          .login-card{flex-direction:column!important;height:auto!important;width:100%!important;}
-          .navy-panel{width:100%!important;min-height:160px!important;position:relative!important;left:auto!important;top:auto!important;border-radius:16px 16px 0 0!important;order:-1;}
-          .form-panel{width:100%!important;position:relative!important;top:auto!important;left:auto!important;right:auto!important;opacity:1!important;pointer-events:all!important;padding:28px 24px 36px!important;}
+          /* Hide animated blobs on mobile — they block touch events in Chrome */
+          .login-blobs{display:none!important;}
+          /* Card: auto height, no overflow clip, full width */
+          .login-card{
+            flex-direction:column!important;
+            height:auto!important;
+            min-height:auto!important;
+            width:100%!important;
+            overflow:visible!important;
+            max-width:100%!important;
+          }
+          /* Navy panel: stacks on top, fixed height, no absolute positioning */
+          .navy-panel{
+            width:100%!important;
+            min-height:180px!important;
+            max-height:220px!important;
+            position:relative!important;
+            left:auto!important;
+            top:auto!important;
+            bottom:auto!important;
+            border-radius:16px 16px 0 0!important;
+            order:-1;
+          }
+          /* Form panel: full width, relative position, fully visible, scrollable */
+          .form-panel{
+            width:100%!important;
+            position:relative!important;
+            top:auto!important;
+            left:auto!important;
+            right:auto!important;
+            bottom:auto!important;
+            opacity:1!important;
+            pointer-events:all!important;
+            padding:28px 24px 48px!important;
+            overflow:visible!important;
+            height:auto!important;
+            min-height:auto!important;
+            display:block!important;
+            align-items:unset!important;
+            justify-content:unset!important;
+          }
+          /* Bigger inputs — prevents iOS zoom on focus */
           .nm-input{font-size:16px!important;padding:13px 14px!important;}
           .nm-input::placeholder{font-size:16px!important;}
           .grad-btn{font-size:15px!important;padding:15px!important;}
@@ -190,7 +246,7 @@ export default function Login() {
       `}</style>
 
       {/* Animated blobs */}
-      <div style={{ position:'fixed', inset:0, pointerEvents:'none', overflow:'hidden' }}>
+      <div className="login-blobs" style={{ position:'fixed', inset:0, pointerEvents:'none', overflow:'hidden', touchAction:'none', zIndex:0 }}>
         <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.12) 0%,transparent 70%)', top:'-5%', left:'5%', animation:'floatA 9s ease-in-out infinite' }}/>
         <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.1) 0%,transparent 70%)', bottom:'5%', right:'5%', animation:'floatB 11s ease-in-out infinite' }}/>
         <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,204,112,0.1) 0%,transparent 70%)', top:'40%', right:'20%', animation:'floatC 7s ease-in-out infinite' }}/>
@@ -198,42 +254,70 @@ export default function Login() {
 
       {/* Card */}
       <div className="login-card" style={{
-        position:'relative', width:840, maxWidth:'100%', height:520,
-        borderRadius:24, overflow:'hidden', display:'flex',
+        position:'relative', width: isMobile ? '100%' : 840, maxWidth:'100%',
+        height: isMobile ? 'auto' : 520,
+        minHeight: isMobile ? '100dvh' : 'unset',
+        borderRadius: isMobile ? 0 : 24,
+        overflow: isMobile ? 'visible' : 'hidden',
+        display:'flex', flexDirection: isMobile ? 'column' : 'row',
         background:'#EEE9E0',
-        boxShadow:'20px 20px 52px rgba(0,0,0,0.13),-8px -8px 24px rgba(255,255,255,0.84)',
+        boxShadow: isMobile ? 'none' : '20px 20px 52px rgba(0,0,0,0.13),-8px -8px 24px rgba(255,255,255,0.84)',
         animation:'slideUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards',
       }}>
-        {/* Sign In form — RIGHT */}
+        {/* Sign In form — RIGHT on desktop, below navy on mobile */}
         <div className="form-panel" style={{
-          position:'absolute', top:0, bottom:0, right:0, width:'50%',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          padding:'32px 44px', zIndex:1,
-          opacity: isSignUp ? 0 : 1, transition:'opacity 0.25s',
-          pointerEvents: isSignUp ? 'none' : 'all',
+          position: isMobile ? 'relative' : 'absolute',
+          top: isMobile ? 'auto' : 0,
+          bottom: isMobile ? 'auto' : 0,
+          right: isMobile ? 'auto' : 0,
+          left: isMobile ? 'auto' : 'unset',
+          width: isMobile ? '100%' : '50%',
+          display: isMobile ? (isSignUp ? 'none' : 'block') : 'flex',
+          alignItems:'center', justifyContent:'center',
+          padding: isMobile ? '28px 24px 48px' : '32px 44px', zIndex:1,
+          opacity: (!isMobile && isSignUp) ? 0 : 1,
+          transition:'opacity 0.25s',
+          pointerEvents: (!isMobile && isSignUp) ? 'none' : 'all',
+          height: isMobile ? 'auto' : 'unset',
+          overflow: isMobile ? 'visible' : 'unset',
         }}>
           <SignInForm onSwitch={()=>setIsSignUp(true)}/>
         </div>
 
-        {/* Sign Up form — LEFT */}
+        {/* Sign Up form — LEFT on desktop, below navy on mobile */}
         <div className="form-panel" style={{
-          position:'absolute', top:0, bottom:0, left:0, width:'50%',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          padding:'28px 44px', zIndex:1,
-          opacity: isSignUp ? 1 : 0, transition:'opacity 0.25s',
-          pointerEvents: isSignUp ? 'all' : 'none',
+          position: isMobile ? 'relative' : 'absolute',
+          top: isMobile ? 'auto' : 0,
+          bottom: isMobile ? 'auto' : 0,
+          left: isMobile ? 'auto' : 0,
+          width: isMobile ? '100%' : '50%',
+          display: isMobile ? (isSignUp ? 'block' : 'none') : 'flex',
+          alignItems:'center', justifyContent:'center',
+          padding: isMobile ? '28px 24px 48px' : '28px 44px', zIndex:1,
+          opacity: (!isMobile && !isSignUp) ? 0 : 1,
+          transition:'opacity 0.25s',
+          pointerEvents: (!isMobile && !isSignUp) ? 'none' : 'all',
+          height: isMobile ? 'auto' : 'unset',
+          overflow: isMobile ? 'visible' : 'unset',
         }}>
           <SignUpForm onSwitch={()=>setIsSignUp(false)}/>
         </div>
 
-        {/* Sliding navy panel */}
+        {/* Sliding navy panel — slides on desktop, fixed header on mobile */}
         <div className="navy-panel" style={{
-          position:'absolute', top:0, bottom:0, width:'50%',
+          position: isMobile ? 'relative' : 'absolute',
+          top: isMobile ? 'auto' : 0,
+          bottom: isMobile ? 'auto' : 0,
+          left: isMobile ? 'auto' : (isSignUp ? '50%' : '0%'),
+          width: isMobile ? '100%' : '50%',
+          minHeight: isMobile ? 200 : 'unset',
           background:'linear-gradient(145deg,#1A1035 0%,#0F0A2A 50%,#08061A 100%)',
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-          padding:'40px 32px', zIndex:20, overflow:'hidden',
-          transition:'left 0.7s cubic-bezier(0.68,-0.1,0.27,1.1)',
-          left: isSignUp ? '50%' : '0%',
+          padding: isMobile ? '32px 24px' : '40px 32px',
+          zIndex:20, overflow:'hidden',
+          transition: isMobile ? 'none' : 'left 0.7s cubic-bezier(0.68,-0.1,0.27,1.1)',
+          borderRadius: isMobile ? '0 0 0 0' : 'unset',
+          order: isMobile ? -1 : 'unset',
         }}>
           <div style={{ position:'absolute', width:260, height:260, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.15) 0%,transparent 70%)', top:-60, right:-60 }}/>
           <div style={{ position:'absolute', width:180, height:180, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.12) 0%,transparent 70%)', bottom:20, left:-50 }}/>
