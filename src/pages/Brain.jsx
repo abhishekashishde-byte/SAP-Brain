@@ -1289,7 +1289,7 @@ export default function Brain({ session }) {
     min-height:20px!important;
     background:inherit;
   }
-  .chat-input-wrap{padding:10px 14px calc(20px + env(safe-area-inset-bottom, 0px))!important;}
+  .chat-input-wrap{padding:10px 14px calc(28px + env(safe-area-inset-bottom, 20px))!important;}
   .chat-messages{padding:16px 14px!important;}
   .tone-btn{padding:7px 14px!important;font-size:13px!important;}
 }
@@ -1558,7 +1558,7 @@ export default function Brain({ session }) {
             </div>
 
             {/* Input */}
-            <div className="chat-input-wrap" style={{ padding:'11px 16px 14px', borderTop:`1px solid ${t.border}`, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2 }}>
+            <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`, background:t.topbar, backdropFilter:'blur(10px)', flexShrink:0, position:'relative', zIndex:2 }}>
               <div style={{ maxWidth:720, margin:'0 auto' }}>
                 <div style={{ display:'flex', gap:10, alignItems:'flex-end', background:t.inputBg, border:`1.5px solid ${t.border2}`, borderRadius:14, padding:'10px 12px', transition:'border-color 0.2s, box-shadow 0.2s' }}
                   onFocusCapture={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)'}}
