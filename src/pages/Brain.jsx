@@ -1264,7 +1264,7 @@ export default function Brain({ session }) {
   const groups = groupConversations(filteredConvs)
 
   return (
-    <div style={{ display:'flex', height:'100vh', background:t.bg, fontFamily:"'DM Sans',sans-serif", overflow:'hidden' }}>
+    <div style={{ display:'flex', height:'100dvh', background:t.bg, fontFamily:"'DM Sans',sans-serif", overflow:'hidden' }}>
       <style>{`
         @keyframes typingBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
         @keyframes msgSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -1289,7 +1289,7 @@ export default function Brain({ session }) {
     min-height:20px!important;
     background:inherit;
   }
-  .chat-input-wrap{padding:10px 14px 20px!important;}
+  .chat-input-wrap{padding:10px 14px calc(20px + env(safe-area-inset-bottom, 0px))!important;}
   .chat-messages{padding:16px 14px!important;}
   .tone-btn{padding:7px 14px!important;font-size:13px!important;}
 }
