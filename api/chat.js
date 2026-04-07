@@ -1,12 +1,37 @@
-// api/chat.js — v4: Parallel Specialist Architecture
-// Groq (theory) + Gemini (facts) run in parallel → Groq merges → user gets best of both
-// Claude handles complex questions directly (BAdI, debug, config, integration)
+// api/chat.js — v5: Reference DB First + Specialist Fallback
+// Flow:
+// 1) Supabase reference DB first (tables / fields / tcodes / aliases)
+// 2) Claude for complex / corrections / deep threads
+// 3) Groq direct for ultra-simple
+// 4) Groq theory + Gemini facts → merge for everything else
 
+import fetch from 'node-fetch'
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
   isComplexQuestion, isUltraSimple, isCorrecting,
   tokenize, detokenize,
 } from './_shared.js'
+
+// ── Reference Search ──────────────────────────────────────────────────────────
+async function callReferenceSearch(question) {
+  try {
+    const baseUrl =
+      process.env.BASE_URL ||
+      process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
+
+    if (!baseUrl) return null
+
+    const res = await fetch(`${baseUrl}/api/reference-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    })
+
+    return await res.json()
+  } catch {
+    return null
+  }
+}
 
 // ── Memory fetch ──────────────────────────────────────────────────────────────
 async function fetchMemories(userId, query, mod) {
@@ -56,7 +81,6 @@ async function callGroqDirect(systemPrompt, messages, maxTokens=800) {
 }
 
 // ── Gemini Flash call (facts only) ───────────────────────────────────────────
-// SAP knowledge anchors — Gemini fallback for well-known T-codes
 const SAP_ANCHORS = {
   'maintenance order': '**T-codes:** `IW31` (create), `IW32` (change), `IW33` (display), `IW38` (mass change)\n**Order types:** PM01 (corrective), PM03 (inspection), PM04 (refurbishment) — exact types depend on implementation\n**Key table:** AUFK (order header)',
   'production order': '**T-codes:** `CO01` (create), `CO02` (change), `CO03` (display), `COHV` (mass processing)\n**Key table:** AUFK (order header), AFKO (order header PP)',
@@ -83,8 +107,6 @@ const SAP_ANCHORS = {
 
 function getAnchorFacts(question) {
   const lower = question.toLowerCase()
-  // Find the MOST SPECIFIC (longest) matching anchor key
-  // This avoids "maintenance order" matching when question is about "production order"
   let bestMatch = ''
   let bestFacts = ''
   for (const [key, facts] of Object.entries(SAP_ANCHORS)) {
@@ -98,24 +120,21 @@ function getAnchorFacts(question) {
 
 async function callGeminiFacts(question, context) {
   const key = process.env.GEMINI_API_KEY
-
-  // Check anchors — but only if question is about a single specific object
-  // Multi-object questions (prerequisite, master data, list all) go to Claude so this is safe
   const anchorFacts = getAnchorFacts(question)
 
-  if (!key) return anchorFacts  // no Gemini key — use anchors only
+  if (!key) return anchorFacts
 
   const prompt = `You are an SAP S/4HANA facts specialist. For this SAP question provide ONLY:
-- The most important T-codes (be confident — include well-known ones like IW31, CO01, ME21N)
+- The most important T-codes
 - Key table names if relevant
 - BAdI or user exit names if the question involves enhancement
-- Fiori app names only if well-known (e.g. "Manage Production Orders")
+- Fiori app names only if well-known
 - SPRO path if it is a configuration question
 
 IMPORTANT:
-- For standard SAP objects (orders, materials, BOM etc.) ALWAYS include the primary T-codes — do not be overly cautious
+- For standard SAP objects ALWAYS include the primary T-codes
 - Format as short bullet points with **bold** for T-codes
-- Do not write explanations — facts only
+- Do not write explanations
 - Maximum 6 bullet points
 - If truly nothing applies, reply: NO_FACTS
 
@@ -134,18 +153,14 @@ Question: ${question}`
     const data = await res.json()
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
 
-    if (!text || text === 'NO_FACTS') {
-      // Gemini returned nothing — fall back to our anchors
-      return anchorFacts
-    }
+    if (!text || text === 'NO_FACTS') return anchorFacts
     return text
   } catch {
-    // API error — fall back to anchors
     return anchorFacts
   }
 }
 
-// ── Groq merge — clubs theory + facts into one clean answer ──────────────────
+// ── Groq merge ────────────────────────────────────────────────────────────────
 async function mergeWithGroq(theoryAnswer, factsAnswer, userName) {
   const nameNote = userName ? `Address the user as ${userName} naturally if appropriate.` : ''
   const mergePrompt = `You are a merger. You will receive two parts of an SAP answer:
@@ -154,18 +169,16 @@ PART 2: Specific facts — T-codes, tables, app names
 
 Your job: Combine them into ONE clean, natural answer.
 CRITICAL RULES:
-- Only include facts from Part 2 that are DIRECTLY relevant to the specific objects mentioned in Part 1
-- If Part 2 contains T-codes for a different SAP object than what Part 1 is explaining — IGNORE those facts
-- Do NOT add any new information not present in Part 1 or Part 2
+- Only include facts from Part 2 that are DIRECTLY relevant
+- Ignore irrelevant facts
+- Do NOT add any new information
 - Do NOT invent any T-codes, app names or table names
-- Weave ONLY the relevant facts naturally into the explanation
-- Keep the combined answer concise — no longer than Part 1
+- Keep the combined answer concise
 - Use **bold** for T-codes and key terms
 - ${nameNote}
 - Output only the final merged answer, nothing else`
 
   const userMsg = `PART 1 (Theory):\n${theoryAnswer}\n\nPART 2 (Facts):\n${factsAnswer}`
-
   return callGroqDirect(mergePrompt, [{ role:'user', content:userMsg }], 600)
 }
 
@@ -216,7 +229,7 @@ async function streamClaude(systemPrompt, anonymised, map, send) {
   return detokenize(fullText, map)
 }
 
-// ── Groq streaming (for ultra-simple direct answers) ─────────────────────────
+// ── Groq streaming ────────────────────────────────────────────────────────────
 async function streamGroq(systemPrompt, anonymised, map, send) {
   const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -249,7 +262,10 @@ async function streamGroq(systemPrompt, anonymised, map, send) {
       try {
         const evt = JSON.parse(raw)
         const chunk = evt.choices?.[0]?.delta?.content
-        if (chunk) { fullText += chunk; send({ type:'chunk', text: detokenize(chunk, map) }) }
+        if (chunk) {
+          fullText += chunk
+          send({ type:'chunk', text: detokenize(chunk, map) })
+        }
       } catch {}
     }
   }
@@ -271,50 +287,7 @@ export default async function handler(req, res) {
   const complex        = isComplexQuestion(lastMsg)
   const ultraSimple    = isUltraSimple(lastMsg)
 
-  // ── Routing decision ──────────────────────────────────────────────────────
-  // Claude if: complex OR correcting OR previous was Claude OR deep conversation
-  const useClaude = complex || userCorrecting || previousClaude || convDepth > 8
-
-  // Build system prompt
-  let systemPrompt = BASE_SYSTEM_PROMPT
-  if (userName) {
-    systemPrompt += `\n\nUSER NAME: The user's name is ${userName}. Address them by name occasionally — naturally, max once per response.`
-  }
-  systemPrompt += TONE_ADDITIONS[tone] || TONE_ADDITIONS.balanced
-
-  // Inject memories
-  if (userId) {
-    const memories = await fetchMemories(userId, lastMsg, mod)
-    if (memories.length) {
-      systemPrompt += `\n\nRELEVANT FACTS FROM PAST CONVERSATIONS:\n${memories.map((f,i)=>`${i+1}. ${f}`).join('\n')}`
-    }
-  }
-
-  // Add topic context to last message
-  // BUT: if user is asking about a different module, don't inject stored module context
-  const MODULE_HINTS = {
-    'pp': 'PP – Production Planning', 'production': 'PP – Production Planning',
-    'pm': 'PM – Plant Maintenance', 'maintenance': 'PM – Plant Maintenance',
-    'mm': 'MM – Logistics', 'logistics': 'MM – Logistics', 'purchase': 'MM – Logistics',
-    'fiori': 'Fiori / UX', 'launchpad': 'Fiori / UX',
-    's/4': 'S/4HANA General', 's4hana': 'S/4HANA General',
-  }
-  const lastMsgLower = lastMsg.toLowerCase()
-  let effectiveMod = mod
-  for (const [hint, moduleName] of Object.entries(MODULE_HINTS)) {
-    if (lastMsgLower.includes(hint) && moduleName !== mod) {
-      effectiveMod = moduleName  // user is asking about a different module — use that
-      break
-    }
-  }
-  const withContext = messages.map((m,i) =>
-    i===messages.length-1 && m.role==='user'
-      ? { ...m, content:`SAP context: module="${effectiveMod||'General'}", topic="${topic||'General'}"\n\n${m.content}` }
-      : m
-  )
-  const { anonymised, map } = tokenize(withContext)
-
-  // ── SSE setup ────────────────────────────────────────────────────────────
+  // ── SSE setup early ────────────────────────────────────────────────────────
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
@@ -324,15 +297,114 @@ export default async function handler(req, res) {
   const keepalive = setInterval(() => res.write(': ping\n\n'), 15000)
 
   try {
+    // ── 1) Reference DB First ───────────────────────────────────────────────
+    const refResult = await callReferenceSearch(lastMsg)
 
-    // ── PATH A: Claude for complex / corrections / follow-ups ─────────────
+    if (refResult && refResult.match) {
+      // FIELD LOOKUP
+      if (refResult.intent === 'FIELD_LOOKUP') {
+        const f = refResult.match
+
+        let answer = `**Field:** \`${f.field_name}\`
+**Table:** \`${f.table_name}\`
+**Meaning:** ${f.short_desc}`
+
+        if (f.common_meaning) {
+          answer += `\n\n${f.common_meaning}`
+        }
+
+        if (refResult.related?.length) {
+          const rel = refResult.related
+            .slice(0, 3)
+            .map(r => `- ${r.relation_type}: \`${r.to_tech_name}\``)
+            .join('\n')
+
+          answer += `\n\n**Related:**\n${rel}`
+        }
+
+        send({ type:'chunk', text: answer })
+        send({ type:'done', model:'reference', full: answer })
+        return
+      }
+
+      // OBJECT / TECH NAME LOOKUP
+      if (
+        refResult.intent === 'OBJECT_LOOKUP' ||
+        refResult.intent === 'TECH_NAME_LOOKUP'
+      ) {
+        const o = refResult.match
+
+        let answer = `**${o.object_type}:** \`${o.tech_name}\`
+**${o.title}**
+${o.short_desc || ''}`
+
+        if (refResult.related?.length) {
+          const rel = refResult.related
+            .slice(0, 3)
+            .map(r => `- ${r.relation_type}: \`${r.to_tech_name}\``)
+            .join('\n')
+
+          answer += `\n\n**Related:**\n${rel}`
+        }
+
+        send({ type:'chunk', text: answer })
+        send({ type:'done', model:'reference', full: answer })
+        return
+      }
+    }
+
+    // ── Routing decision ────────────────────────────────────────────────────
+    const useClaude = complex || userCorrecting || previousClaude || convDepth > 8
+
+    // Build system prompt
+    let systemPrompt = BASE_SYSTEM_PROMPT
+    if (userName) {
+      systemPrompt += `\n\nUSER NAME: The user's name is ${userName}. Address them by name occasionally — naturally, max once per response.`
+    }
+    systemPrompt += TONE_ADDITIONS[tone] || TONE_ADDITIONS.balanced
+
+    // Inject memories
+    if (userId) {
+      const memories = await fetchMemories(userId, lastMsg, mod)
+      if (memories.length) {
+        systemPrompt += `\n\nRELEVANT FACTS FROM PAST CONVERSATIONS:\n${memories.map((f,i)=>`${i+1}. ${f}`).join('\n')}`
+      }
+    }
+
+    // Add topic context
+    const MODULE_HINTS = {
+      'pp': 'PP – Production Planning', 'production': 'PP – Production Planning',
+      'pm': 'PM – Plant Maintenance', 'maintenance': 'PM – Plant Maintenance',
+      'mm': 'MM – Logistics', 'logistics': 'MM – Logistics', 'purchase': 'MM – Logistics',
+      'fiori': 'Fiori / UX', 'launchpad': 'Fiori / UX',
+      's/4': 'S/4HANA General', 's4hana': 'S/4HANA General',
+    }
+
+    const lastMsgLower = lastMsg.toLowerCase()
+    let effectiveMod = mod
+    for (const [hint, moduleName] of Object.entries(MODULE_HINTS)) {
+      if (lastMsgLower.includes(hint) && moduleName !== mod) {
+        effectiveMod = moduleName
+        break
+      }
+    }
+
+    const withContext = messages.map((m,i) =>
+      i===messages.length-1 && m.role==='user'
+        ? { ...m, content:`SAP context: module="${effectiveMod||'General'}", topic="${topic||'General'}"\n\n${m.content}` }
+        : m
+    )
+
+    const { anonymised, map } = tokenize(withContext)
+
+    // ── 2) Claude for complex / corrections / follow-ups ───────────────────
     if (useClaude && process.env.ANTHROPIC_API_KEY) {
       const full = await streamClaude(systemPrompt, anonymised, map, send)
       send({ type:'done', model:'claude', full })
       return
     }
 
-    // ── PATH B: Ultra-simple → Groq direct streaming (no Gemini needed) ───
+    // ── 3) Ultra-simple → Groq direct ──────────────────────────────────────
     if (ultraSimple && process.env.GROQ_API_KEY) {
       const groqPrompt = systemPrompt + '\n\nFor this simple question: give a clear, concise answer. Include T-codes only if you are 100% certain they are correct.'
       const full = await streamGroq(groqPrompt, anonymised, map, send)
@@ -340,17 +412,18 @@ export default async function handler(req, res) {
       return
     }
 
-    // ── PATH C: Parallel specialist — Groq theory + Gemini facts → merge ──
+    // ── 4) Groq theory + Gemini facts → merge ──────────────────────────────
     if (process.env.GROQ_API_KEY) {
-      const groqTheoryPrompt = systemPrompt + `\n\nIMPORTANT FOR THIS RESPONSE:
+      const groqTheoryPrompt = systemPrompt + `
+
+IMPORTANT FOR THIS RESPONSE:
 - Explain the concept, process, and context clearly
 - Do NOT include specific T-codes, table names, BAdI names, or Fiori app names — those will be added separately
-- Focus on the "what" and "why" — leave the "where in the system" to the facts layer
+- Focus on the "what" and "why"
 - Keep explanation clear and conversational`
 
       const contextStr = `module="${mod||'General'}", topic="${topic||'General'}"`
 
-      // Run Groq theory + Gemini facts in parallel
       const [theoryAnswer, factsAnswer] = await Promise.all([
         callGroqDirect(groqTheoryPrompt, anonymised, 700),
         callGeminiFacts(lastMsg, contextStr),
@@ -359,14 +432,11 @@ export default async function handler(req, res) {
       let finalAnswer = ''
 
       if (factsAnswer && factsAnswer.length > 10) {
-        // Merge theory + facts using Groq
         finalAnswer = await mergeWithGroq(theoryAnswer, factsAnswer, userName)
       } else {
-        // No facts found — use theory answer directly
         finalAnswer = theoryAnswer
       }
 
-      // Stream the merged answer word by word for smooth animation
       const words = finalAnswer.split(' ')
       for (let i = 0; i < words.length; i++) {
         const chunk = (i === 0 ? '' : ' ') + words[i]
