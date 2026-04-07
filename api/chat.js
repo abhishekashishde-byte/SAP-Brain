@@ -1,4 +1,4 @@
-// api/chat.js — v6: Reference DB First + Gemini Enrichment + Specialist Fallback
+// api/chat.js — v7: Confidence-based Reference Routing + Gemini Enrichment + Specialist Fallback
 
 import fetch from 'node-fetch'
 import {
@@ -91,9 +91,11 @@ function extractSAPTerms(text) {
   const terms = []
   const tcodes = text.match(/\b([A-Z]{1,4}\d{2,3}N?)\b/g) || []
   terms.push(...tcodes)
-  const nouns = ['settlement','valuation','refurbish','routing','bom','mrp','capacity',
+  const nouns = [
+    'settlement','valuation','refurbish','routing','bom','mrp','capacity',
     'person responsible','functional location','equipment','notification',
-    'production version','batch','split valuation','costing','variance']
+    'production version','batch','split valuation','costing','variance'
+  ]
   const lower = text.toLowerCase()
   nouns.forEach(n => { if (lower.includes(n)) terms.push(n) })
   return [...new Set(terms)].slice(0,6)
@@ -103,7 +105,10 @@ function extractSAPTerms(text) {
 async function callGroqDirect(systemPrompt, messages, maxTokens=800) {
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.GROQ_API_KEY}` },
+    headers: {
+      'Content-Type':'application/json',
+      'Authorization':`Bearer ${process.env.GROQ_API_KEY}`
+    },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       max_tokens: maxTokens,
@@ -118,9 +123,9 @@ async function callGroqDirect(systemPrompt, messages, maxTokens=800) {
 
 // ── Gemini Flash call (facts only) ───────────────────────────────────────────
 const SAP_ANCHORS = {
-  'maintenance order': '**T-codes:** `IW31` (create), `IW32` (change), `IW33` (display), `IW38` (mass change)\n**Order types:** PM01 (corrective), PM03 (inspection), PM04 (refurbishment)\n**Key table:** AUFK (order header), AFIH (PM header)',
-  'production order': '**T-codes:** `CO01` (create), `CO02` (change), `CO03` (display), `COHV` (mass processing)\n**Key table:** AUFK, AFKO, AFPO',
-  'purchase order': '**T-codes:** `ME21N` (create), `ME22N` (change), `ME23N` (display), `ME2N` (list)\n**Key table:** EKKO, EKPO',
+  'maintenance order': '**T-codes:** `IW31`, `IW32`, `IW33`, `IW38`\n**Key table:** AUFK, AFIH',
+  'production order': '**T-codes:** `CO01`, `CO02`, `CO03`, `COHV`\n**Key table:** AUFK, AFKO, AFPO',
+  'purchase order': '**T-codes:** `ME21N`, `ME22N`, `ME23N`, `ME2N`\n**Key table:** EKKO, EKPO',
   'goods receipt': '**T-codes:** `MIGO`, `MB51`\n**Key table:** MKPF, MSEG',
   'material master': '**T-codes:** `MM01`, `MM02`, `MM03`\n**Key table:** MARA, MARC, MARD',
   'bom': '**T-codes:** `CS01`, `CS02`, `CS03`, `CS15`\n**Key table:** MAST, STKO, STPO',
@@ -199,20 +204,21 @@ Question: ${question}`
 // ── Groq merge ────────────────────────────────────────────────────────────────
 async function mergeWithGroq(theoryAnswer, factsAnswer, userName) {
   const nameNote = userName ? `Address the user as ${userName} naturally if appropriate.` : ''
-  const mergePrompt = `You are a merger. You will receive two parts of an SAP answer:
+  const mergePrompt = `You will receive two parts of an SAP answer:
 PART 1: Theory/explanation
 PART 2: Specific facts — T-codes, tables, app names
 
-Your job: Combine them into ONE clean, natural answer.
-CRITICAL RULES:
-- Only include facts from Part 2 that are DIRECTLY relevant
+Combine them into ONE clean answer.
+
+RULES:
+- Only include facts from Part 2 that are directly relevant
 - Ignore irrelevant facts
 - Do NOT add any new information
 - Do NOT invent any T-codes, app names or table names
 - Keep the combined answer concise
 - Use **bold** for T-codes and key terms
 - ${nameNote}
-- Output only the final merged answer, nothing else`
+- Output only the final merged answer`
 
   const userMsg = `PART 1 (Theory):\n${theoryAnswer}\n\nPART 2 (Facts):\n${factsAnswer}`
   return callGroqDirect(mergePrompt, [{ role:'user', content:userMsg }], 600)
@@ -269,7 +275,10 @@ async function streamClaude(systemPrompt, anonymised, map, send) {
 async function streamGroq(systemPrompt, anonymised, map, send) {
   const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.GROQ_API_KEY}` },
+    headers: {
+      'Content-Type':'application/json',
+      'Authorization':`Bearer ${process.env.GROQ_API_KEY}`
+    },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       max_tokens: 800,
@@ -315,13 +324,13 @@ export default async function handler(req, res) {
   const { messages, module: mod, topic, tone='balanced', userId, userName } = req.body
   if (!messages || !Array.isArray(messages)) return res.status(400).json({ error:'Invalid body' })
 
-  const lastMsg       = messages[messages.length-1]?.content || ''
-  const lastAIMsg     = [...messages].reverse().find(m => m.role === 'assistant')?.content || ''
-  const convDepth     = messages.length
+  const lastMsg = messages[messages.length-1]?.content || ''
+  const lastAIMsg = [...messages].reverse().find(m => m.role === 'assistant')?.content || ''
+  const convDepth = messages.length
   const previousClaude = lastAIMsg.includes('_✦ Claude_')
   const userCorrecting = isCorrecting(lastMsg)
-  const complex        = isComplexQuestion(lastMsg)
-  const ultraSimple    = isUltraSimple(lastMsg)
+  const complex = isComplexQuestion(lastMsg)
+  const ultraSimple = isUltraSimple(lastMsg)
 
   // ── SSE setup ──────────────────────────────────────────────────────────────
   res.setHeader('Content-Type', 'text/event-stream')
@@ -336,16 +345,26 @@ export default async function handler(req, res) {
     // ── 1) Reference DB First ───────────────────────────────────────────────
     const refResult = await callReferenceSearch(lastMsg)
 
-    if (refResult && refResult.match) {
+    if (refResult && refResult.match && refResult.confidence >= 0.55) {
       const enrichedAnswer = await enrichReferenceAnswer(refResult, lastMsg)
 
-      if (enrichedAnswer) {
-        send({ type:'chunk', text: enrichedAnswer })
-        send({ type:'done', model:'reference+gemini', full: enrichedAnswer })
-        return
+      if (refResult.should_answer_directly) {
+        if (enrichedAnswer) {
+          send({ type:'chunk', text: enrichedAnswer })
+          send({ type:'done', model:'reference+gemini', full: enrichedAnswer })
+          return
+        }
       }
 
-      // fallback if Gemini enrichment fails
+      if (refResult.should_enrich_with_gemini) {
+        if (enrichedAnswer) {
+          send({ type:'chunk', text: enrichedAnswer })
+          send({ type:'done', model:'reference+gemini', full: enrichedAnswer })
+          return
+        }
+      }
+
+      // Fallback if Gemini enrichment fails
       if (refResult.intent === 'FIELD_LOOKUP') {
         const f = refResult.match
         let answer = `**Field:** \`${f.field_name}\`
