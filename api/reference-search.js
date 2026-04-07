@@ -29,6 +29,7 @@ function cleanSearchPhrase(question = '') {
   q = q
     .replace(/\bwhat is\b/g, '')
     .replace(/\btable for\b/g, '')
+    .replace(/\btables for\b/g, '')
     .replace(/\btcode for\b/g, '')
     .replace(/\btransaction for\b/g, '')
     .replace(/\bfiori app for\b/g, '')
@@ -36,17 +37,21 @@ function cleanSearchPhrase(question = '') {
     .replace(/\bapp for\b/g, '')
     .replace(/\bfield\b/g, '')
     .replace(/\btable\b/g, '')
+    .replace(/\btables\b/g, '')
     .replace(/\btcode\b/g, '')
     .replace(/\btransaction\b/g, '')
     .replace(/\bfiori\b/g, '')
     .replace(/\bapp\b/g, '')
+    .replace(/\bdifference between\b/g, '')
+    .replace(/\band\b/g, ' ')
+    .replace(/\bvs\b/g, ' ')
     .replace(/\bthe\b/g, '')
     .replace(/\ban\b/g, '')
     .replace(/\ba\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  return singularize(q);
+  return q;
 }
 
 function extractFieldLookup(question) {
@@ -71,14 +76,23 @@ function extractFieldLookup(question) {
   return null;
 }
 
+function extractMultipleTechNames(question) {
+  const matches = question.match(/\b[A-Z0-9_]{3,12}\b/g) || [];
+  const filtered = [...new Set(matches.map(x => x.toUpperCase()))];
+  return filtered.length >= 2 ? filtered.slice(0, 5) : [];
+}
+
 function isLikelyObjectLookup(question) {
   const q = simplify(question);
   return (
     q.includes('table') ||
+    q.includes('tables') ||
     q.includes('tcode') ||
     q.includes('transaction') ||
     q.includes('fiori') ||
-    q.includes('app')
+    q.includes('app') ||
+    q.includes('difference between') ||
+    q.includes(' vs ')
   );
 }
 
@@ -124,7 +138,7 @@ async function searchAliasLoose(searchText) {
     .from('sap_aliases')
     .select('*')
     .or(`alias_text.ilike.%${searchText}%,alias_text.ilike.%${singularize(searchText)}%`)
-    .limit(5);
+    .limit(8);
 
   if (error) throw error;
   return data || [];
@@ -141,24 +155,35 @@ async function searchObjectByTechName(tech) {
   return data;
 }
 
-async function searchObjectByKeywords(searchText) {
+async function searchObjectsByTechNames(techNames) {
   const { data, error } = await supabase
     .from('sap_objects')
     .select('*')
-    .or(`title.ilike.%${searchText}%,short_desc.ilike.%${searchText}%,tech_name.ilike.%${searchText}%`)
-    .limit(5);
+    .in('tech_name', techNames);
 
   if (error) throw error;
   return data || [];
 }
 
-function buildResponse(intent, query, match, related = [], confidence = 0, source = 'unknown') {
+async function searchObjectByKeywords(searchText) {
+  const { data, error } = await supabase
+    .from('sap_objects')
+    .select('*')
+    .or(`title.ilike.%${searchText}%,short_desc.ilike.%${searchText}%,tech_name.ilike.%${searchText}%`)
+    .limit(8);
+
+  if (error) throw error;
+  return data || [];
+}
+
+function buildResponse(intent, query, match, related = [], confidence = 0, source = 'unknown', matches = []) {
   return {
     intent,
     query,
     confidence,
     source,
     match,
+    matches,
     related,
     should_answer_directly: confidence >= 0.85,
     should_enrich_with_gemini: confidence >= 0.55 && confidence < 0.85,
@@ -193,7 +218,27 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2) DIRECT TECH NAME
+    // 2) MULTI TECH-NAME LOOKUP
+    const multiTechNames = extractMultipleTechNames(q);
+    if (multiTechNames.length) {
+      const objects = await searchObjectsByTechNames(multiTechNames);
+
+      if (objects.length >= 2) {
+        return res.status(200).json(
+          buildResponse(
+            'MULTI_OBJECT_LOOKUP',
+            q,
+            objects[0],
+            [],
+            0.95,
+            'multi_tech_exact',
+            objects
+          )
+        );
+      }
+    }
+
+    // 3) DIRECT TECH NAME
     if (isLikelyTechName(q)) {
       const tech = q.toUpperCase();
       const objectData = await searchObjectByTechName(tech);
@@ -207,11 +252,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3) OBJECT / ALIAS LOOKUP
-    if (isLikelyObjectLookup(q) || q.split(' ').length <= 5) {
+    // 4) OBJECT / ALIAS LOOKUP
+    if (isLikelyObjectLookup(q) || q.split(' ').length <= 6) {
       const cleaned = cleanSearchPhrase(q);
 
-      // 3A) Exact alias
+      // 4A) Exact alias
       const exactAlias = await searchAliasExact(cleaned);
       if (exactAlias) {
         const objectData = await searchObjectByTechName(exactAlias.mapped_tech_name);
@@ -222,9 +267,26 @@ export default async function handler(req, res) {
         );
       }
 
-      // 3B) Loose alias
+      // 4B) Loose aliases
       const looseAliases = await searchAliasLoose(cleaned);
       if (looseAliases.length) {
+        const techNames = [...new Set(looseAliases.map(a => a.mapped_tech_name))];
+        const objects = await searchObjectsByTechNames(techNames);
+
+        if (objects.length >= 2) {
+          return res.status(200).json(
+            buildResponse(
+              'MULTI_OBJECT_LOOKUP',
+              q,
+              objects[0],
+              [],
+              0.78,
+              'alias_loose_multi',
+              objects
+            )
+          );
+        }
+
         const best = looseAliases[0];
         const objectData = await searchObjectByTechName(best.mapped_tech_name);
         const related = await getRelated(best.mapped_object_type, best.mapped_tech_name);
@@ -234,9 +296,23 @@ export default async function handler(req, res) {
         );
       }
 
-      // 3C) Object keyword/title search
+      // 4C) Object keyword/title search
       const objectMatches = await searchObjectByKeywords(cleaned);
-      if (objectMatches.length) {
+      if (objectMatches.length >= 2) {
+        return res.status(200).json(
+          buildResponse(
+            'MULTI_OBJECT_LOOKUP',
+            q,
+            objectMatches[0],
+            [],
+            0.68,
+            'object_keyword_multi',
+            objectMatches
+          )
+        );
+      }
+
+      if (objectMatches.length === 1) {
         const best = objectMatches[0];
         const related = await getRelated(best.object_type, best.tech_name);
 
