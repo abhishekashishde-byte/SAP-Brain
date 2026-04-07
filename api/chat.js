@@ -1,4 +1,4 @@
-// api/chat.js — v7: Confidence-based Reference Routing + Gemini Enrichment + Specialist Fallback
+// api/chat.js — v8: Confidence-based Reference Routing + Multi-object Support + Specialist Fallback
 
 import fetch from 'node-fetch'
 import {
@@ -346,6 +346,28 @@ export default async function handler(req, res) {
     const refResult = await callReferenceSearch(lastMsg)
 
     if (refResult && refResult.match && refResult.confidence >= 0.55) {
+      // MULTI OBJECT LOOKUP
+      if (refResult.intent === 'MULTI_OBJECT_LOOKUP' && refResult.matches?.length) {
+        const enrichedAnswer = await enrichReferenceAnswer(refResult, lastMsg)
+
+        if (enrichedAnswer) {
+          send({ type:'chunk', text: enrichedAnswer })
+          send({ type:'done', model:'reference+gemini', full: enrichedAnswer })
+          return
+        }
+
+        const lines = refResult.matches
+          .slice(0, 5)
+          .map(o => `- \`${o.tech_name}\` — ${o.title}`)
+          .join('\n')
+
+        const answer = `I found multiple relevant SAP objects:\n\n${lines}`
+
+        send({ type:'chunk', text: answer })
+        send({ type:'done', model:'reference', full: answer })
+        return
+      }
+
       const enrichedAnswer = await enrichReferenceAnswer(refResult, lastMsg)
 
       if (refResult.should_answer_directly) {
