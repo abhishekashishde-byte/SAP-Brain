@@ -6,22 +6,73 @@ const supabase = createClient(
 );
 
 function normalize(text = '') {
-  return text.trim();
+  return text.trim().replace(/\s+/g, ' ');
+}
+
+function simplify(text = '') {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function singularize(word = '') {
+  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
+  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
+
+function cleanSearchPhrase(question = '') {
+  let q = simplify(question);
+
+  q = q
+    .replace(/\bwhat is\b/g, '')
+    .replace(/\btable for\b/g, '')
+    .replace(/\btcode for\b/g, '')
+    .replace(/\btransaction for\b/g, '')
+    .replace(/\bfiori app for\b/g, '')
+    .replace(/\bfiori for\b/g, '')
+    .replace(/\bapp for\b/g, '')
+    .replace(/\bfield\b/g, '')
+    .replace(/\btable\b/g, '')
+    .replace(/\btcode\b/g, '')
+    .replace(/\btransaction\b/g, '')
+    .replace(/\bfiori\b/g, '')
+    .replace(/\bapp\b/g, '')
+    .replace(/\bthe\b/g, '')
+    .replace(/\ban\b/g, '')
+    .replace(/\ba\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return singularize(q);
 }
 
 function extractFieldLookup(question) {
-  const match = question.match(/\bwhat is\s+([A-Z0-9_]+)\s+in\s+([A-Z0-9_]+)\b/i);
-  if (match) {
-    return {
-      field: match[1].toUpperCase(),
-      table: match[2].toUpperCase(),
-    };
+  const q = normalize(question);
+
+  const patterns = [
+    /\bwhat is\s+([A-Z0-9_]+)\s+in\s+([A-Z0-9_]+)\b/i,
+    /\b([A-Z0-9_]+)\s+field\s+in\s+([A-Z0-9_]+)\b/i,
+    /\bfield\s+([A-Z0-9_]+)\s+in\s+([A-Z0-9_]+)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = q.match(pattern);
+    if (match) {
+      return {
+        field: match[1].toUpperCase(),
+        table: match[2].toUpperCase(),
+      };
+    }
   }
+
   return null;
 }
 
 function isLikelyObjectLookup(question) {
-  const q = question.toLowerCase();
+  const q = simplify(question);
   return (
     q.includes('table') ||
     q.includes('tcode') ||
@@ -32,7 +83,73 @@ function isLikelyObjectLookup(question) {
 }
 
 function isLikelyTechName(question) {
-  return /^[A-Z0-9_]{3,10}$/i.test(question.trim());
+  return /^[A-Z0-9_]{3,12}$/i.test(question.trim());
+}
+
+async function getRelated(objectType, techName) {
+  const { data } = await supabase
+    .from('sap_relationships')
+    .select('*')
+    .eq('from_object_type', objectType)
+    .eq('from_tech_name', techName);
+
+  return data || [];
+}
+
+async function searchField(table, field) {
+  const { data, error } = await supabase
+    .from('sap_fields')
+    .select('*')
+    .eq('table_name', table)
+    .eq('field_name', field)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function searchAliasExact(searchText) {
+  const { data, error } = await supabase
+    .from('sap_aliases')
+    .select('*')
+    .ilike('alias_text', searchText)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function searchAliasLoose(searchText) {
+  const { data, error } = await supabase
+    .from('sap_aliases')
+    .select('*')
+    .or(`alias_text.ilike.%${searchText}%,alias_text.ilike.%${singularize(searchText)}%`)
+    .limit(5);
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function searchObjectByTechName(tech) {
+  const { data, error } = await supabase
+    .from('sap_objects')
+    .select('*')
+    .eq('tech_name', tech)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function searchObjectByKeywords(searchText) {
+  const { data, error } = await supabase
+    .from('sap_objects')
+    .select('*')
+    .or(`title.ilike.%${searchText}%,short_desc.ilike.%${searchText}%,tech_name.ilike.%${searchText}%`)
+    .limit(5);
+
+  if (error) throw error;
+  return data || [];
 }
 
 export default async function handler(req, res) {
@@ -49,93 +166,84 @@ export default async function handler(req, res) {
 
     const q = normalize(question);
 
-    // 1. FIELD LOOKUP
+    // ── 1. FIELD LOOKUP ───────────────────────────────────────────────
     const fieldLookup = extractFieldLookup(q);
     if (fieldLookup) {
-      const { data: fieldData, error: fieldError } = await supabase
-        .from('sap_fields')
-        .select('*')
-        .eq('table_name', fieldLookup.table)
-        .eq('field_name', fieldLookup.field)
-        .maybeSingle();
-
-      if (fieldError) throw fieldError;
+      const fieldData = await searchField(fieldLookup.table, fieldLookup.field);
 
       if (fieldData) {
-        const { data: relatedData } = await supabase
-          .from('sap_relationships')
-          .select('*')
-          .eq('from_object_type', 'TABLE')
-          .eq('from_tech_name', fieldLookup.table);
+        const related = await getRelated('TABLE', fieldLookup.table);
 
         return res.status(200).json({
           intent: 'FIELD_LOOKUP',
           query: q,
           match: fieldData,
-          related: relatedData || [],
+          related,
         });
       }
     }
 
-    // 2. ALIAS / OBJECT LOOKUP
-    if (isLikelyObjectLookup(q)) {
-      const { data: aliasData, error: aliasError } = await supabase
-        .from('sap_aliases')
-        .select('*')
-        .ilike('alias_text', q)
-        .maybeSingle();
-
-      if (aliasError) throw aliasError;
-
-      if (aliasData) {
-        const { data: objectData, error: objectError } = await supabase
-          .from('sap_objects')
-          .select('*')
-          .eq('object_type', aliasData.mapped_object_type)
-          .eq('tech_name', aliasData.mapped_tech_name)
-          .maybeSingle();
-
-        if (objectError) throw objectError;
-
-        const { data: relatedData } = await supabase
-          .from('sap_relationships')
-          .select('*')
-          .eq('from_object_type', aliasData.mapped_object_type)
-          .eq('from_tech_name', aliasData.mapped_tech_name);
-
-        return res.status(200).json({
-          intent: 'OBJECT_LOOKUP',
-          query: q,
-          match: objectData || aliasData,
-          related: relatedData || [],
-        });
-      }
-    }
-
-    // 3. DIRECT TECH NAME LOOKUP
+    // ── 2. DIRECT TECH NAME LOOKUP ───────────────────────────────────
     if (isLikelyTechName(q)) {
       const tech = q.toUpperCase();
-
-      const { data: objectData, error: objectError } = await supabase
-        .from('sap_objects')
-        .select('*')
-        .eq('tech_name', tech)
-        .maybeSingle();
-
-      if (objectError) throw objectError;
+      const objectData = await searchObjectByTechName(tech);
 
       if (objectData) {
-        const { data: relatedData } = await supabase
-          .from('sap_relationships')
-          .select('*')
-          .eq('from_object_type', objectData.object_type)
-          .eq('from_tech_name', objectData.tech_name);
+        const related = await getRelated(objectData.object_type, objectData.tech_name);
 
         return res.status(200).json({
           intent: 'TECH_NAME_LOOKUP',
           query: q,
           match: objectData,
-          related: relatedData || [],
+          related,
+        });
+      }
+    }
+
+    // ── 3. OBJECT / ALIAS LOOKUP ─────────────────────────────────────
+    if (isLikelyObjectLookup(q) || q.split(' ').length <= 5) {
+      const cleaned = cleanSearchPhrase(q);
+
+      // 3A. Exact alias
+      const exactAlias = await searchAliasExact(cleaned);
+      if (exactAlias) {
+        const objectData = await searchObjectByTechName(exactAlias.mapped_tech_name);
+        const related = await getRelated(exactAlias.mapped_object_type, exactAlias.mapped_tech_name);
+
+        return res.status(200).json({
+          intent: 'OBJECT_LOOKUP',
+          query: q,
+          match: objectData || exactAlias,
+          related,
+        });
+      }
+
+      // 3B. Loose alias
+      const looseAliases = await searchAliasLoose(cleaned);
+      if (looseAliases.length) {
+        const best = looseAliases[0];
+        const objectData = await searchObjectByTechName(best.mapped_tech_name);
+        const related = await getRelated(best.mapped_object_type, best.mapped_tech_name);
+
+        return res.status(200).json({
+          intent: 'OBJECT_LOOKUP',
+          query: q,
+          match: objectData || best,
+          related,
+        });
+      }
+
+      // 3C. Object keyword/title search
+      const objectMatches = await searchObjectByKeywords(cleaned);
+      if (objectMatches.length) {
+        const best = objectMatches[0];
+        const related = await getRelated(best.object_type, best.tech_name);
+
+        return res.status(200).json({
+          intent: 'OBJECT_LOOKUP',
+          query: q,
+          match: best,
+          related,
         });
       }
     }
