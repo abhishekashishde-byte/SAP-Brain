@@ -1,4 +1,4 @@
-// api/chat.js — v8: Confidence-based Reference Routing + Multi-object Support + Specialist Fallback
+// api/chat.js — v9: Confidence-based Reference Routing + Multi-object + Field-meaning Support + Specialist Fallback
 
 import fetch from 'node-fetch'
 import {
@@ -368,6 +368,28 @@ export default async function handler(req, res) {
         return
       }
 
+      // MULTI FIELD LOOKUP
+      if (refResult.intent === 'MULTI_FIELD_LOOKUP' && refResult.matches?.length) {
+        const enrichedAnswer = await enrichReferenceAnswer(refResult, lastMsg)
+
+        if (enrichedAnswer) {
+          send({ type:'chunk', text: enrichedAnswer })
+          send({ type:'done', model:'reference+gemini', full: enrichedAnswer })
+          return
+        }
+
+        const lines = refResult.matches
+          .slice(0, 5)
+          .map(f => `- \`${f.field_name}\` — ${f.short_desc}`)
+          .join('\n')
+
+        const answer = `I found multiple relevant fields:\n\n${lines}`
+
+        send({ type:'chunk', text: answer })
+        send({ type:'done', model:'reference', full: answer })
+        return
+      }
+
       const enrichedAnswer = await enrichReferenceAnswer(refResult, lastMsg)
 
       if (refResult.should_answer_directly) {
@@ -387,7 +409,7 @@ export default async function handler(req, res) {
       }
 
       // Fallback if Gemini enrichment fails
-      if (refResult.intent === 'FIELD_LOOKUP') {
+      if (refResult.intent === 'FIELD_LOOKUP' || refResult.intent === 'FIELD_MEANING_LOOKUP') {
         const f = refResult.match
         let answer = `**Field:** \`${f.field_name}\`
 **Table:** \`${f.table_name}\`
