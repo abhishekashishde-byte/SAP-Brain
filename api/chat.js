@@ -1,9 +1,4 @@
-// api/chat.js — v5: Reference DB First + Specialist Fallback
-// Flow:
-// 1) Supabase reference DB first (tables / fields / tcodes / aliases)
-// 2) Claude for complex / corrections / deep threads
-// 3) Groq direct for ultra-simple
-// 4) Groq theory + Gemini facts → merge for everything else
+// api/chat.js — v6: Reference DB First + Gemini Enrichment + Specialist Fallback
 
 import fetch from 'node-fetch'
 import {
@@ -17,7 +12,7 @@ async function callReferenceSearch(question) {
   try {
     const baseUrl =
       process.env.BASE_URL ||
-      process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
 
     if (!baseUrl) return null
 
@@ -28,6 +23,47 @@ async function callReferenceSearch(question) {
     })
 
     return await res.json()
+  } catch {
+    return null
+  }
+}
+
+// ── Gemini enrichment for DB answers ─────────────────────────────────────────
+async function enrichReferenceAnswer(refResult, userQuestion) {
+  const key = process.env.GEMINI_API_KEY
+  if (!key || !refResult?.match) return null
+
+  const prompt = `You are an SAP S/4HANA assistant.
+You are given a structured SAP reference result from an internal database.
+
+Your job:
+- explain it briefly and clearly
+- do NOT change the technical object names
+- do NOT invent SAP facts
+- do NOT guess if something is unclear
+- keep answer concise
+- max 6 bullet points or short paragraphs
+
+User Question:
+${userQuestion}
+
+Reference Result:
+${JSON.stringify(refResult, null, 2)}
+
+Return a concise user-facing answer only.`
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 350, temperature: 0.2 },
+      }),
+    })
+
+    const data = await res.json()
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null
   } catch {
     return null
   }
@@ -82,27 +118,27 @@ async function callGroqDirect(systemPrompt, messages, maxTokens=800) {
 
 // ── Gemini Flash call (facts only) ───────────────────────────────────────────
 const SAP_ANCHORS = {
-  'maintenance order': '**T-codes:** `IW31` (create), `IW32` (change), `IW33` (display), `IW38` (mass change)\n**Order types:** PM01 (corrective), PM03 (inspection), PM04 (refurbishment) — exact types depend on implementation\n**Key table:** AUFK (order header)',
-  'production order': '**T-codes:** `CO01` (create), `CO02` (change), `CO03` (display), `COHV` (mass processing)\n**Key table:** AUFK (order header), AFKO (order header PP)',
-  'purchase order': '**T-codes:** `ME21N` (create), `ME22N` (change), `ME23N` (display), `ME2N` (list)\n**Key table:** EKKO (header), EKPO (item)',
-  'goods receipt': '**T-codes:** `MIGO` (goods movement), `MB51` (material document list)\n**Key table:** MKPF (header), MSEG (item)',
-  'material master': '**T-codes:** `MM01` (create), `MM02` (change), `MM03` (display), `MM60` (where-used)\n**Key table:** MARA (general), MARC (plant), MARD (storage location)',
-  'bom': '**T-codes:** `CS01` (create), `CS02` (change), `CS03` (display), `CS15` (where-used)\n**Key table:** MAST, STKO, STPO',
-  'routing': '**T-codes:** `CA01` (create), `CA02` (change), `CA03` (display)\n**Key table:** PLKO (header), PLPO (operations)',
-  'work center': '**T-codes:** `CR01` (create), `CR02` (change), `CR03` (display)\n**Key table:** CRHD',
-  'functional location': '**T-codes:** `IL01` (create), `IL02` (change), `IL03` (display)\n**Key table:** IFLOT',
-  'equipment': '**T-codes:** `IE01` (create), `IE02` (change), `IE03` (display)\n**Key table:** EQUI, EQUZ',
-  'notification': '**T-codes:** `IW21` (create PM), `IW22` (change), `IW23` (display), `IW28` (list)\n**Key table:** QMEL',
-  'mrp': '**T-codes:** `MD01` (run), `MD02` (single item), `MD04` (stock/req list), `MD05` (MRP list)\n**Key table:** MDKP, MDTB',
-  'teco': '**T-codes:** `IW32` (PM orders), `CO02` (production orders), `IW38`/`COHV` (mass TECO)\n**Status:** TECO = technically complete, CLSD = closed',
-  'goods issue': '**T-codes:** `MIGO` (goods movement - 261 for order), `MB1A` (classic)\n**Key table:** MSEG',
-  'settlement': '**T-codes:** `KO88` (individual), `KO8G` (collective), `KSU5` (actual settlement)\n**Key table:** COBRA, COBRB',
-  'production version': '**T-codes:** `C223` (mass maintenance), `C220` (individual), `MM02` (via material master MRP4 view)\n**Key fields:** BOM usage, routing, plant, lot size validity',
-  'sales order': '**T-codes:** `VA01` (create), `VA02` (change), `VA03` (display), `VA05` (list)\n**Key table:** VBAK (header), VBAP (item)',
-  'delivery': '**T-codes:** `VL01N` (create outbound), `VL02N` (change), `VL03N` (display)\n**Key table:** LIKP (header), LIPS (item)',
-  'invoice': '**T-codes:** `VF01` (create billing), `MIRO` (logistics invoice verification)\n**Key table:** VBRK (billing header)',
-  'plant maintenance plan': '**T-codes:** `IP01` (create), `IP02` (change), `IP10` (schedule), `IP30` (deadline monitoring)\n**Key table:** MPLA',
-  'measuring point': '**T-codes:** `IK01` (create), `IK02` (change), `IK11` (enter measurement)\n**Key table:** IMPTT',
+  'maintenance order': '**T-codes:** `IW31` (create), `IW32` (change), `IW33` (display), `IW38` (mass change)\n**Order types:** PM01 (corrective), PM03 (inspection), PM04 (refurbishment)\n**Key table:** AUFK (order header), AFIH (PM header)',
+  'production order': '**T-codes:** `CO01` (create), `CO02` (change), `CO03` (display), `COHV` (mass processing)\n**Key table:** AUFK, AFKO, AFPO',
+  'purchase order': '**T-codes:** `ME21N` (create), `ME22N` (change), `ME23N` (display), `ME2N` (list)\n**Key table:** EKKO, EKPO',
+  'goods receipt': '**T-codes:** `MIGO`, `MB51`\n**Key table:** MKPF, MSEG',
+  'material master': '**T-codes:** `MM01`, `MM02`, `MM03`\n**Key table:** MARA, MARC, MARD',
+  'bom': '**T-codes:** `CS01`, `CS02`, `CS03`, `CS15`\n**Key table:** MAST, STKO, STPO',
+  'routing': '**T-codes:** `CA01`, `CA02`, `CA03`\n**Key table:** PLKO, PLPO',
+  'work center': '**T-codes:** `CR01`, `CR02`, `CR03`\n**Key table:** CRHD',
+  'functional location': '**T-codes:** `IL01`, `IL02`, `IL03`\n**Key table:** IFLOT',
+  'equipment': '**T-codes:** `IE01`, `IE02`, `IE03`\n**Key table:** EQUI, EQKT',
+  'notification': '**T-codes:** `IW21`, `IW22`, `IW23`, `IW28`\n**Key table:** QMEL',
+  'mrp': '**T-codes:** `MD01`, `MD02`, `MD04`, `MD05`\n**Key table:** MDKP, MDTB',
+  'teco': '**T-codes:** `IW32`, `CO02`, `IW38`, `COHV`\n**Status:** TECO = technically complete',
+  'goods issue': '**T-codes:** `MIGO`, `MB1A`\n**Key table:** MSEG',
+  'settlement': '**T-codes:** `KO88`, `KO8G`\n**Key table:** COBRA, COBRB',
+  'production version': '**T-codes:** `C223`, `C220`, `MM02`\n**Key table:** MKAL',
+  'sales order': '**T-codes:** `VA01`, `VA02`, `VA03`, `VA05`\n**Key table:** VBAK, VBAP',
+  'delivery': '**T-codes:** `VL01N`, `VL02N`, `VL03N`\n**Key table:** LIKP, LIPS',
+  'invoice': '**T-codes:** `VF01`, `MIRO`\n**Key table:** VBRK',
+  'plant maintenance plan': '**T-codes:** `IP01`, `IP02`, `IP10`, `IP30`\n**Key table:** MPLA',
+  'measuring point': '**T-codes:** `IK01`, `IK02`, `IK11`\n**Key table:** IMPTT',
 }
 
 function getAnchorFacts(question) {
@@ -287,7 +323,7 @@ export default async function handler(req, res) {
   const complex        = isComplexQuestion(lastMsg)
   const ultraSimple    = isUltraSimple(lastMsg)
 
-  // ── SSE setup early ────────────────────────────────────────────────────────
+  // ── SSE setup ──────────────────────────────────────────────────────────────
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
@@ -301,51 +337,33 @@ export default async function handler(req, res) {
     const refResult = await callReferenceSearch(lastMsg)
 
     if (refResult && refResult.match) {
-      // FIELD LOOKUP
+      const enrichedAnswer = await enrichReferenceAnswer(refResult, lastMsg)
+
+      if (enrichedAnswer) {
+        send({ type:'chunk', text: enrichedAnswer })
+        send({ type:'done', model:'reference+gemini', full: enrichedAnswer })
+        return
+      }
+
+      // fallback if Gemini enrichment fails
       if (refResult.intent === 'FIELD_LOOKUP') {
         const f = refResult.match
-
         let answer = `**Field:** \`${f.field_name}\`
 **Table:** \`${f.table_name}\`
 **Meaning:** ${f.short_desc}`
 
-        if (f.common_meaning) {
-          answer += `\n\n${f.common_meaning}`
-        }
-
-        if (refResult.related?.length) {
-          const rel = refResult.related
-            .slice(0, 3)
-            .map(r => `- ${r.relation_type}: \`${r.to_tech_name}\``)
-            .join('\n')
-
-          answer += `\n\n**Related:**\n${rel}`
-        }
+        if (f.common_meaning) answer += `\n\n${f.common_meaning}`
 
         send({ type:'chunk', text: answer })
         send({ type:'done', model:'reference', full: answer })
         return
       }
 
-      // OBJECT / TECH NAME LOOKUP
-      if (
-        refResult.intent === 'OBJECT_LOOKUP' ||
-        refResult.intent === 'TECH_NAME_LOOKUP'
-      ) {
+      if (refResult.intent === 'OBJECT_LOOKUP' || refResult.intent === 'TECH_NAME_LOOKUP') {
         const o = refResult.match
-
         let answer = `**${o.object_type}:** \`${o.tech_name}\`
 **${o.title}**
 ${o.short_desc || ''}`
-
-        if (refResult.related?.length) {
-          const rel = refResult.related
-            .slice(0, 3)
-            .map(r => `- ${r.relation_type}: \`${r.to_tech_name}\``)
-            .join('\n')
-
-          answer += `\n\n**Related:**\n${rel}`
-        }
 
         send({ type:'chunk', text: answer })
         send({ type:'done', model:'reference', full: answer })
@@ -356,14 +374,12 @@ ${o.short_desc || ''}`
     // ── Routing decision ────────────────────────────────────────────────────
     const useClaude = complex || userCorrecting || previousClaude || convDepth > 8
 
-    // Build system prompt
     let systemPrompt = BASE_SYSTEM_PROMPT
     if (userName) {
       systemPrompt += `\n\nUSER NAME: The user's name is ${userName}. Address them by name occasionally — naturally, max once per response.`
     }
     systemPrompt += TONE_ADDITIONS[tone] || TONE_ADDITIONS.balanced
 
-    // Inject memories
     if (userId) {
       const memories = await fetchMemories(userId, lastMsg, mod)
       if (memories.length) {
@@ -371,7 +387,6 @@ ${o.short_desc || ''}`
       }
     }
 
-    // Add topic context
     const MODULE_HINTS = {
       'pp': 'PP – Production Planning', 'production': 'PP – Production Planning',
       'pm': 'PM – Plant Maintenance', 'maintenance': 'PM – Plant Maintenance',
