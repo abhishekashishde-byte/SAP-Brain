@@ -152,6 +152,19 @@ async function searchObjectByKeywords(searchText) {
   return data || [];
 }
 
+function buildResponse(intent, query, match, related = [], confidence = 0, source = 'unknown') {
+  return {
+    intent,
+    query,
+    confidence,
+    source,
+    match,
+    related,
+    should_answer_directly: confidence >= 0.85,
+    should_enrich_with_gemini: confidence >= 0.55 && confidence < 0.85,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -166,7 +179,7 @@ export default async function handler(req, res) {
 
     const q = normalize(question);
 
-    // ── 1. FIELD LOOKUP ───────────────────────────────────────────────
+    // 1) FIELD LOOKUP
     const fieldLookup = extractFieldLookup(q);
     if (fieldLookup) {
       const fieldData = await searchField(fieldLookup.table, fieldLookup.field);
@@ -174,16 +187,13 @@ export default async function handler(req, res) {
       if (fieldData) {
         const related = await getRelated('TABLE', fieldLookup.table);
 
-        return res.status(200).json({
-          intent: 'FIELD_LOOKUP',
-          query: q,
-          match: fieldData,
-          related,
-        });
+        return res.status(200).json(
+          buildResponse('FIELD_LOOKUP', q, fieldData, related, 0.98, 'field_exact')
+        );
       }
     }
 
-    // ── 2. DIRECT TECH NAME LOOKUP ───────────────────────────────────
+    // 2) DIRECT TECH NAME
     if (isLikelyTechName(q)) {
       const tech = q.toUpperCase();
       const objectData = await searchObjectByTechName(tech);
@@ -191,69 +201,54 @@ export default async function handler(req, res) {
       if (objectData) {
         const related = await getRelated(objectData.object_type, objectData.tech_name);
 
-        return res.status(200).json({
-          intent: 'TECH_NAME_LOOKUP',
-          query: q,
-          match: objectData,
-          related,
-        });
+        return res.status(200).json(
+          buildResponse('TECH_NAME_LOOKUP', q, objectData, related, 0.97, 'tech_exact')
+        );
       }
     }
 
-    // ── 3. OBJECT / ALIAS LOOKUP ─────────────────────────────────────
+    // 3) OBJECT / ALIAS LOOKUP
     if (isLikelyObjectLookup(q) || q.split(' ').length <= 5) {
       const cleaned = cleanSearchPhrase(q);
 
-      // 3A. Exact alias
+      // 3A) Exact alias
       const exactAlias = await searchAliasExact(cleaned);
       if (exactAlias) {
         const objectData = await searchObjectByTechName(exactAlias.mapped_tech_name);
         const related = await getRelated(exactAlias.mapped_object_type, exactAlias.mapped_tech_name);
 
-        return res.status(200).json({
-          intent: 'OBJECT_LOOKUP',
-          query: q,
-          match: objectData || exactAlias,
-          related,
-        });
+        return res.status(200).json(
+          buildResponse('OBJECT_LOOKUP', q, objectData || exactAlias, related, 0.93, 'alias_exact')
+        );
       }
 
-      // 3B. Loose alias
+      // 3B) Loose alias
       const looseAliases = await searchAliasLoose(cleaned);
       if (looseAliases.length) {
         const best = looseAliases[0];
         const objectData = await searchObjectByTechName(best.mapped_tech_name);
         const related = await getRelated(best.mapped_object_type, best.mapped_tech_name);
 
-        return res.status(200).json({
-          intent: 'OBJECT_LOOKUP',
-          query: q,
-          match: objectData || best,
-          related,
-        });
+        return res.status(200).json(
+          buildResponse('OBJECT_LOOKUP', q, objectData || best, related, 0.72, 'alias_loose')
+        );
       }
 
-      // 3C. Object keyword/title search
+      // 3C) Object keyword/title search
       const objectMatches = await searchObjectByKeywords(cleaned);
       if (objectMatches.length) {
         const best = objectMatches[0];
         const related = await getRelated(best.object_type, best.tech_name);
 
-        return res.status(200).json({
-          intent: 'OBJECT_LOOKUP',
-          query: q,
-          match: best,
-          related,
-        });
+        return res.status(200).json(
+          buildResponse('OBJECT_LOOKUP', q, best, related, 0.58, 'object_keyword')
+        );
       }
     }
 
-    return res.status(200).json({
-      intent: 'NO_MATCH',
-      query: q,
-      match: null,
-      related: [],
-    });
+    return res.status(200).json(
+      buildResponse('NO_MATCH', q, null, [], 0, 'none')
+    );
 
   } catch (error) {
     console.error('reference-search error:', error);
