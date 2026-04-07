@@ -28,6 +28,11 @@ function cleanSearchPhrase(question = '') {
 
   q = q
     .replace(/\bwhat is\b/g, '')
+    .replace(/\bwhich field stores\b/g, '')
+    .replace(/\bwhich field\b/g, '')
+    .replace(/\bfield for\b/g, '')
+    .replace(/\bwhere is\b/g, '')
+    .replace(/\bstored in\b/g, '')
     .replace(/\btable for\b/g, '')
     .replace(/\btables for\b/g, '')
     .replace(/\btcode for\b/g, '')
@@ -68,6 +73,28 @@ function extractFieldLookup(question) {
     if (match) {
       return {
         field: match[1].toUpperCase(),
+        table: match[2].toUpperCase(),
+      };
+    }
+  }
+
+  return null;
+}
+
+function extractFieldMeaningLookup(question) {
+  const q = simplify(question);
+
+  const patterns = [
+    /\bwhich field stores (.+?) in ([a-z0-9_]+)\b/i,
+    /\bfield for (.+?) in ([a-z0-9_]+)\b/i,
+    /\bwhere is (.+?) stored in ([a-z0-9_]+)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = q.match(pattern);
+    if (match) {
+      return {
+        meaning: match[1].trim(),
         table: match[2].toUpperCase(),
       };
     }
@@ -120,6 +147,18 @@ async function searchField(table, field) {
 
   if (error) throw error;
   return data;
+}
+
+async function searchFieldsByMeaning(table, meaning) {
+  const { data, error } = await supabase
+    .from('sap_fields')
+    .select('*')
+    .eq('table_name', table)
+    .or(`short_desc.ilike.%${meaning}%,common_meaning.ilike.%${meaning}%`)
+    .limit(5);
+
+  if (error) throw error;
+  return data || [];
 }
 
 async function searchAliasExact(searchText) {
@@ -204,7 +243,7 @@ export default async function handler(req, res) {
 
     const q = normalize(question);
 
-    // 1) FIELD LOOKUP
+    // 1) EXACT FIELD LOOKUP
     const fieldLookup = extractFieldLookup(q);
     if (fieldLookup) {
       const fieldData = await searchField(fieldLookup.table, fieldLookup.field);
@@ -218,7 +257,35 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2) MULTI TECH-NAME LOOKUP
+    // 2) FIELD BY MEANING LOOKUP
+    const fieldMeaningLookup = extractFieldMeaningLookup(q);
+    if (fieldMeaningLookup) {
+      const fields = await searchFieldsByMeaning(fieldMeaningLookup.table, fieldMeaningLookup.meaning);
+
+      if (fields.length === 1) {
+        const related = await getRelated('TABLE', fieldMeaningLookup.table);
+
+        return res.status(200).json(
+          buildResponse('FIELD_MEANING_LOOKUP', q, fields[0], related, 0.92, 'field_meaning_exact')
+        );
+      }
+
+      if (fields.length > 1) {
+        return res.status(200).json(
+          buildResponse(
+            'MULTI_FIELD_LOOKUP',
+            q,
+            fields[0],
+            [],
+            0.82,
+            'field_meaning_multi',
+            fields
+          )
+        );
+      }
+    }
+
+    // 3) MULTI TECH-NAME LOOKUP
     const multiTechNames = extractMultipleTechNames(q);
     if (multiTechNames.length) {
       const objects = await searchObjectsByTechNames(multiTechNames);
@@ -238,7 +305,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3) DIRECT TECH NAME
+    // 4) DIRECT TECH NAME
     if (isLikelyTechName(q)) {
       const tech = q.toUpperCase();
       const objectData = await searchObjectByTechName(tech);
@@ -252,11 +319,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // 4) OBJECT / ALIAS LOOKUP
+    // 5) OBJECT / ALIAS LOOKUP
     if (isLikelyObjectLookup(q) || q.split(' ').length <= 6) {
       const cleaned = cleanSearchPhrase(q);
 
-      // 4A) Exact alias
       const exactAlias = await searchAliasExact(cleaned);
       if (exactAlias) {
         const objectData = await searchObjectByTechName(exactAlias.mapped_tech_name);
@@ -267,7 +333,6 @@ export default async function handler(req, res) {
         );
       }
 
-      // 4B) Loose aliases
       const looseAliases = await searchAliasLoose(cleaned);
       if (looseAliases.length) {
         const techNames = [...new Set(looseAliases.map(a => a.mapped_tech_name))];
@@ -296,7 +361,6 @@ export default async function handler(req, res) {
         );
       }
 
-      // 4C) Object keyword/title search
       const objectMatches = await searchObjectByKeywords(cleaned);
       if (objectMatches.length >= 2) {
         return res.status(200).json(
