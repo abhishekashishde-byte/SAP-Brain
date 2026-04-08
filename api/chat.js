@@ -1,4 +1,7 @@
-// api/chat.js — v14 FULL: DB + Groq + Gemini + Groq Merge + Claude fallback + source label + fact validator + correction memory
+// api/chat.js — v15 FULL FIXED:
+// DB first + Groq explanation + Gemini nuance + Groq strict merge + Claude fallback
+// + source label always + fact validator + correction memory
+// + FIXED lookup routing so Groq does NOT freestyle SAP lookup answers
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -7,17 +10,20 @@ import {
 } from './_shared.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. INTENT CLASSIFIER
+// 1. INTENT CLASSIFIER (FIXED)
 // ─────────────────────────────────────────────────────────────────────────────
 function classifyIntent(q = '') {
   const text = q.toLowerCase()
 
-  if (text.match(/\bfield\b|\bstores\b|\bwhere is\b/)) return 'FIELD_LOOKUP'
+  // STRICT LOOKUP first
+  if (
+    text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bfield\b|\bstores\b|\bwhere is\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b/)
+  ) return 'REFERENCE'
+
   if (text.match(/\bdifference\b|\bvs\b|\bcompare\b/)) return 'COMPARISON'
   if (text.match(/\bconfig\b|\bspro\b|\bsetting\b|\bcustomizing\b/)) return 'CONFIG'
   if (text.match(/\berror\b|\bdump\b|\bissue\b|\bnot working\b/)) return 'DEBUG'
   if (text.match(/\bhow\b|\bprocess\b|\bflow\b|\bwhat is\b/)) return 'PROCESS'
-  if (text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b/)) return 'REFERENCE'
 
   return 'GENERAL'
 }
@@ -495,6 +501,7 @@ export default async function handler(req, res) {
         geminiNuance(lastMsg),
       ])
 
+      // DB hit → merge all
       if (dbHit && dbAnswer) {
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
         let finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
@@ -506,17 +513,23 @@ export default async function handler(req, res) {
         return
       }
 
-      if (!dbHit && (explanation || nuance)) {
-        const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
-        let finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
-        finalAnswer = await validateAndCleanAnswer(finalAnswer)
+      // NO DB hit → IMPORTANT FIX:
+      // For lookup questions, do NOT allow Groq-only freestyle answer
+      const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
 
-        if (finalAnswer && finalAnswer.length > 20) {
-          const source = nuance ? 'Groq + Gemini' : 'Groq'
-          const output = withSource(finalAnswer, source)
-          send({ type:'chunk', text: output })
-          send({ type:'done', model:'groq+gemini', full: output })
-          return
+      if (!dbHit && (explanation || nuance)) {
+        if (!isStrictLookup || nuance) {
+          const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
+          let finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
+          finalAnswer = await validateAndCleanAnswer(finalAnswer)
+
+          if (finalAnswer && finalAnswer.length > 20) {
+            const source = nuance ? 'Groq + Gemini' : 'Groq'
+            const output = withSource(finalAnswer, source)
+            send({ type:'chunk', text: output })
+            send({ type:'done', model:'groq+gemini', full: output })
+            return
+          }
         }
       }
     }
@@ -547,7 +560,11 @@ export default async function handler(req, res) {
 
 You are the high-accuracy fallback for difficult SAP consultant questions.
 Use deeper reasoning only when needed.
-Avoid unnecessary long answers.`
+Avoid unnecessary long answers.
+
+IMPORTANT:
+- If user is asking a lookup-style SAP question, answer directly and specifically.
+- Do NOT drift into generic definitions if the user is clearly asking for a table / field / object.`
 
     const claudeAnswer = await callClaude(claudePrompt, anonymised)
 
