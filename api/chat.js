@@ -1,7 +1,8 @@
-// api/chat.js — v16 STABLE
-// DB first + Groq explanation + Gemini nuance + Groq merge + Claude fallback
-// + source label + correction memory
-// + SAFE validator (T-code only, NO table validation)
+// api/chat.js — v17 CLEAN STABLE
+// DB first + Gemini refine + Groq explanation/merge + Claude only last
+// NO validator
+// NO [unverified]
+// FIXED DB hit detection for match OR matches
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -15,7 +16,6 @@ import {
 function classifyIntent(q = '') {
   const text = q.toLowerCase()
 
-  // STRICT LOOKUP first
   if (
     text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bfield\b|\bstores\b|\bwhere is\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b/)
   ) return 'REFERENCE'
@@ -29,7 +29,7 @@ function classifyIntent(q = '') {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. SOURCE LABEL HELPER
+// 2. SOURCE LABEL
 // ─────────────────────────────────────────────────────────────────────────────
 function withSource(answer, sourceLabel) {
   if (!answer) return `_✦ ${sourceLabel}_`
@@ -60,7 +60,7 @@ async function callReferenceSearch(question) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. RELATED OBJECT EXPANSION
+// 4. RELATED OBJECTS
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchRelated(object) {
   try {
@@ -110,18 +110,11 @@ ${ref.short_desc || ''}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. BASIC CLEANUP
+// 6. CLEANUP
 // ─────────────────────────────────────────────────────────────────────────────
 function guardAnswer(answer) {
   if (!answer) return answer
-
-  let cleaned = answer
-
-  if (cleaned.includes('Z_') || cleaned.includes('Custom app')) {
-    cleaned = cleaned.replace(/Z_\w+/g, '[custom object]')
-  }
-
-  return cleaned.trim()
+  return answer.trim()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -210,7 +203,7 @@ async function callClaude(systemPrompt, messages) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. GROQ EXPLANATION LAYER
+// 10. GROQ EXPLANATION
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqExplainOnly(question) {
   const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
@@ -233,7 +226,7 @@ Return only the explanation.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 11. GEMINI NUANCE LAYER
+// 11. GEMINI NUANCE
 // ─────────────────────────────────────────────────────────────────────────────
 async function geminiNuance(question) {
   const prompt = `You are an SAP S/4HANA assistant.
@@ -259,7 +252,31 @@ Return only the nuance.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 12. GROQ STRICT MERGE
+// 12. GEMINI LOOKUP (important for cost reduction)
+// ─────────────────────────────────────────────────────────────────────────────
+async function geminiLookup(question) {
+  const prompt = `You are an SAP lookup assistant.
+
+User is asking for a SAP object like table / field / tcode.
+
+CRITICAL RULES:
+- Answer directly with correct SAP objects
+- Prefer standard SAP tables like T001L, MARD, EQUI, AUFK, AFKO, MKAL etc.
+- If multiple answers possible, list them clearly
+- Do NOT explain concepts
+- Do NOT hallucinate
+- If unsure, say exactly: NOT_FOUND
+
+Question:
+${question}`
+
+  const out = await callGemini(prompt, 220)
+  if (!out || out.includes('NOT_FOUND')) return null
+  return out
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. GROQ MERGE
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqStrictMerge(question, explanation, dbFacts, nuance) {
   const mergePrompt = `You are a formatter that merges SAP answer parts.
@@ -290,58 +307,7 @@ ${nuance || ''}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. SAFE VALIDATOR (ONLY T-CODES)
-// ─────────────────────────────────────────────────────────────────────────────
-function extractTcodes(text = '') {
-  const matches = text.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || []
-  return [...new Set(matches)]
-}
-
-async function validateTcodes(tcodes = []) {
-  if (!tcodes.length) return new Set()
-
-  try {
-    const encoded = tcodes.map(x => `"${x}"`).join(',')
-    const url = `${process.env.SUPABASE_URL}/rest/v1/sap_objects?object_type=eq.TCODE&tech_name=in.(${encoded})&select=tech_name`
-
-    const res = await fetch(url, {
-      headers: {
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-    })
-
-    const data = await res.json()
-    return new Set((data || []).map(x => x.tech_name))
-  } catch {
-    return new Set()
-  }
-}
-
-async function validateAndCleanAnswer(answer) {
-  if (!answer) return answer
-
-  // TEMP SAFE MODE:
-  // validate only T-codes
-  // DO NOT validate tables / fields yet
-
-  let cleaned = answer
-
-  const tcodes = extractTcodes(answer)
-  const validTcodes = await validateTcodes(tcodes)
-
-  for (const tcode of tcodes) {
-    if (!validTcodes.has(tcode)) {
-      const regex = new RegExp(`\\b${tcode}\\b`, 'g')
-      cleaned = cleaned.replace(regex, '[unverified]')
-    }
-  }
-
-  return cleaned.trim()
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 14. CORRECTION MEMORY SAVE
+// 14. CORRECTION MEMORY
 // ─────────────────────────────────────────────────────────────────────────────
 function isCorrectionMessage(text = '') {
   const t = text.toLowerCase()
@@ -411,6 +377,7 @@ export default async function handler(req, res) {
   const complex = isComplexQuestion(lastMsg)
   const correcting = isCorrecting(lastMsg)
   const previousClaude = lastAIMsg.includes('_✦ Claude_')
+  const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -426,7 +393,8 @@ export default async function handler(req, res) {
     let dbAnswer = null
     let dbHit = false
 
-    if (ref && ref.match && ref.confidence >= 0.55) {
+    // FIXED: treat BOTH match and matches as DB hit
+    if (ref && ref.confidence >= 0.45 && (ref.match || (ref.matches && ref.matches.length))) {
       dbHit = true
 
       if (ref.matches?.length) {
@@ -435,19 +403,44 @@ export default async function handler(req, res) {
             ref.matches.slice(0, 6).map(f => `- \`${f.field_name}\` — ${f.short_desc}`).join('\n')
         } else {
           dbAnswer = `**Relevant SAP objects:**\n\n` +
-            ref.matches.slice(0, 6).map(o => `- \`${o.tech_name}\` — ${o.title}`).join('\n')
+            ref.matches.slice(0, 6).map(o => `- \`${o.tech_name}\` — ${o.title || o.short_desc || ''}`).join('\n')
         }
-      } else {
+      } else if (ref.match) {
         const related = await fetchRelated(ref.match)
         dbAnswer = formatReferenceAnswer(intent, ref.match, related)
       }
     }
 
-    // STEP 2 — CHEAP PIPELINE
+    // STEP 2 — STRICT LOOKUP FLOW (COST SAVER)
+    if (isStrictLookup) {
+      // DB answer exists → use DB first
+      if (dbHit && dbAnswer) {
+        const refined = await callGemini(`Refine this SAP answer for consultant readability. Do not add new facts.\n\n${dbAnswer}`, 260)
+        const finalAnswer = guardAnswer(refined || dbAnswer)
+        const source = refined ? 'Database + Gemini' : 'Database'
+        const output = withSource(finalAnswer, source)
+
+        send({ type:'chunk', text: output })
+        send({ type:'done', model:'db+gemini', full: output })
+        return
+      }
+
+      // DB miss → Gemini lookup before Claude
+      const lookupAnswer = await geminiLookup(lastMsg)
+      if (lookupAnswer) {
+        const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
+        send({ type:'chunk', text: output })
+        send({ type:'done', model:'gemini', full: output })
+        return
+      }
+    }
+
+    // STEP 3 — CHEAP PIPELINE FOR NON-STRICT QUESTIONS
     const shouldUseCheapPipeline =
       !complex &&
       !correcting &&
-      !previousClaude
+      !previousClaude &&
+      !isStrictLookup
 
     if (shouldUseCheapPipeline) {
       const [explanation, nuance] = await Promise.all([
@@ -455,54 +448,32 @@ export default async function handler(req, res) {
         geminiNuance(lastMsg),
       ])
 
-      // DB hit → merge all
       if (dbHit && dbAnswer) {
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
-        let finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
-        finalAnswer = await validateAndCleanAnswer(finalAnswer)
-
+        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
         const output = withSource(finalAnswer, 'Groq + Database + Gemini')
+
         send({ type:'chunk', text: output })
         send({ type:'done', model:'groq+db+gemini', full: output })
         return
       }
 
-      // NO DB hit → IMPORTANT:
-      // For lookup questions, do NOT allow Groq-only freestyle answer
-      const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
+      if (explanation || nuance) {
+        const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
+        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
 
-      if (!dbHit && (explanation || nuance)) {
-        if (!isStrictLookup || nuance) {
-          const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
-          let finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
-          finalAnswer = await validateAndCleanAnswer(finalAnswer)
+        if (finalAnswer && finalAnswer.length > 20) {
+          const source = nuance ? 'Groq + Gemini' : 'Groq'
+          const output = withSource(finalAnswer, source)
 
-          if (finalAnswer && finalAnswer.length > 20) {
-            const source = nuance ? 'Groq + Gemini' : 'Groq'
-            const output = withSource(finalAnswer, source)
-            send({ type:'chunk', text: output })
-            send({ type:'done', model:'groq+gemini', full: output })
-            return
-          }
+          send({ type:'chunk', text: output })
+          send({ type:'done', model:'groq+gemini', full: output })
+          return
         }
       }
     }
 
-    // STEP 3 — DB + Gemini direct fallback
-    if (dbHit && dbAnswer) {
-      const refined = await callGemini(`Refine this SAP answer for consultant readability. Do not add new facts.\n\n${dbAnswer}`, 300)
-      let finalAnswer = guardAnswer(refined || dbAnswer)
-      finalAnswer = await validateAndCleanAnswer(finalAnswer)
-
-      const source = refined ? 'Database + Gemini' : 'Database'
-      const output = withSource(finalAnswer, source)
-
-      send({ type:'chunk', text: output })
-      send({ type:'done', model:'db+gemini', full: output })
-      return
-    }
-
-    // STEP 4 — Claude only last
+    // STEP 4 — CLAUDE ONLY LAST
     const systemPrompt =
       BASE_SYSTEM_PROMPT +
       (TONE_ADDITIONS[tone] || '') +
@@ -523,10 +494,7 @@ IMPORTANT:
     const claudeAnswer = await callClaude(claudePrompt, anonymised)
 
     if (claudeAnswer) {
-      let finalAnswer = guardAnswer(claudeAnswer)
-      finalAnswer = await validateAndCleanAnswer(finalAnswer)
-
-      const output = withSource(finalAnswer, 'Claude')
+      const output = withSource(guardAnswer(claudeAnswer), 'Claude')
       send({ type:'chunk', text: output })
       send({ type:'done', model:'claude', full: output })
       return
