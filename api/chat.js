@@ -1,5 +1,10 @@
-// api/chat.js — v21 ROUTING DEBUG VISIBLE
-// Shows DB / Gemini / Claude routing reasons directly in chat output
+// api/chat.js — v22 GROQ NORMALIZER + DEBUG
+// Flow:
+// 1. Groq normalizes messy SAP question into better DB search terms
+// 2. DB search tries with normalized query
+// 3. Gemini lookup if DB weak
+// 4. Claude only last
+// Debug stays visible in answer
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -14,7 +19,7 @@ function classifyIntent(q = '') {
   const text = q.toLowerCase()
 
   if (
-    text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bfield\b|\bstores\b|\bwhere is\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b/)
+    text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bfield\b|\bstores\b|\bwhere is\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b|\btble\b/)
   ) return 'REFERENCE'
 
   if (text.match(/\bdifference\b|\bvs\b|\bcompare\b/)) return 'COMPARISON'
@@ -26,7 +31,7 @@ function classifyIntent(q = '') {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. SOURCE LABEL
+// 2. SOURCE LABEL + DEBUG
 // ─────────────────────────────────────────────────────────────────────────────
 function withSource(answer, sourceLabel, debugBlock = '') {
   const body = answer?.trim() || ''
@@ -36,6 +41,7 @@ function withSource(answer, sourceLabel, debugBlock = '') {
 function buildDebugBlock(debug) {
   return `[ROUTING DEBUG]
 intent: ${debug.intent || '-'}
+normalized_query: ${debug.normalized_query || '-'}
 db: ${debug.db || '-'}
 gemini_lookup: ${debug.gemini_lookup || '-'}
 cheap_pipeline: ${debug.cheap_pipeline || '-'}
@@ -45,89 +51,13 @@ reason: ${debug.reason || '-'}
 `
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. REFERENCE SEARCH
-// ─────────────────────────────────────────────────────────────────────────────
-async function callReferenceSearch(question) {
-  try {
-    const baseUrl =
-      process.env.BASE_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-
-    if (!baseUrl) return null
-
-    const res = await fetch(`${baseUrl}/api/reference-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-    })
-
-    return await res.json()
-  } catch {
-    return null
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. RELATED OBJECTS
-// ─────────────────────────────────────────────────────────────────────────────
-async function fetchRelated(object) {
-  try {
-    if (!object?.tech_name) return []
-
-    const url = `${process.env.SUPABASE_URL}/rest/v1/sap_relationships?from_tech_name=eq.${object.tech_name}`
-    const res = await fetch(url, {
-      headers: {
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-    })
-
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. FORMAT DB OUTPUT
-// ─────────────────────────────────────────────────────────────────────────────
-function formatReferenceAnswer(intent, ref, related = []) {
-  if (!ref) return ''
-
-  if (intent === 'FIELD_LOOKUP' || ref.field_name) {
-    let out = `**Field:** \`${ref.field_name}\`
-**Table:** \`${ref.table_name}\`
-
-**Meaning:** ${ref.short_desc || 'No description available'}`
-
-    if (ref.common_meaning) out += `\n\n${ref.common_meaning}`
-    return out
-  }
-
-  let out = `**${ref.object_type || 'Object'}:** \`${ref.tech_name}\`
-**${ref.title || ref.tech_name}**
-${ref.short_desc || ''}`
-
-  if (related.length) {
-    const grouped = related.slice(0, 8).map(r => `- \`${r.to_tech_name}\``).join('\n')
-    out += `\n\n**Related objects:**\n${grouped}`
-  }
-
-  return out
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. CLEANUP
-// ─────────────────────────────────────────────────────────────────────────────
 function guardAnswer(answer) {
   if (!answer) return answer
   return answer.trim()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. GROQ CALL
+// 3. GROQ CALL
 // ─────────────────────────────────────────────────────────────────────────────
 async function callGroq(systemPrompt, messages, maxTokens = 700) {
   if (!process.env.GROQ_API_KEY) return null
@@ -142,7 +72,7 @@ async function callGroq(systemPrompt, messages, maxTokens = 700) {
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         max_tokens: maxTokens,
-        temperature: 0.2,
+        temperature: 0.1,
         messages: [{ role:'system', content:systemPrompt }, ...messages],
       }),
     })
@@ -156,7 +86,7 @@ async function callGroq(systemPrompt, messages, maxTokens = 700) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. GEMINI CALL
+// 4. GEMINI CALL
 // ─────────────────────────────────────────────────────────────────────────────
 async function callGemini(promptText, maxOutputTokens = 400) {
   const key = process.env.GEMINI_API_KEY
@@ -183,7 +113,7 @@ async function callGemini(promptText, maxOutputTokens = 400) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. CLAUDE CALL
+// 5. CLAUDE CALL
 // ─────────────────────────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, messages) {
   if (!process.env.ANTHROPIC_API_KEY) return null
@@ -212,51 +142,111 @@ async function callClaude(systemPrompt, messages) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. GROQ EXPLANATION
+// 6. GROQ NORMALIZER (NEW)
+// only converts messy user question into SAP-friendly DB query
 // ─────────────────────────────────────────────────────────────────────────────
-async function groqExplainOnly(question) {
-  const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
+async function groqNormalizeQuery(question) {
+  const prompt = `You are an SAP search normalizer.
+
+Your job:
+Convert the user question into a SHORT SAP database lookup query.
 
 CRITICAL RULES:
-- Explain only the concept in plain SAP consultant language
-- Do NOT give T-codes
-- Do NOT give table names
-- Do NOT give Fiori app names
-- Do NOT invent SAP facts
-- Keep it concise
+- Do NOT answer the user
+- Do NOT explain
+- Do NOT hallucinate
+- Return only one short search string
+- Prefer SAP object names and common SAP terms
+- Fix typos if obvious
+- Max 8 words
 
-Question:
+Examples:
+"what is tble for prod version" -> "production version MKAL VERID"
+"where is equipment stored" -> "equipment EQUI"
+"table for storage location" -> "storage location T001L MARD"
+
+User question:
 ${question}`
 
-  return await callGroq(prompt, [{ role: 'user', content: question }], 350)
+  const out = await callGroq(prompt, [{ role: 'user', content: question }], 80)
+  return out?.replace(/["']/g, '').trim() || question
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 11. GEMINI NUANCE
+// 7. REFERENCE SEARCH
 // ─────────────────────────────────────────────────────────────────────────────
-async function geminiNuance(question) {
-  const prompt = `You are an SAP S/4HANA assistant.
+async function callReferenceSearch(question) {
+  try {
+    const baseUrl =
+      process.env.BASE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
 
-Provide only useful practical SAP nuance for this question.
+    if (!baseUrl) return null
 
-CRITICAL RULES:
-- Do NOT explain the full concept
-- Do NOT repeat generic definition
-- Focus only on practical options / caveats / system behavior
-- Mention T-codes or tables only if reasonably confident
-- If nothing useful, reply exactly: NO_NUANCE
-- Keep it short
+    const res = await fetch(`${baseUrl}/api/reference-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    })
 
-Question:
-${question}`
+    return await res.json()
+  } catch {
+    return null
+  }
+}
 
-  const out = await callGemini(prompt, 250)
-  if (!out || out.trim() === 'NO_NUANCE') return null
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. RELATED OBJECTS
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchRelated(object) {
+  try {
+    if (!object?.tech_name) return []
+
+    const url = `${process.env.SUPABASE_URL}/rest/v1/sap_relationships?from_tech_name=eq.${object.tech_name}`
+    const res = await fetch(url, {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    })
+
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. FORMAT DB OUTPUT
+// ─────────────────────────────────────────────────────────────────────────────
+function formatReferenceAnswer(intent, ref, related = []) {
+  if (!ref) return ''
+
+  if (intent === 'FIELD_LOOKUP' || ref.field_name) {
+    let out = `**Field:** \`${ref.field_name}\`
+**Table:** \`${ref.table_name}\`
+
+**Meaning:** ${ref.short_desc || 'No description available'}`
+
+    if (ref.common_meaning) out += `\n\n${ref.common_meaning}`
+    return out
+  }
+
+  let out = `**${ref.object_type || 'Object'}:** \`${ref.tech_name}\`
+**${ref.title || ref.tech_name}**
+${ref.short_desc || ''}`
+
+  if (related.length) {
+    const grouped = related.slice(0, 8).map(r => `- \`${r.to_tech_name}\``).join('\n')
+    out += `\n\n**Related objects:**\n${grouped}`
+  }
+
   return out
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 12. GEMINI LOOKUP
+// 10. GEMINI LOOKUP
 // ─────────────────────────────────────────────────────────────────────────────
 async function geminiLookup(question) {
   const prompt = `You are an SAP lookup assistant.
@@ -281,7 +271,51 @@ ${question}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. GROQ MERGE
+// 11. GROQ EXPLANATION (NON-LOOKUP)
+// ─────────────────────────────────────────────────────────────────────────────
+async function groqExplainOnly(question) {
+  const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
+
+CRITICAL RULES:
+- Explain only the concept in plain SAP consultant language
+- Do NOT give T-codes
+- Do NOT give table names
+- Do NOT give Fiori app names
+- Do NOT invent SAP facts
+- Keep it concise
+
+Question:
+${question}`
+
+  return await callGroq(prompt, [{ role: 'user', content: question }], 350)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. GEMINI NUANCE (NON-LOOKUP)
+// ─────────────────────────────────────────────────────────────────────────────
+async function geminiNuance(question) {
+  const prompt = `You are an SAP S/4HANA assistant.
+
+Provide only useful practical SAP nuance for this question.
+
+CRITICAL RULES:
+- Do NOT explain the full concept
+- Do NOT repeat generic definition
+- Focus only on practical options / caveats / system behavior
+- Mention T-codes or tables only if reasonably confident
+- If nothing useful, reply exactly: NO_NUANCE
+- Keep it short
+
+Question:
+${question}`
+
+  const out = await callGemini(prompt, 250)
+  if (!out || out.trim() === 'NO_NUANCE') return null
+  return out
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. GROQ MERGE (NON-LOOKUP)
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqStrictMerge(question, explanation, dbFacts, nuance) {
   const mergePrompt = `You are a formatter that merges SAP answer parts.
@@ -324,6 +358,7 @@ export default async function handler(req, res) {
 
   const debug = {
     intent,
+    normalized_query: '-',
     db: 'NOT_TRIED',
     gemini_lookup: 'NOT_TRIED',
     cheap_pipeline: 'NOT_TRIED',
@@ -339,8 +374,21 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-    // STEP 1 — DB FIRST
-    const ref = await callReferenceSearch(lastMsg)
+    // STEP 1 — GROQ NORMALIZATION FOR LOOKUP QUERIES
+    let dbSearchQuestion = lastMsg
+
+    if (isStrictLookup) {
+      const normalized = await groqNormalizeQuery(lastMsg)
+      if (normalized && normalized.length > 2) {
+        dbSearchQuestion = normalized
+        debug.normalized_query = normalized
+      } else {
+        debug.normalized_query = lastMsg
+      }
+    }
+
+    // STEP 2 — DB SEARCH
+    const ref = await callReferenceSearch(dbSearchQuestion)
 
     let dbAnswer = null
     let dbHit = false
@@ -365,13 +413,13 @@ export default async function handler(req, res) {
       debug.db = 'MISS'
     }
 
-    // STEP 2 — STRICT LOOKUP FLOW
+    // STEP 3 — STRICT LOOKUP FLOW
     if (isStrictLookup) {
       debug.cheap_pipeline = 'SKIPPED (strict lookup)'
 
       if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
         debug.fallback = 'DATABASE'
-        debug.reason = 'DB returned usable answer'
+        debug.reason = 'DB returned usable answer after Groq normalization'
 
         const output = withSource(guardAnswer(dbAnswer), 'Database', buildDebugBlock(debug))
         send({ type:'chunk', text: output })
@@ -384,7 +432,7 @@ export default async function handler(req, res) {
       if (lookupAnswer && lookupAnswer.trim().length > 10) {
         debug.gemini_lookup = 'HIT'
         debug.fallback = 'GEMINI'
-        debug.reason = 'DB missed, Gemini lookup succeeded'
+        debug.reason = 'DB miss, Gemini lookup succeeded'
 
         const output = withSource(guardAnswer(lookupAnswer), 'Gemini', buildDebugBlock(debug))
         send({ type:'chunk', text: output })
@@ -397,7 +445,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // STEP 3 — NON-LOOKUP CHEAP PIPELINE
+    // STEP 4 — NON-LOOKUP CHEAP PIPELINE
     const shouldUseCheapPipeline =
       !complex &&
       !correcting &&
@@ -447,7 +495,7 @@ export default async function handler(req, res) {
       debug.reason = complex ? 'Question classified as complex' : correcting ? 'Correction message' : 'Skipped by routing'
     }
 
-    // STEP 4 — CLAUDE ONLY LAST
+    // STEP 5 — CLAUDE LAST
     debug.fallback = 'CLAUDE'
     if (debug.reason === '-') debug.reason = 'Final fallback'
 
