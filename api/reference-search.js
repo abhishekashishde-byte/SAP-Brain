@@ -1,5 +1,6 @@
-// api/reference-search.js — v2 FULL IMPROVED
-// Better SAP object / field / alias lookup with confidence scoring
+// api/reference-search.js — v1 HARDENED LOOKUP
+// Purpose: reliable DB lookup for SAP objects before Gemini/Claude
+// Focus: tables / tcodes / fiori / fields / common SAP aliases
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -7,105 +8,122 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { question } = req.body
-    if (!question || typeof question !== 'string') {
-      return res.status(400).json({ error: 'Question is required' })
-    }
-
-    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return res.status(500).json({ error: 'Supabase config missing' })
-    }
-
-    const q = question.trim()
+    const { question = '' } = req.body || {}
+    const q = String(question).trim()
     const qLower = q.toLowerCase()
 
-    // ───────────────────────────────────────────────────────────────────────
-    // 1. INTENT DETECTION
-    // ───────────────────────────────────────────────────────────────────────
-    const isFieldLookup =
-      /\bfield\b|\bstores\b|\bwhat is\b.*\bin\b|\bmeaning of\b/.test(qLower)
+    if (!q) {
+      return res.status(400).json({ error: 'Missing question' })
+    }
 
-    const isReferenceLookup =
-      /\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b/.test(qLower)
+    const SUPABASE_URL = process.env.SUPABASE_URL
+    const SUPABASE_KEY =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 
-    const isComparison =
-      /\bdifference\b|\bvs\b|\bcompare\b/.test(qLower)
-
-    // ───────────────────────────────────────────────────────────────────────
-    // 2. TERM EXTRACTION
-    // ───────────────────────────────────────────────────────────────────────
-    const extracted = extractSearchTerms(q)
-    const {
-      tcodes,
-      fieldNames,
-      sapWords,
-      objectHints,
-    } = extracted
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return res.status(500).json({ error: 'Missing Supabase env vars' })
+    }
 
     // ───────────────────────────────────────────────────────────────────────
-    // 3. FIELD LOOKUP FIRST
+    // 1. INTENT
     // ───────────────────────────────────────────────────────────────────────
-    if (fieldNames.length || isFieldLookup) {
-      const fieldResult = await searchFields({
-        SUPABASE_URL,
-        SUPABASE_KEY,
-        q,
-        qLower,
-        fieldNames,
-        sapWords,
+    const intent = detectIntent(qLower)
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 2. ALIAS EXTRACTION
+    // ───────────────────────────────────────────────────────────────────────
+    const aliasCandidates = buildAliasCandidates(qLower)
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 3. SEARCH SAP_OBJECTS
+    // ───────────────────────────────────────────────────────────────────────
+    const objectResults = await searchSapObjects({
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      qLower,
+      aliasCandidates,
+      limit: 12,
+    })
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 4. SEARCH SAP_FIELDS (for field-style queries)
+    // ───────────────────────────────────────────────────────────────────────
+    const fieldResults = await searchSapFields({
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      qLower,
+      aliasCandidates,
+      limit: 12,
+    })
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 5. SCORE RESULTS
+    // ───────────────────────────────────────────────────────────────────────
+    const scoredObjects = objectResults.map(r => ({
+      ...r,
+      _score: scoreObject(r, qLower, aliasCandidates),
+    })).sort((a, b) => b._score - a._score)
+
+    const scoredFields = fieldResults.map(r => ({
+      ...r,
+      _score: scoreField(r, qLower, aliasCandidates),
+    })).sort((a, b) => b._score - a._score)
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 6. RESPONSE SHAPE
+    // ───────────────────────────────────────────────────────────────────────
+    if (intent === 'FIELD_LOOKUP' && scoredFields.length) {
+      const top = scoredFields[0]
+      return res.status(200).json({
+        intent,
+        confidence: normalizeScore(top._score),
+        match: top,
+        matches: scoredFields.slice(0, 6),
       })
+    }
 
-      if (fieldResult?.match || fieldResult?.matches?.length) {
-        return res.status(200).json(fieldResult)
+    // If object query and we found objects
+    if (scoredObjects.length) {
+      const top = scoredObjects[0]
+
+      // If query sounds broad, return multiple
+      if (isBroadQuery(qLower) || scoredObjects.length > 1 && top._score < 75) {
+        return res.status(200).json({
+          intent,
+          confidence: normalizeScore(top._score),
+          matches: scoredObjects.slice(0, 6),
+        })
       }
+
+      return res.status(200).json({
+        intent,
+        confidence: normalizeScore(top._score),
+        match: top,
+        matches: scoredObjects.slice(0, 6),
+      })
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // 4. OBJECT / TABLE / TCODE / APP LOOKUP
-    // ───────────────────────────────────────────────────────────────────────
-    const objectResult = await searchObjects({
-      SUPABASE_URL,
-      SUPABASE_KEY,
-      q,
-      qLower,
-      tcodes,
-      sapWords,
-      objectHints,
-      isReferenceLookup,
-      isComparison,
-    })
-
-    if (objectResult?.match || objectResult?.matches?.length) {
-      return res.status(200).json(objectResult)
+    // fallback to field if object failed
+    if (scoredFields.length) {
+      const top = scoredFields[0]
+      return res.status(200).json({
+        intent: 'FIELD_LOOKUP',
+        confidence: normalizeScore(top._score),
+        match: top,
+        matches: scoredFields.slice(0, 6),
+      })
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // 5. ALIAS LOOKUP (important fallback)
-    // ───────────────────────────────────────────────────────────────────────
-    const aliasResult = await searchAliases({
-      SUPABASE_URL,
-      SUPABASE_KEY,
-      q,
-      qLower,
-      sapWords,
-    })
-
-    if (aliasResult?.match || aliasResult?.matches?.length) {
-      return res.status(200).json(aliasResult)
-    }
-
+    // no hit
     return res.status(200).json({
+      intent,
       confidence: 0,
-      intent: isFieldLookup ? 'FIELD_LOOKUP' : 'REFERENCE',
       match: null,
       matches: [],
-      message: 'No confident SAP reference found',
     })
 
   } catch (err) {
+    console.error('REFERENCE SEARCH ERROR:', err)
     return res.status(500).json({ error: err.message })
   }
 }
@@ -113,298 +131,185 @@ export default async function handler(req, res) {
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-function extractSearchTerms(text = '') {
-  const upperText = text.toUpperCase()
 
-  const tcodes = [...new Set(upperText.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || [])]
-  const fieldNames = [...new Set(upperText.match(/\b[A-Z][A-Z0-9_]{2,14}\b/g) || [])]
-
-  const stopWords = new Set([
-    'WHAT','IS','THE','FOR','IN','OF','TO','USED','USE','TABLE','FIELD','TCODE',
-    'FIORI','APP','WHICH','DIFFERENCE','BETWEEN','AND','STORES','WHERE','MEANING'
-  ])
-
-  const sapWords = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter(w => !stopWords.has(w.toUpperCase()))
-    .filter(w => w.length > 2)
-
-  const objectHints = []
-  if (text.toLowerCase().includes('storage location')) objectHints.push('storage location')
-  if (text.toLowerCase().includes('equipment')) objectHints.push('equipment')
-  if (text.toLowerCase().includes('production version')) objectHints.push('production version')
-  if (text.toLowerCase().includes('mrp area')) objectHints.push('mrp area')
-  if (text.toLowerCase().includes('planner group')) objectHints.push('planner group')
-  if (text.toLowerCase().includes('functional location')) objectHints.push('functional location')
-  if (text.toLowerCase().includes('notification')) objectHints.push('notification')
-  if (text.toLowerCase().includes('maintenance order')) objectHints.push('maintenance order')
-
-  return {
-    tcodes,
-    fieldNames,
-    sapWords: [...new Set(sapWords)],
-    objectHints: [...new Set(objectHints)],
+function detectIntent(q) {
+  if (/\bfield\b|\baufnr\b|\bmatnr\b|\bwerks\b|\bwhat is .* in .*table\b/.test(q)) {
+    return 'FIELD_LOOKUP'
   }
+
+  if (/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b/.test(q)) {
+    return 'REFERENCE'
+  }
+
+  if (/\bdifference\b|\bvs\b|\bcompare\b/.test(q)) {
+    return 'COMPARISON'
+  }
+
+  return 'REFERENCE'
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FIELD SEARCH
-// ─────────────────────────────────────────────────────────────────────────────
-async function searchFields({ SUPABASE_URL, SUPABASE_KEY, q, qLower, fieldNames, sapWords }) {
-  let candidates = []
+function isBroadQuery(q) {
+  return /\bwhich\b|\bwhat are\b|\blist\b|\brelevant\b|\bpossible\b|\ball\b/.test(q)
+}
 
-  // 1. direct field match
-  if (fieldNames.length) {
-    const direct = await supabaseGet(
-      `${SUPABASE_URL}/rest/v1/sap_fields?field_name=in.(${fieldNames.map(x => `"${x}"`).join(',')})&select=*`,
-      SUPABASE_KEY
-    )
-    candidates.push(...direct)
+function normalizeScore(score) {
+  if (score >= 95) return 0.95
+  if (score >= 85) return 0.85
+  if (score >= 75) return 0.75
+  if (score >= 65) return 0.65
+  if (score >= 55) return 0.55
+  if (score >= 45) return 0.45
+  return 0.35
+}
+
+function buildAliasCandidates(q) {
+  const aliases = new Set()
+
+  // Raw keywords
+  q.split(/\s+/).forEach(w => {
+    if (w.length > 2) aliases.add(w)
+  })
+
+  // Strong SAP aliases
+  const aliasMap = {
+    'production version': ['mkal', 'production version', 'verid', 'c223', 'c220'],
+    'production order': ['aufk', 'afko', 'production order', 'co01', 'co02', 'co03'],
+    'process order': ['aufk', 'afko', 'process order', 'cor1', 'cor2', 'cor3'],
+    'equipment': ['equi', 'equz', 'equipment', 'ie01', 'ie02', 'ie03'],
+    'functional location': ['iflot', 'functional location', 'il01', 'il02', 'il03'],
+    'notification': ['qmel', 'notification', 'iw21', 'iw22', 'iw23'],
+    'maintenance order': ['aufk', 'maintenance order', 'iw31', 'iw32', 'iw33'],
+    'routing': ['plko', 'plpo', 'routing', 'ca01', 'ca02', 'ca03'],
+    'bom': ['mast', 'stko', 'stpo', 'bom', 'cs01', 'cs02', 'cs03'],
+    'material master': ['mara', 'marc', 'mard', 'material master', 'mm01', 'mm02', 'mm03'],
+    'storage location': ['t001l', 'mard', 'storage location'],
+    'plant': ['t001w', 'plant'],
+    'purchase order': ['ekko', 'ekpo', 'purchase order', 'me21n', 'me22n', 'me23n'],
+    'sales order': ['vbak', 'vbap', 'sales order', 'va01', 'va02', 'va03'],
+    'delivery': ['likp', 'lips', 'delivery', 'vl01n', 'vl02n', 'vl03n'],
+    'invoice': ['vbrk', 'vbrp', 'invoice', 'vf01'],
+    'work center': ['crhd', 'work center', 'cr01', 'cr02', 'cr03'],
+    'production version lot size': ['mkalv', 'lot size', 'production version lot size'],
   }
 
-  // 2. description search
-  for (const word of sapWords.slice(0, 5)) {
-    const descMatches = await supabaseGet(
-      `${SUPABASE_URL}/rest/v1/sap_fields?or=(short_desc.ilike.*${encodeURIComponent(word)}*,common_meaning.ilike.*${encodeURIComponent(word)}*)&select=*`,
-      SUPABASE_KEY
-    )
-    candidates.push(...descMatches)
-  }
-
-  candidates = dedupeBy(candidates, x => `${x.table_name}_${x.field_name}`)
-
-  if (!candidates.length) return null
-
-  const scored = candidates
-    .map(c => ({
-      ...c,
-      _score: scoreFieldMatch(c, qLower),
-    }))
-    .sort((a, b) => b._score - a._score)
-
-  const best = scored[0]
-  if (!best || best._score < 0.45) return null
-
-  if (scored.length > 1 && scored[1]._score > 0.55) {
-    return {
-      confidence: best._score,
-      intent: 'MULTI_FIELD_LOOKUP',
-      match: null,
-      matches: scored.slice(0, 6),
+  for (const [phrase, values] of Object.entries(aliasMap)) {
+    if (q.includes(phrase)) {
+      values.forEach(v => aliases.add(v))
     }
   }
 
-  return {
-    confidence: best._score,
-    intent: 'FIELD_LOOKUP',
-    match: best,
-    matches: [],
-  }
+  // Common field-like tokens
+  const uppercaseTokens = q.match(/\b[a-z]{3,10}\b/g) || []
+  uppercaseTokens.forEach(t => aliases.add(t))
+
+  return Array.from(aliases)
 }
 
-function scoreFieldMatch(field, qLower) {
+async function searchSapObjects({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandidates, limit = 12 }) {
+  const orParts = []
+
+  for (const term of aliasCandidates.slice(0, 12)) {
+    const esc = encodeURIComponent(term)
+    orParts.push(`tech_name.ilike.*${esc}*`)
+    orParts.push(`title.ilike.*${esc}*`)
+    orParts.push(`short_desc.ilike.*${esc}*`)
+    orParts.push(`keywords.ilike.*${esc}*`)
+    orParts.push(`module.ilike.*${esc}*`)
+  }
+
+  const url = `${SUPABASE_URL}/rest/v1/sap_objects?select=*&or=(${orParts.join(',')})&limit=${limit}`
+
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  })
+
+  if (!res.ok) return []
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+}
+
+async function searchSapFields({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandidates, limit = 12 }) {
+  const orParts = []
+
+  for (const term of aliasCandidates.slice(0, 12)) {
+    const esc = encodeURIComponent(term)
+    orParts.push(`field_name.ilike.*${esc}*`)
+    orParts.push(`table_name.ilike.*${esc}*`)
+    orParts.push(`short_desc.ilike.*${esc}*`)
+    orParts.push(`common_meaning.ilike.*${esc}*`)
+  }
+
+  const url = `${SUPABASE_URL}/rest/v1/sap_fields?select=*&or=(${orParts.join(',')})&limit=${limit}`
+
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  })
+
+  if (!res.ok) return []
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+}
+
+function scoreObject(row, qLower, aliases) {
   let score = 0
 
-  const fieldName = (field.field_name || '').toLowerCase()
-  const tableName = (field.table_name || '').toLowerCase()
-  const shortDesc = (field.short_desc || '').toLowerCase()
-  const commonMeaning = (field.common_meaning || '').toLowerCase()
+  const tech = (row.tech_name || '').toLowerCase()
+  const title = (row.title || '').toLowerCase()
+  const desc = (row.short_desc || '').toLowerCase()
+  const kw = (row.keywords || '').toLowerCase()
+  const type = (row.object_type || '').toLowerCase()
 
-  if (qLower.includes(fieldName)) score += 0.55
-  if (qLower.includes(tableName)) score += 0.15
+  for (const a of aliases) {
+    const aa = a.toLowerCase()
 
-  const words = qLower.split(/\s+/)
-  for (const w of words) {
-    if (shortDesc.includes(w)) score += 0.08
-    if (commonMeaning.includes(w)) score += 0.08
+    if (tech === aa) score += 80
+    if (tech.includes(aa)) score += 40
+    if (title.includes(aa)) score += 35
+    if (desc.includes(aa)) score += 25
+    if (kw.includes(aa)) score += 25
+    if (type.includes(aa)) score += 20
   }
 
-  return Math.min(score, 0.99)
+  // Strong object boosts
+  if (qLower.includes('production version') && tech === 'mkal') score += 120
+  if (qLower.includes('production version') && tech === 'mkalv') score += 60
+  if (qLower.includes('equipment') && tech === 'equi') score += 120
+  if (qLower.includes('storage location') && tech === 't001l') score += 120
+  if (qLower.includes('storage location') && tech === 'mard') score += 100
+  if (qLower.includes('production order') && tech === 'afko') score += 120
+  if (qLower.includes('production order') && tech === 'aufk') score += 110
+  if (qLower.includes('routing') && tech === 'plko') score += 120
+  if (qLower.includes('routing') && tech === 'plpo') score += 110
+  if (qLower.includes('bom') && tech === 'mast') score += 120
+  if (qLower.includes('bom') && tech === 'stko') score += 110
+  if (qLower.includes('bom') && tech === 'stpo') score += 110
+
+  return score
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OBJECT SEARCH
-// ─────────────────────────────────────────────────────────────────────────────
-async function searchObjects({
-  SUPABASE_URL,
-  SUPABASE_KEY,
-  q,
-  qLower,
-  tcodes,
-  sapWords,
-  objectHints,
-  isReferenceLookup,
-  isComparison,
-}) {
-  let candidates = []
-
-  // 1. direct tech_name match
-  const upperWords = [...new Set((q.toUpperCase().match(/\b[A-Z][A-Z0-9_]{2,14}\b/g) || []))]
-  if (upperWords.length) {
-    const direct = await supabaseGet(
-      `${SUPABASE_URL}/rest/v1/sap_objects?tech_name=in.(${upperWords.map(x => `"${x}"`).join(',')})&select=*`,
-      SUPABASE_KEY
-    )
-    candidates.push(...direct)
-  }
-
-  // 2. title / description search
-  for (const word of [...sapWords, ...objectHints].slice(0, 6)) {
-    const matches = await supabaseGet(
-      `${SUPABASE_URL}/rest/v1/sap_objects?or=(title.ilike.*${encodeURIComponent(word)}*,short_desc.ilike.*${encodeURIComponent(word)}*)&select=*`,
-      SUPABASE_KEY
-    )
-    candidates.push(...matches)
-  }
-
-  candidates = dedupeBy(candidates, x => `${x.object_type}_${x.tech_name}`)
-
-  if (!candidates.length) return null
-
-  const scored = candidates
-    .map(c => ({
-      ...c,
-      _score: scoreObjectMatch(c, qLower),
-    }))
-    .sort((a, b) => b._score - a._score)
-
-  const best = scored[0]
-  if (!best || best._score < 0.45) return null
-
-  // comparison or broad multi lookup
-  if (isComparison || (scored.length > 1 && scored[1]._score > 0.58)) {
-    return {
-      confidence: best._score,
-      intent: isComparison ? 'COMPARISON' : 'MULTI_OBJECT_LOOKUP',
-      match: null,
-      matches: scored.slice(0, 6),
-    }
-  }
-
-  return {
-    confidence: best._score,
-    intent: isReferenceLookup ? 'REFERENCE' : 'OBJECT_LOOKUP',
-    match: best,
-    matches: [],
-  }
-}
-
-function scoreObjectMatch(obj, qLower) {
+function scoreField(row, qLower, aliases) {
   let score = 0
 
-  const techName = (obj.tech_name || '').toLowerCase()
-  const title = (obj.title || '').toLowerCase()
-  const shortDesc = (obj.short_desc || '').toLowerCase()
-  const objectType = (obj.object_type || '').toLowerCase()
+  const field = (row.field_name || '').toLowerCase()
+  const table = (row.table_name || '').toLowerCase()
+  const desc = (row.short_desc || '').toLowerCase()
+  const meaning = (row.common_meaning || '').toLowerCase()
 
-  if (qLower.includes(techName)) score += 0.65
-  if (qLower.includes(title)) score += 0.45
+  for (const a of aliases) {
+    const aa = a.toLowerCase()
 
-  const words = qLower.split(/\s+/)
-  for (const w of words) {
-    if (title.includes(w)) score += 0.08
-    if (shortDesc.includes(w)) score += 0.06
+    if (field === aa) score += 80
+    if (field.includes(aa)) score += 45
+    if (table.includes(aa)) score += 35
+    if (desc.includes(aa)) score += 25
+    if (meaning.includes(aa)) score += 25
   }
 
-  if (qLower.includes('table') && objectType === 'table') score += 0.18
-  if (qLower.includes('tcode') && objectType === 'tcode') score += 0.18
-  if (qLower.includes('fiori') && objectType === 'fiori') score += 0.18
-  if (qLower.includes('app') && objectType === 'fiori') score += 0.12
-
-  return Math.min(score, 0.99)
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ALIAS SEARCH
-// ─────────────────────────────────────────────────────────────────────────────
-async function searchAliases({ SUPABASE_URL, SUPABASE_KEY, q, qLower, sapWords }) {
-  let aliasCandidates = []
-
-  for (const word of sapWords.slice(0, 6)) {
-    const rows = await supabaseGet(
-      `${SUPABASE_URL}/rest/v1/sap_aliases?alias.ilike.*${encodeURIComponent(word)}*&select=*`,
-      SUPABASE_KEY
-    )
-    aliasCandidates.push(...rows)
-  }
-
-  aliasCandidates = dedupeBy(aliasCandidates, x => `${x.object_type}_${x.tech_name}_${x.alias}`)
-
-  if (!aliasCandidates.length) return null
-
-  const scoredAliases = aliasCandidates
-    .map(a => ({
-      ...a,
-      _score: scoreAliasMatch(a, qLower),
-    }))
-    .sort((a, b) => b._score - a._score)
-
-  const bestAlias = scoredAliases[0]
-  if (!bestAlias || bestAlias._score < 0.45) return null
-
-  const objectRows = await supabaseGet(
-    `${SUPABASE_URL}/rest/v1/sap_objects?tech_name=eq.${encodeURIComponent(bestAlias.tech_name)}&object_type=eq.${encodeURIComponent(bestAlias.object_type)}&select=*`,
-    SUPABASE_KEY
-  )
-
-  const obj = objectRows?.[0]
-  if (!obj) return null
-
-  return {
-    confidence: bestAlias._score,
-    intent: 'REFERENCE',
-    match: obj,
-    matches: [],
-    via_alias: bestAlias.alias,
-  }
-}
-
-function scoreAliasMatch(aliasRow, qLower) {
-  let score = 0
-  const alias = (aliasRow.alias || '').toLowerCase()
-
-  if (qLower.includes(alias)) score += 0.75
-
-  const words = qLower.split(/\s+/)
-  for (const w of words) {
-    if (alias.includes(w)) score += 0.08
-  }
-
-  return Math.min(score, 0.99)
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// UTILS
-// ─────────────────────────────────────────────────────────────────────────────
-async function supabaseGet(url, key) {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-      },
-    })
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
-  } catch {
-    return []
-  }
-}
-
-function dedupeBy(arr, keyFn) {
-  const seen = new Set()
-  const out = []
-
-  for (const item of arr) {
-    const k = keyFn(item)
-    if (!seen.has(k)) {
-      seen.add(k)
-      out.push(item)
-    }
-  }
-
-  return out
+  return score
 }
