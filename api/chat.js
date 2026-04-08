@@ -1,6 +1,5 @@
-// api/chat.js — v10: Full Intelligent Layer (Intent + DB + Expansion + Guard + Formatting)
+// api/chat.js — v10 FIXED: No node-fetch import
 
-import fetch from 'node-fetch'
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
   tokenize, detokenize,
@@ -71,7 +70,6 @@ async function fetchRelated(object) {
 function guardAnswer(answer) {
   if (!answer) return answer
 
-  // Remove obvious hallucination patterns
   if (answer.includes('Z_') || answer.includes('Custom app')) {
     return answer.replace(/Z_\w+/g, '[custom object]')
   }
@@ -83,7 +81,6 @@ function guardAnswer(answer) {
 // 5. FORMATTER
 // ─────────────────────────────────────────────────────────────────────────────
 function formatResponse(intent, data, related = []) {
-
   if (intent === 'REFERENCE') {
     return `**${data.object_type}:** \`${data.tech_name}\`
 ${data.title}
@@ -109,7 +106,7 @@ ${data.common_meaning || ''}`
 ${data}`
   }
 
-  return data
+  return typeof data === 'string' ? data : JSON.stringify(data, null, 2)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -173,17 +170,19 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-
     // ── STEP 1: DB SEARCH
     const ref = await callReferenceSearch(lastMsg)
 
     if (ref && ref.match && ref.confidence > 0.6) {
-
       let answer = ''
 
-      // MULTI OBJECT
+      // MULTI OBJECT / MULTI FIELD
       if (ref.matches?.length) {
-        answer = ref.matches.map(o => `- ${o.tech_name} — ${o.title}`).join('\n')
+        if (ref.intent === 'MULTI_FIELD_LOOKUP') {
+          answer = ref.matches.map(f => `- ${f.field_name} — ${f.short_desc}`).join('\n')
+        } else {
+          answer = ref.matches.map(o => `- ${o.tech_name} — ${o.title}`).join('\n')
+        }
       } else {
         const related = await fetchRelated(ref.match)
         answer = formatResponse(intent, ref.match, related)
@@ -203,7 +202,6 @@ export default async function handler(req, res) {
     const { anonymised } = tokenize(messages)
 
     let answer = await callClaude(systemPrompt, anonymised)
-
     answer = guardAnswer(answer)
 
     send({ type:'chunk', text: answer })
