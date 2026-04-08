@@ -1,6 +1,8 @@
-// api/reference-search.js — v1 HARDENED LOOKUP
-// Purpose: reliable DB lookup for SAP objects before Gemini/Claude
-// Focus: tables / tcodes / fiori / fields / common SAP aliases
+// api/reference-search.js — v3 FULL FORCE MATCH + FALLBACK SEARCH
+// Purpose:
+// 1. Catch direct SAP object names like MKAL / EQUI / AUFK
+// 2. Search sap_objects reliably using normalized terms
+// 3. Return structure compatible with chat.js
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,10 +11,9 @@ export default async function handler(req, res) {
 
   try {
     const { question = '' } = req.body || {}
-    const q = String(question).trim()
-    const qLower = q.toLowerCase()
+    const rawQuestion = String(question || '').trim()
 
-    if (!q) {
+    if (!rawQuestion) {
       return res.status(400).json({ error: 'Missing question' })
     }
 
@@ -24,76 +25,54 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Missing Supabase env vars' })
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // 1. INTENT
-    // ───────────────────────────────────────────────────────────────────────
-    const intent = detectIntent(qLower)
+    const q = rawQuestion.toLowerCase()
 
     // ───────────────────────────────────────────────────────────────────────
-    // 2. ALIAS EXTRACTION
+    // 1. INTENT DETECTION
     // ───────────────────────────────────────────────────────────────────────
-    const aliasCandidates = buildAliasCandidates(qLower)
+    const intent = detectIntent(q)
 
     // ───────────────────────────────────────────────────────────────────────
-    // 3. SEARCH SAP_OBJECTS
+    // 2. FORCE DIRECT SAP OBJECT MATCH (VERY IMPORTANT)
+    // catches MKAL / EQUI / AUFK / AFKO / MARA / MARD etc.
     // ───────────────────────────────────────────────────────────────────────
-    const objectResults = await searchSapObjects({
-      SUPABASE_URL,
-      SUPABASE_KEY,
-      qLower,
-      aliasCandidates,
-      limit: 12,
-    })
+    const directCodeMatches = rawQuestion.match(/\b[A-Z0-9]{3,8}\b/g) || []
 
-    // ───────────────────────────────────────────────────────────────────────
-    // 4. SEARCH SAP_FIELDS (for field-style queries)
-    // ───────────────────────────────────────────────────────────────────────
-    const fieldResults = await searchSapFields({
-      SUPABASE_URL,
-      SUPABASE_KEY,
-      qLower,
-      aliasCandidates,
-      limit: 12,
-    })
-
-    // ───────────────────────────────────────────────────────────────────────
-    // 5. SCORE RESULTS
-    // ───────────────────────────────────────────────────────────────────────
-    const scoredObjects = objectResults.map(r => ({
-      ...r,
-      _score: scoreObject(r, qLower, aliasCandidates),
-    })).sort((a, b) => b._score - a._score)
-
-    const scoredFields = fieldResults.map(r => ({
-      ...r,
-      _score: scoreField(r, qLower, aliasCandidates),
-    })).sort((a, b) => b._score - a._score)
-
-    // ───────────────────────────────────────────────────────────────────────
-    // 6. RESPONSE SHAPE
-    // ───────────────────────────────────────────────────────────────────────
-    if (intent === 'FIELD_LOOKUP' && scoredFields.length) {
-      const top = scoredFields[0]
-      return res.status(200).json({
-        intent,
-        confidence: normalizeScore(top._score),
-        match: top,
-        matches: scoredFields.slice(0, 6),
-      })
-    }
-
-    // If object query and we found objects
-    if (scoredObjects.length) {
-      const top = scoredObjects[0]
-
-      // If query sounds broad, return multiple
-      if (isBroadQuery(qLower) || scoredObjects.length > 1 && top._score < 75) {
+    for (const code of directCodeMatches) {
+      const exact = await fetchSapObjectsExact(SUPABASE_URL, SUPABASE_KEY, code)
+      if (exact.length) {
         return res.status(200).json({
           intent,
-          confidence: normalizeScore(top._score),
-          matches: scoredObjects.slice(0, 6),
+          confidence: 0.95,
+          match: exact[0],
+          matches: exact.slice(0, 6),
         })
       }
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 3. BUILD SEARCH TERMS
+    // ───────────────────────────────────────────────────────────────────────
+    const searchTerms = buildSearchTerms(q)
+
+    // ───────────────────────────────────────────────────────────────────────
+    // 4. SEARCH sap_objects
+    // ───────────────────────────────────────────────────────────────────────
+    const objectResults = await fetchSapObjectsFuzzy(
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      searchTerms
+    )
+
+    const scoredObjects = objectResults
+      .map(row => ({
+        ...row,
+        _score: scoreObject(row, q, searchTerms),
+      }))
+      .sort((a, b) => b._score - a._score)
+
+    if (scoredObjects.length) {
+      const top = scoredObjects[0]
 
       return res.status(200).json({
         intent,
@@ -103,9 +82,25 @@ export default async function handler(req, res) {
       })
     }
 
-    // fallback to field if object failed
+    // ───────────────────────────────────────────────────────────────────────
+    // 5. SEARCH sap_fields (optional fallback)
+    // ───────────────────────────────────────────────────────────────────────
+    const fieldResults = await fetchSapFieldsFuzzy(
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      searchTerms
+    )
+
+    const scoredFields = fieldResults
+      .map(row => ({
+        ...row,
+        _score: scoreField(row, q, searchTerms),
+      }))
+      .sort((a, b) => b._score - a._score)
+
     if (scoredFields.length) {
       const top = scoredFields[0]
+
       return res.status(200).json({
         intent: 'FIELD_LOOKUP',
         confidence: normalizeScore(top._score),
@@ -114,7 +109,9 @@ export default async function handler(req, res) {
       })
     }
 
-    // no hit
+    // ───────────────────────────────────────────────────────────────────────
+    // 6. NO HIT
+    // ───────────────────────────────────────────────────────────────────────
     return res.status(200).json({
       intent,
       confidence: 0,
@@ -133,82 +130,62 @@ export default async function handler(req, res) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function detectIntent(q) {
-  if (/\bfield\b|\baufnr\b|\bmatnr\b|\bwerks\b|\bwhat is .* in .*table\b/.test(q)) {
-    return 'FIELD_LOOKUP'
-  }
-
-  if (/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b/.test(q)) {
-    return 'REFERENCE'
-  }
-
-  if (/\bdifference\b|\bvs\b|\bcompare\b/.test(q)) {
-    return 'COMPARISON'
-  }
-
+  if (/\bfield\b|\baufnr\b|\bmatnr\b|\bwerks\b/.test(q)) return 'FIELD_LOOKUP'
+  if (/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\btble\b/.test(q)) return 'REFERENCE'
+  if (/\bdifference\b|\bvs\b|\bcompare\b/.test(q)) return 'COMPARISON'
   return 'REFERENCE'
 }
 
-function isBroadQuery(q) {
-  return /\bwhich\b|\bwhat are\b|\blist\b|\brelevant\b|\bpossible\b|\ball\b/.test(q)
-}
+function buildSearchTerms(q) {
+  const terms = new Set()
 
-function normalizeScore(score) {
-  if (score >= 95) return 0.95
-  if (score >= 85) return 0.85
-  if (score >= 75) return 0.75
-  if (score >= 65) return 0.65
-  if (score >= 55) return 0.55
-  if (score >= 45) return 0.45
-  return 0.35
-}
-
-function buildAliasCandidates(q) {
-  const aliases = new Set()
-
-  // Raw keywords
   q.split(/\s+/).forEach(w => {
-    if (w.length > 2) aliases.add(w)
+    if (w.length > 2) terms.add(w)
   })
 
-  // Strong SAP aliases
+  // Strong aliases
   const aliasMap = {
-    'production version': ['mkal', 'production version', 'verid', 'c223', 'c220'],
-    'production order': ['aufk', 'afko', 'production order', 'co01', 'co02', 'co03'],
-    'process order': ['aufk', 'afko', 'process order', 'cor1', 'cor2', 'cor3'],
-    'equipment': ['equi', 'equz', 'equipment', 'ie01', 'ie02', 'ie03'],
-    'functional location': ['iflot', 'functional location', 'il01', 'il02', 'il03'],
-    'notification': ['qmel', 'notification', 'iw21', 'iw22', 'iw23'],
-    'maintenance order': ['aufk', 'maintenance order', 'iw31', 'iw32', 'iw33'],
-    'routing': ['plko', 'plpo', 'routing', 'ca01', 'ca02', 'ca03'],
-    'bom': ['mast', 'stko', 'stpo', 'bom', 'cs01', 'cs02', 'cs03'],
-    'material master': ['mara', 'marc', 'mard', 'material master', 'mm01', 'mm02', 'mm03'],
-    'storage location': ['t001l', 'mard', 'storage location'],
-    'plant': ['t001w', 'plant'],
-    'purchase order': ['ekko', 'ekpo', 'purchase order', 'me21n', 'me22n', 'me23n'],
-    'sales order': ['vbak', 'vbap', 'sales order', 'va01', 'va02', 'va03'],
-    'delivery': ['likp', 'lips', 'delivery', 'vl01n', 'vl02n', 'vl03n'],
-    'invoice': ['vbrk', 'vbrp', 'invoice', 'vf01'],
-    'work center': ['crhd', 'work center', 'cr01', 'cr02', 'cr03'],
-    'production version lot size': ['mkalv', 'lot size', 'production version lot size'],
+    'production version': ['production', 'version', 'mkal', 'verid', 'c223', 'c220'],
+    'equipment': ['equipment', 'equi', 'equz', 'ie03'],
+    'storage location': ['storage', 'location', 't001l', 'mard'],
+    'production order': ['production', 'order', 'afko', 'aufk', 'co03'],
+    'routing': ['routing', 'plko', 'plpo', 'ca03'],
+    'bom': ['bom', 'mast', 'stko', 'stpo', 'cs03'],
+    'material master': ['material', 'master', 'mara', 'marc', 'mard'],
+    'notification': ['notification', 'qmel', 'iw23'],
+    'functional location': ['functional', 'location', 'iflot', 'il03'],
   }
 
   for (const [phrase, values] of Object.entries(aliasMap)) {
     if (q.includes(phrase)) {
-      values.forEach(v => aliases.add(v))
+      values.forEach(v => terms.add(v))
     }
   }
 
-  // Common field-like tokens
-  const uppercaseTokens = q.match(/\b[a-z]{3,10}\b/g) || []
-  uppercaseTokens.forEach(t => aliases.add(t))
-
-  return Array.from(aliases)
+  return Array.from(terms).slice(0, 12)
 }
 
-async function searchSapObjects({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandidates, limit = 12 }) {
+async function fetchSapObjectsExact(SUPABASE_URL, SUPABASE_KEY, code) {
+  const url = `${SUPABASE_URL}/rest/v1/sap_objects?select=*&tech_name=eq.${encodeURIComponent(code)}&limit=6`
+
+  const res = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  })
+
+  if (!res.ok) return []
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+}
+
+async function fetchSapObjectsFuzzy(SUPABASE_URL, SUPABASE_KEY, searchTerms) {
+  if (!searchTerms.length) return []
+
   const orParts = []
 
-  for (const term of aliasCandidates.slice(0, 12)) {
+  for (const term of searchTerms) {
     const esc = encodeURIComponent(term)
     orParts.push(`tech_name.ilike.*${esc}*`)
     orParts.push(`title.ilike.*${esc}*`)
@@ -217,7 +194,7 @@ async function searchSapObjects({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandi
     orParts.push(`module.ilike.*${esc}*`)
   }
 
-  const url = `${SUPABASE_URL}/rest/v1/sap_objects?select=*&or=(${orParts.join(',')})&limit=${limit}`
+  const url = `${SUPABASE_URL}/rest/v1/sap_objects?select=*&or=(${orParts.join(',')})&limit=20`
 
   const res = await fetch(url, {
     headers: {
@@ -231,10 +208,12 @@ async function searchSapObjects({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandi
   return Array.isArray(data) ? data : []
 }
 
-async function searchSapFields({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandidates, limit = 12 }) {
+async function fetchSapFieldsFuzzy(SUPABASE_URL, SUPABASE_KEY, searchTerms) {
+  if (!searchTerms.length) return []
+
   const orParts = []
 
-  for (const term of aliasCandidates.slice(0, 12)) {
+  for (const term of searchTerms) {
     const esc = encodeURIComponent(term)
     orParts.push(`field_name.ilike.*${esc}*`)
     orParts.push(`table_name.ilike.*${esc}*`)
@@ -242,7 +221,7 @@ async function searchSapFields({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandid
     orParts.push(`common_meaning.ilike.*${esc}*`)
   }
 
-  const url = `${SUPABASE_URL}/rest/v1/sap_fields?select=*&or=(${orParts.join(',')})&limit=${limit}`
+  const url = `${SUPABASE_URL}/rest/v1/sap_fields?select=*&or=(${orParts.join(',')})&limit=20`
 
   const res = await fetch(url, {
     headers: {
@@ -256,44 +235,41 @@ async function searchSapFields({ SUPABASE_URL, SUPABASE_KEY, qLower, aliasCandid
   return Array.isArray(data) ? data : []
 }
 
-function scoreObject(row, qLower, aliases) {
+function scoreObject(row, q, terms) {
   let score = 0
 
   const tech = (row.tech_name || '').toLowerCase()
   const title = (row.title || '').toLowerCase()
   const desc = (row.short_desc || '').toLowerCase()
   const kw = (row.keywords || '').toLowerCase()
-  const type = (row.object_type || '').toLowerCase()
 
-  for (const a of aliases) {
-    const aa = a.toLowerCase()
+  for (const t of terms) {
+    const term = t.toLowerCase()
 
-    if (tech === aa) score += 80
-    if (tech.includes(aa)) score += 40
-    if (title.includes(aa)) score += 35
-    if (desc.includes(aa)) score += 25
-    if (kw.includes(aa)) score += 25
-    if (type.includes(aa)) score += 20
+    if (tech === term) score += 100
+    if (tech.includes(term)) score += 45
+    if (title.includes(term)) score += 35
+    if (desc.includes(term)) score += 25
+    if (kw.includes(term)) score += 25
   }
 
-  // Strong object boosts
-  if (qLower.includes('production version') && tech === 'mkal') score += 120
-  if (qLower.includes('production version') && tech === 'mkalv') score += 60
-  if (qLower.includes('equipment') && tech === 'equi') score += 120
-  if (qLower.includes('storage location') && tech === 't001l') score += 120
-  if (qLower.includes('storage location') && tech === 'mard') score += 100
-  if (qLower.includes('production order') && tech === 'afko') score += 120
-  if (qLower.includes('production order') && tech === 'aufk') score += 110
-  if (qLower.includes('routing') && tech === 'plko') score += 120
-  if (qLower.includes('routing') && tech === 'plpo') score += 110
-  if (qLower.includes('bom') && tech === 'mast') score += 120
-  if (qLower.includes('bom') && tech === 'stko') score += 110
-  if (qLower.includes('bom') && tech === 'stpo') score += 110
+  // hard boosts
+  if (q.includes('production version') && tech === 'mkal') score += 150
+  if (q.includes('equipment') && tech === 'equi') score += 150
+  if (q.includes('storage location') && tech === 't001l') score += 150
+  if (q.includes('storage location') && tech === 'mard') score += 130
+  if (q.includes('production order') && tech === 'afko') score += 150
+  if (q.includes('production order') && tech === 'aufk') score += 130
+  if (q.includes('routing') && tech === 'plko') score += 150
+  if (q.includes('routing') && tech === 'plpo') score += 130
+  if (q.includes('bom') && tech === 'mast') score += 150
+  if (q.includes('bom') && tech === 'stko') score += 130
+  if (q.includes('bom') && tech === 'stpo') score += 130
 
   return score
 }
 
-function scoreField(row, qLower, aliases) {
+function scoreField(row, q, terms) {
   let score = 0
 
   const field = (row.field_name || '').toLowerCase()
@@ -301,15 +277,24 @@ function scoreField(row, qLower, aliases) {
   const desc = (row.short_desc || '').toLowerCase()
   const meaning = (row.common_meaning || '').toLowerCase()
 
-  for (const a of aliases) {
-    const aa = a.toLowerCase()
+  for (const t of terms) {
+    const term = t.toLowerCase()
 
-    if (field === aa) score += 80
-    if (field.includes(aa)) score += 45
-    if (table.includes(aa)) score += 35
-    if (desc.includes(aa)) score += 25
-    if (meaning.includes(aa)) score += 25
+    if (field === term) score += 100
+    if (field.includes(term)) score += 45
+    if (table.includes(term)) score += 35
+    if (desc.includes(term)) score += 25
+    if (meaning.includes(term)) score += 25
   }
 
   return score
+}
+
+function normalizeScore(score) {
+  if (score >= 140) return 0.95
+  if (score >= 100) return 0.85
+  if (score >= 75) return 0.75
+  if (score >= 55) return 0.65
+  if (score >= 40) return 0.50
+  return 0.35
 }
