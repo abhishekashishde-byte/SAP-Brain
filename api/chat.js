@@ -1,7 +1,7 @@
-// api/chat.js — v15 FULL FIXED:
-// DB first + Groq explanation + Gemini nuance + Groq strict merge + Claude fallback
-// + source label always + fact validator + correction memory
-// + FIXED lookup routing so Groq does NOT freestyle SAP lookup answers
+// api/chat.js — v16 STABLE
+// DB first + Groq explanation + Gemini nuance + Groq merge + Claude fallback
+// + source label + correction memory
+// + SAFE validator (T-code only, NO table validation)
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -10,7 +10,7 @@ import {
 } from './_shared.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. INTENT CLASSIFIER (FIXED)
+// 1. INTENT CLASSIFIER
 // ─────────────────────────────────────────────────────────────────────────────
 function classifyIntent(q = '') {
   const text = q.toLowerCase()
@@ -210,7 +210,7 @@ async function callClaude(systemPrompt, messages) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. GROQ EXPLANATION LAYER (SAFE USE)
+// 10. GROQ EXPLANATION LAYER
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqExplainOnly(question) {
   const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
@@ -259,7 +259,7 @@ Return only the nuance.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 12. GROQ STRICT MERGE (SAFE)
+// 12. GROQ STRICT MERGE
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqStrictMerge(question, explanation, dbFacts, nuance) {
   const mergePrompt = `You are a formatter that merges SAP answer parts.
@@ -290,22 +290,11 @@ ${nuance || ''}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. FACT VALIDATOR
+// 13. SAFE VALIDATOR (ONLY T-CODES)
 // ─────────────────────────────────────────────────────────────────────────────
 function extractTcodes(text = '') {
   const matches = text.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || []
   return [...new Set(matches)]
-}
-
-function extractTableNames(text = '') {
-  const matches = text.match(/\b[A-Z][A-Z0-9_]{2,9}\b/g) || []
-  const blacklist = new Set([
-    'SAP','S4','S4HANA','ERP','PP','PM','MM','SD','FI','CO','QM','WM','EWM',
-    'BOM','MRP','FICO','ABAP','API','UI','APP','DB','RFC','BADI','IMG','SPRO',
-    'TECO','CLSD','CRUD','JSON','HTTP','HTTPS'
-  ])
-
-  return [...new Set(matches.filter(x => !blacklist.has(x)))]
 }
 
 async function validateTcodes(tcodes = []) {
@@ -329,39 +318,17 @@ async function validateTcodes(tcodes = []) {
   }
 }
 
-async function validateTables(tables = []) {
-  if (!tables.length) return new Set()
-
-  try {
-    const encoded = tables.map(x => `"${x}"`).join(',')
-    const url = `${process.env.SUPABASE_URL}/rest/v1/sap_objects?object_type=eq.TABLE&tech_name=in.(${encoded})&select=tech_name`
-
-    const res = await fetch(url, {
-      headers: {
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-    })
-
-    const data = await res.json()
-    return new Set((data || []).map(x => x.tech_name))
-  } catch {
-    return new Set()
-  }
-}
-
 async function validateAndCleanAnswer(answer) {
   if (!answer) return answer
+
+  // TEMP SAFE MODE:
+  // validate only T-codes
+  // DO NOT validate tables / fields yet
 
   let cleaned = answer
 
   const tcodes = extractTcodes(answer)
-  const tables = extractTableNames(answer)
-
-  const [validTcodes, validTables] = await Promise.all([
-    validateTcodes(tcodes),
-    validateTables(tables),
-  ])
+  const validTcodes = await validateTcodes(tcodes)
 
   for (const tcode of tcodes) {
     if (!validTcodes.has(tcode)) {
@@ -369,19 +336,6 @@ async function validateAndCleanAnswer(answer) {
       cleaned = cleaned.replace(regex, '[unverified]')
     }
   }
-
-  for (const table of tables) {
-    if (!validTables.has(table)) {
-      const regex = new RegExp(`\\b${table}\\b`, 'g')
-      cleaned = cleaned.replace(regex, '[unverified]')
-    }
-  }
-
-  cleaned = cleaned
-    .replace(/\[unverified\](,\s*\[unverified\])+/g, '[unverified]')
-    .replace(/\(\s*\[unverified\]\s*\)/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
 
   return cleaned.trim()
 }
@@ -513,7 +467,7 @@ export default async function handler(req, res) {
         return
       }
 
-      // NO DB hit → IMPORTANT FIX:
+      // NO DB hit → IMPORTANT:
       // For lookup questions, do NOT allow Groq-only freestyle answer
       const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
 
