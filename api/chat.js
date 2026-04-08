@@ -1,7 +1,8 @@
-// api/chat.js — v18 DEBUG ROUTING
-// DB first + Gemini refine + Groq explanation/merge + Claude only last
-// NO validator
-// DEBUG logs added so we can see why Claude is being used
+// api/chat.js — v19 FULL STABLE LOOKUP-FIRST
+// DB first + Gemini second + Claude only last for lookup questions
+// Groq only for conceptual/process questions
+// No validator
+// Logs included for routing visibility
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -9,6 +10,9 @@ import {
   tokenize,
 } from './_shared.js'
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. INTENT CLASSIFIER
+// ─────────────────────────────────────────────────────────────────────────────
 function classifyIntent(q = '') {
   const text = q.toLowerCase()
 
@@ -24,18 +28,27 @@ function classifyIntent(q = '') {
   return 'GENERAL'
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. SOURCE LABEL
+// ─────────────────────────────────────────────────────────────────────────────
 function withSource(answer, sourceLabel) {
   if (!answer) return `_✦ ${sourceLabel}_`
   return `${answer.trim()}\n\n_✦ ${sourceLabel}_`
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. REFERENCE SEARCH
+// ─────────────────────────────────────────────────────────────────────────────
 async function callReferenceSearch(question) {
   try {
     const baseUrl =
       process.env.BASE_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
 
-    if (!baseUrl) return null
+    if (!baseUrl) {
+      console.log('REFERENCE SEARCH SKIPPED: no BASE_URL / VERCEL_URL')
+      return null
+    }
 
     const res = await fetch(`${baseUrl}/api/reference-search`, {
       method: 'POST',
@@ -43,13 +56,17 @@ async function callReferenceSearch(question) {
       body: JSON.stringify({ question }),
     })
 
-    return await res.json()
+    const data = await res.json()
+    return data
   } catch (err) {
     console.error('REFERENCE SEARCH ERROR:', err.message)
     return null
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. RELATED OBJECTS
+// ─────────────────────────────────────────────────────────────────────────────
 async function fetchRelated(object) {
   try {
     if (!object?.tech_name) return []
@@ -70,6 +87,9 @@ async function fetchRelated(object) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. FORMAT DB OUTPUT
+// ─────────────────────────────────────────────────────────────────────────────
 function formatReferenceAnswer(intent, ref, related = []) {
   if (!ref) return ''
 
@@ -95,11 +115,17 @@ ${ref.short_desc || ''}`
   return out
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. CLEANUP
+// ─────────────────────────────────────────────────────────────────────────────
 function guardAnswer(answer) {
   if (!answer) return answer
   return answer.trim()
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. GROQ CALL
+// ─────────────────────────────────────────────────────────────────────────────
 async function callGroq(systemPrompt, messages, maxTokens = 700) {
   if (!process.env.GROQ_API_KEY) {
     console.log('GROQ SKIPPED: no API key')
@@ -122,6 +148,7 @@ async function callGroq(systemPrompt, messages, maxTokens = 700) {
     })
 
     const data = await res.json()
+
     if (!res.ok) {
       console.error('GROQ ERROR:', data)
       return null
@@ -134,8 +161,12 @@ async function callGroq(systemPrompt, messages, maxTokens = 700) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. GEMINI CALL
+// ─────────────────────────────────────────────────────────────────────────────
 async function callGemini(promptText, maxOutputTokens = 400) {
   const key = process.env.GEMINI_API_KEY
+
   if (!key) {
     console.log('GEMINI SKIPPED: no API key')
     return null
@@ -162,6 +193,9 @@ async function callGemini(promptText, maxOutputTokens = 400) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. CLAUDE CALL
+// ─────────────────────────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, messages) {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.log('CLAUDE SKIPPED: no API key')
@@ -192,6 +226,9 @@ async function callClaude(systemPrompt, messages) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. GROQ EXPLANATION (ONLY FOR NON-LOOKUP QUESTIONS)
+// ─────────────────────────────────────────────────────────────────────────────
 async function groqExplainOnly(question) {
   const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
 
@@ -202,6 +239,7 @@ CRITICAL RULES:
 - Do NOT give Fiori app names
 - Do NOT invent SAP facts
 - Keep it concise
+- Max 5 bullets or short paragraphs
 
 Question:
 ${question}
@@ -211,6 +249,9 @@ Return only the explanation.`
   return await callGroq(prompt, [{ role: 'user', content: question }], 350)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. GEMINI NUANCE (ONLY FOR NON-LOOKUP QUESTIONS)
+// ─────────────────────────────────────────────────────────────────────────────
 async function geminiNuance(question) {
   const prompt = `You are an SAP S/4HANA assistant.
 
@@ -232,15 +273,19 @@ ${question}`
   return out
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. GEMINI LOOKUP (FOR TABLE / FIELD / TCODE / APP QUESTIONS)
+// ─────────────────────────────────────────────────────────────────────────────
 async function geminiLookup(question) {
   const prompt = `You are an SAP lookup assistant.
 
-User is asking for a SAP object like table / field / tcode.
+User is asking for a SAP object like table / field / tcode / app.
 
 CRITICAL RULES:
 - Answer directly with correct SAP objects
 - Prefer standard SAP tables like T001L, MARD, EQUI, AUFK, AFKO, MKAL etc.
 - If multiple answers possible, list them clearly
+- Keep answer short
 - Do NOT explain concepts
 - Do NOT hallucinate
 - If unsure, say exactly: NOT_FOUND
@@ -253,6 +298,9 @@ ${question}`
   return out
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. GROQ MERGE (ONLY FOR NON-LOOKUP QUESTIONS)
+// ─────────────────────────────────────────────────────────────────────────────
 async function groqStrictMerge(question, explanation, dbFacts, nuance) {
   const mergePrompt = `You are a formatter that merges SAP answer parts.
 
@@ -278,6 +326,9 @@ ${nuance || ''}`
   return await callGroq(mergePrompt, [{ role: 'user', content: question }], 500)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. CORRECTION MEMORY
+// ─────────────────────────────────────────────────────────────────────────────
 function isCorrectionMessage(text = '') {
   const t = text.toLowerCase()
 
@@ -319,8 +370,11 @@ async function saveCorrectionMemory({ userId, module, topic, userMessage, previo
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN HANDLER
+// ─────────────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  console.log('WANI CHAT VERSION = V18 DEBUG')
+  console.log('WANI CHAT VERSION = V19 LOOKUP-FIRST')
 
   if (req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' })
 
@@ -359,19 +413,22 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 1 — DB FIRST
+    // ───────────────────────────────────────────────────────────────────────
     const ref = await callReferenceSearch(lastMsg)
     console.log('REFERENCE SEARCH RESULT:', JSON.stringify(ref))
 
     let dbAnswer = null
     let dbHit = false
 
-    if (ref && ref.confidence >= 0.45 && (ref.match || (ref.matches && ref.matches.length))) {
+    if (ref && ref.confidence >= 0.40 && (ref.match || (ref.matches && ref.matches.length))) {
       dbHit = true
 
       if (ref.matches?.length) {
         if (ref.intent === 'MULTI_FIELD_LOOKUP') {
           dbAnswer = `**Relevant fields:**\n\n` +
-            ref.matches.slice(0, 6).map(f => `- \`${f.field_name}\` — ${f.short_desc}`).join('\n')
+            ref.matches.slice(0, 6).map(f => `- \`${f.field_name}\` — ${f.short_desc || ''}`).join('\n')
         } else {
           dbAnswer = `**Relevant SAP objects:**\n\n` +
             ref.matches.slice(0, 6).map(o => `- \`${o.tech_name}\` — ${o.title || o.short_desc || ''}`).join('\n')
@@ -385,31 +442,43 @@ export default async function handler(req, res) {
     console.log('DB HIT:', dbHit)
     console.log('DB ANSWER:', dbAnswer)
 
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 2 — STRICT LOOKUP FLOW
+    // table / field / tcode / app → NO GROQ FIRST
+    // ───────────────────────────────────────────────────────────────────────
     if (isStrictLookup) {
-      if (dbHit && dbAnswer) {
-        console.log('PATH USED: DATABASE')
-        const refined = await callGemini(`Refine this SAP answer for consultant readability. Do not add new facts.\n\n${dbAnswer}`, 260)
-        const finalAnswer = guardAnswer(refined || dbAnswer)
-        const source = refined ? 'Database + Gemini' : 'Database'
-        const output = withSource(finalAnswer, source)
+      console.log('STRICT LOOKUP FLOW START')
 
+      // 2A. Database first
+      if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
+        console.log('PATH USED: DATABASE')
+
+        const output = withSource(guardAnswer(dbAnswer), 'Database')
         send({ type:'chunk', text: output })
-        send({ type:'done', model:'db+gemini', full: output })
+        send({ type:'done', model:'database', full: output })
         return
       }
 
+      // 2B. Gemini second
       const lookupAnswer = await geminiLookup(lastMsg)
-      console.log('GEMINI LOOKUP:', lookupAnswer)
+      console.log('GEMINI LOOKUP RESULT:', lookupAnswer)
 
-      if (lookupAnswer) {
-        console.log('PATH USED: GEMINI LOOKUP')
+      if (lookupAnswer && lookupAnswer.trim().length > 10) {
+        console.log('PATH USED: GEMINI')
+
         const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
         send({ type:'chunk', text: output })
         send({ type:'done', model:'gemini', full: output })
         return
       }
+
+      // 2C. Only then Claude
+      console.log('STRICT LOOKUP FALLBACK TO CLAUDE')
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 3 — CHEAP PIPELINE FOR NON-LOOKUP QUESTIONS
+    // ───────────────────────────────────────────────────────────────────────
     const shouldUseCheapPipeline =
       !complex &&
       !correcting &&
@@ -429,6 +498,7 @@ export default async function handler(req, res) {
 
       if (dbHit && dbAnswer) {
         console.log('PATH USED: GROQ + DB + GEMINI')
+
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
         const output = withSource(finalAnswer, 'Groq + Database + Gemini')
@@ -440,6 +510,7 @@ export default async function handler(req, res) {
 
       if (explanation || nuance) {
         console.log('PATH USED: GROQ + GEMINI')
+
         const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
 
@@ -454,6 +525,9 @@ export default async function handler(req, res) {
       }
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 4 — CLAUDE ONLY LAST
+    // ───────────────────────────────────────────────────────────────────────
     console.log('PATH USED: CLAUDE FALLBACK')
 
     const systemPrompt =
@@ -490,4 +564,4 @@ IMPORTANT:
   } finally {
     res.end()
   }
-}
+                                                           }
