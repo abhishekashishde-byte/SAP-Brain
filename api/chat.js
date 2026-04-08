@@ -1,4 +1,4 @@
-// api/chat.js — v12: DB + Groq + Gemini + Groq Merge + Claude fallback + source label always
+// api/chat.js — v13: DB + Groq + Gemini + Groq Merge + Claude fallback + source label + fact validator
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -104,14 +104,13 @@ ${ref.short_desc || ''}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. HALLUCINATION GUARD
+// 6. BASIC CLEANUP
 // ─────────────────────────────────────────────────────────────────────────────
 function guardAnswer(answer) {
   if (!answer) return answer
 
   let cleaned = answer
 
-  // basic cleanup only
   if (cleaned.includes('Z_') || cleaned.includes('Custom app')) {
     cleaned = cleaned.replace(/Z_\w+/g, '[custom object]')
   }
@@ -285,6 +284,106 @@ ${nuance || ''}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 13. FACT VALIDATOR
+// ─────────────────────────────────────────────────────────────────────────────
+function extractTcodes(text = '') {
+  const matches = text.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || []
+  return [...new Set(matches)]
+}
+
+function extractTableNames(text = '') {
+  const matches = text.match(/\b[A-Z][A-Z0-9_]{2,9}\b/g) || []
+  const blacklist = new Set([
+    'SAP','S4','S4HANA','ERP','PP','PM','MM','SD','FI','CO','QM','WM','EWM',
+    'BOM','MRP','FICO','ABAP','API','UI','APP','DB','RFC','BADI','IMG','SPRO',
+    'TECO','CLSD','CRUD','JSON','HTTP','HTTPS'
+  ])
+
+  return [...new Set(matches.filter(x => !blacklist.has(x)))]
+}
+
+async function validateTcodes(tcodes = []) {
+  if (!tcodes.length) return new Set()
+
+  try {
+    const encoded = tcodes.map(x => `"${x}"`).join(',')
+    const url = `${process.env.SUPABASE_URL}/rest/v1/sap_objects?object_type=eq.TCODE&tech_name=in.(${encoded})&select=tech_name`
+
+    const res = await fetch(url, {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    })
+
+    const data = await res.json()
+    return new Set((data || []).map(x => x.tech_name))
+  } catch {
+    return new Set()
+  }
+}
+
+async function validateTables(tables = []) {
+  if (!tables.length) return new Set()
+
+  try {
+    const encoded = tables.map(x => `"${x}"`).join(',')
+    const url = `${process.env.SUPABASE_URL}/rest/v1/sap_objects?object_type=eq.TABLE&tech_name=in.(${encoded})&select=tech_name`
+
+    const res = await fetch(url, {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    })
+
+    const data = await res.json()
+    return new Set((data || []).map(x => x.tech_name))
+  } catch {
+    return new Set()
+  }
+}
+
+async function validateAndCleanAnswer(answer) {
+  if (!answer) return answer
+
+  let cleaned = answer
+
+  const tcodes = extractTcodes(answer)
+  const tables = extractTableNames(answer)
+
+  const [validTcodes, validTables] = await Promise.all([
+    validateTcodes(tcodes),
+    validateTables(tables),
+  ])
+
+  // remove invalid T-codes
+  for (const tcode of tcodes) {
+    if (!validTcodes.has(tcode)) {
+      const regex = new RegExp(`\\b${tcode}\\b`, 'g')
+      cleaned = cleaned.replace(regex, '[unverified]')
+    }
+  }
+
+  // remove invalid tables
+  for (const table of tables) {
+    if (!validTables.has(table)) {
+      const regex = new RegExp(`\\b${table}\\b`, 'g')
+      cleaned = cleaned.replace(regex, '[unverified]')
+    }
+  }
+
+  // clean ugly duplicates after replacement
+  cleaned = cleaned
+    .replace(/\[unverified\](,\s*\[unverified\])+/g, '[unverified]')
+    .replace(/\(\s*\[unverified\]\s*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+
+  return cleaned.trim()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
@@ -296,7 +395,6 @@ export default async function handler(req, res) {
 
   const intent = classifyIntent(lastMsg)
   const complex = isComplexQuestion(lastMsg)
-  const ultraSimple = isUltraSimple(lastMsg)
   const correcting = isCorrecting(lastMsg)
   const previousClaude = lastAIMsg.includes('_✦ Claude_')
 
@@ -334,8 +432,7 @@ export default async function handler(req, res) {
     }
 
     // ───────────────────────────────────────────────────────────────────────
-    // STEP 2 — SIMPLE / MID SAP QUESTIONS
-    // DB + Groq + Gemini + Groq merge
+    // STEP 2 — CHEAP PIPELINE
     // ───────────────────────────────────────────────────────────────────────
     const shouldUseCheapPipeline =
       !complex &&
@@ -348,24 +445,27 @@ export default async function handler(req, res) {
         geminiNuance(lastMsg),
       ])
 
-      // If DB exists, merge all 3
       if (dbHit && dbAnswer) {
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
-        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
+        let finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
+        finalAnswer = await validateAndCleanAnswer(finalAnswer)
 
-        send({ type:'chunk', text: withSource(finalAnswer, 'Groq + Database + Gemini') })
-        send({ type:'done', model:'groq+db+gemini', full: withSource(finalAnswer, 'Groq + Database + Gemini') })
+        const output = withSource(finalAnswer, 'Groq + Database + Gemini')
+        send({ type:'chunk', text: output })
+        send({ type:'done', model:'groq+db+gemini', full: output })
         return
       }
 
-      // No DB but Gemini has enough
       if (!dbHit && (explanation || nuance)) {
         const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
-        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
+        let finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
+        finalAnswer = await validateAndCleanAnswer(finalAnswer)
 
         if (finalAnswer && finalAnswer.length > 20) {
-          send({ type:'chunk', text: withSource(finalAnswer, nuance ? 'Groq + Gemini' : 'Groq') })
-          send({ type:'done', model:'groq+gemini', full: withSource(finalAnswer, nuance ? 'Groq + Gemini' : 'Groq') })
+          const source = nuance ? 'Groq + Gemini' : 'Groq'
+          const output = withSource(finalAnswer, source)
+          send({ type:'chunk', text: output })
+          send({ type:'done', model:'groq+gemini', full: output })
           return
         }
       }
@@ -376,10 +476,14 @@ export default async function handler(req, res) {
     // ───────────────────────────────────────────────────────────────────────
     if (dbHit && dbAnswer) {
       const refined = await callGemini(`Refine this SAP answer for consultant readability. Do not add new facts.\n\n${dbAnswer}`, 300)
-      const finalAnswer = guardAnswer(refined || dbAnswer)
+      let finalAnswer = guardAnswer(refined || dbAnswer)
+      finalAnswer = await validateAndCleanAnswer(finalAnswer)
 
-      send({ type:'chunk', text: withSource(finalAnswer, refined ? 'Database + Gemini' : 'Database') })
-      send({ type:'done', model:'db+gemini', full: withSource(finalAnswer, refined ? 'Database + Gemini' : 'Database') })
+      const source = refined ? 'Database + Gemini' : 'Database'
+      const output = withSource(finalAnswer, source)
+
+      send({ type:'chunk', text: output })
+      send({ type:'done', model:'db+gemini', full: output })
       return
     }
 
@@ -402,9 +506,12 @@ Avoid unnecessary long answers.`
     const claudeAnswer = await callClaude(claudePrompt, anonymised)
 
     if (claudeAnswer) {
-      const finalAnswer = guardAnswer(claudeAnswer)
-      send({ type:'chunk', text: withSource(finalAnswer, 'Claude') })
-      send({ type:'done', model:'claude', full: withSource(finalAnswer, 'Claude') })
+      let finalAnswer = guardAnswer(claudeAnswer)
+      finalAnswer = await validateAndCleanAnswer(finalAnswer)
+
+      const output = withSource(finalAnswer, 'Claude')
+      send({ type:'chunk', text: output })
+      send({ type:'done', model:'claude', full: output })
       return
     }
 
