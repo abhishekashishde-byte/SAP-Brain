@@ -1,397 +1,410 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-function normalize(text = '') {
-  return text.trim().replace(/\s+/g, ' ');
-}
-
-function simplify(text = '') {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function singularize(word = '') {
-  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
-  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
-  return word;
-}
-
-function cleanSearchPhrase(question = '') {
-  let q = simplify(question);
-
-  q = q
-    .replace(/\bwhat is\b/g, '')
-    .replace(/\bwhich field stores\b/g, '')
-    .replace(/\bwhich field\b/g, '')
-    .replace(/\bfield for\b/g, '')
-    .replace(/\bwhere is\b/g, '')
-    .replace(/\bstored in\b/g, '')
-    .replace(/\btable for\b/g, '')
-    .replace(/\btables for\b/g, '')
-    .replace(/\btcode for\b/g, '')
-    .replace(/\btransaction for\b/g, '')
-    .replace(/\bfiori app for\b/g, '')
-    .replace(/\bfiori for\b/g, '')
-    .replace(/\bapp for\b/g, '')
-    .replace(/\bfield\b/g, '')
-    .replace(/\btable\b/g, '')
-    .replace(/\btables\b/g, '')
-    .replace(/\btcode\b/g, '')
-    .replace(/\btransaction\b/g, '')
-    .replace(/\bfiori\b/g, '')
-    .replace(/\bapp\b/g, '')
-    .replace(/\bdifference between\b/g, '')
-    .replace(/\band\b/g, ' ')
-    .replace(/\bvs\b/g, ' ')
-    .replace(/\bthe\b/g, '')
-    .replace(/\ban\b/g, '')
-    .replace(/\ba\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return q;
-}
-
-function extractFieldLookup(question) {
-  const q = normalize(question);
-
-  const patterns = [
-    /\bwhat is\s+([A-Z0-9_]+)\s+in\s+([A-Z0-9_]+)\b/i,
-    /\b([A-Z0-9_]+)\s+field\s+in\s+([A-Z0-9_]+)\b/i,
-    /\bfield\s+([A-Z0-9_]+)\s+in\s+([A-Z0-9_]+)\b/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = q.match(pattern);
-    if (match) {
-      return {
-        field: match[1].toUpperCase(),
-        table: match[2].toUpperCase(),
-      };
-    }
-  }
-
-  return null;
-}
-
-function extractFieldMeaningLookup(question) {
-  const q = simplify(question);
-
-  const patterns = [
-    /\bwhich field stores (.+?) in ([a-z0-9_]+)\b/i,
-    /\bfield for (.+?) in ([a-z0-9_]+)\b/i,
-    /\bwhere is (.+?) stored in ([a-z0-9_]+)\b/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = q.match(pattern);
-    if (match) {
-      return {
-        meaning: match[1].trim(),
-        table: match[2].toUpperCase(),
-      };
-    }
-  }
-
-  return null;
-}
-
-function extractMultipleTechNames(question) {
-  const matches = question.match(/\b[A-Z0-9_]{3,12}\b/g) || [];
-  const filtered = [...new Set(matches.map(x => x.toUpperCase()))];
-  return filtered.length >= 2 ? filtered.slice(0, 5) : [];
-}
-
-function isLikelyObjectLookup(question) {
-  const q = simplify(question);
-  return (
-    q.includes('table') ||
-    q.includes('tables') ||
-    q.includes('tcode') ||
-    q.includes('transaction') ||
-    q.includes('fiori') ||
-    q.includes('app') ||
-    q.includes('difference between') ||
-    q.includes(' vs ')
-  );
-}
-
-function isLikelyTechName(question) {
-  return /^[A-Z0-9_]{3,12}$/i.test(question.trim());
-}
-
-async function getRelated(objectType, techName) {
-  const { data } = await supabase
-    .from('sap_relationships')
-    .select('*')
-    .eq('from_object_type', objectType)
-    .eq('from_tech_name', techName);
-
-  return data || [];
-}
-
-async function searchField(table, field) {
-  const { data, error } = await supabase
-    .from('sap_fields')
-    .select('*')
-    .eq('table_name', table)
-    .eq('field_name', field)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
-async function searchFieldsByMeaning(table, meaning) {
-  const { data, error } = await supabase
-    .from('sap_fields')
-    .select('*')
-    .eq('table_name', table)
-    .or(`short_desc.ilike.%${meaning}%,common_meaning.ilike.%${meaning}%`)
-    .limit(5);
-
-  if (error) throw error;
-  return data || [];
-}
-
-async function searchAliasExact(searchText) {
-  const { data, error } = await supabase
-    .from('sap_aliases')
-    .select('*')
-    .ilike('alias_text', searchText)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
-async function searchAliasLoose(searchText) {
-  const { data, error } = await supabase
-    .from('sap_aliases')
-    .select('*')
-    .or(`alias_text.ilike.%${searchText}%,alias_text.ilike.%${singularize(searchText)}%`)
-    .limit(8);
-
-  if (error) throw error;
-  return data || [];
-}
-
-async function searchObjectByTechName(tech) {
-  const { data, error } = await supabase
-    .from('sap_objects')
-    .select('*')
-    .eq('tech_name', tech)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
-async function searchObjectsByTechNames(techNames) {
-  const { data, error } = await supabase
-    .from('sap_objects')
-    .select('*')
-    .in('tech_name', techNames);
-
-  if (error) throw error;
-  return data || [];
-}
-
-async function searchObjectByKeywords(searchText) {
-  const { data, error } = await supabase
-    .from('sap_objects')
-    .select('*')
-    .or(`title.ilike.%${searchText}%,short_desc.ilike.%${searchText}%,tech_name.ilike.%${searchText}%`)
-    .limit(8);
-
-  if (error) throw error;
-  return data || [];
-}
-
-function buildResponse(intent, query, match, related = [], confidence = 0, source = 'unknown', matches = []) {
-  return {
-    intent,
-    query,
-    confidence,
-    source,
-    match,
-    matches,
-    related,
-    should_answer_directly: confidence >= 0.85,
-    should_enrich_with_gemini: confidence >= 0.55 && confidence < 0.85,
-  };
-}
+// api/reference-search.js — v2 FULL IMPROVED
+// Better SAP object / field / alias lookup with confidence scoring
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' })
   }
 
   try {
-    const { question } = req.body;
-
+    const { question } = req.body
     if (!question || typeof question !== 'string') {
-      return res.status(400).json({ error: 'Question is required' });
+      return res.status(400).json({ error: 'Question is required' })
     }
 
-    const q = normalize(question);
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 
-    // 1) EXACT FIELD LOOKUP
-    const fieldLookup = extractFieldLookup(q);
-    if (fieldLookup) {
-      const fieldData = await searchField(fieldLookup.table, fieldLookup.field);
-
-      if (fieldData) {
-        const related = await getRelated('TABLE', fieldLookup.table);
-
-        return res.status(200).json(
-          buildResponse('FIELD_LOOKUP', q, fieldData, related, 0.98, 'field_exact')
-        );
-      }
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return res.status(500).json({ error: 'Supabase config missing' })
     }
 
-    // 2) FIELD BY MEANING LOOKUP
-    const fieldMeaningLookup = extractFieldMeaningLookup(q);
-    if (fieldMeaningLookup) {
-      const fields = await searchFieldsByMeaning(fieldMeaningLookup.table, fieldMeaningLookup.meaning);
+    const q = question.trim()
+    const qLower = q.toLowerCase()
 
-      if (fields.length === 1) {
-        const related = await getRelated('TABLE', fieldMeaningLookup.table);
+    // ───────────────────────────────────────────────────────────────────────
+    // 1. INTENT DETECTION
+    // ───────────────────────────────────────────────────────────────────────
+    const isFieldLookup =
+      /\bfield\b|\bstores\b|\bwhat is\b.*\bin\b|\bmeaning of\b/.test(qLower)
 
-        return res.status(200).json(
-          buildResponse('FIELD_MEANING_LOOKUP', q, fields[0], related, 0.92, 'field_meaning_exact')
-        );
-      }
+    const isReferenceLookup =
+      /\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b/.test(qLower)
 
-      if (fields.length > 1) {
-        return res.status(200).json(
-          buildResponse(
-            'MULTI_FIELD_LOOKUP',
-            q,
-            fields[0],
-            [],
-            0.82,
-            'field_meaning_multi',
-            fields
-          )
-        );
-      }
-    }
+    const isComparison =
+      /\bdifference\b|\bvs\b|\bcompare\b/.test(qLower)
 
-    // 3) MULTI TECH-NAME LOOKUP
-    const multiTechNames = extractMultipleTechNames(q);
-    if (multiTechNames.length) {
-      const objects = await searchObjectsByTechNames(multiTechNames);
+    // ───────────────────────────────────────────────────────────────────────
+    // 2. TERM EXTRACTION
+    // ───────────────────────────────────────────────────────────────────────
+    const extracted = extractSearchTerms(q)
+    const {
+      tcodes,
+      fieldNames,
+      sapWords,
+      objectHints,
+    } = extracted
 
-      if (objects.length >= 2) {
-        return res.status(200).json(
-          buildResponse(
-            'MULTI_OBJECT_LOOKUP',
-            q,
-            objects[0],
-            [],
-            0.95,
-            'multi_tech_exact',
-            objects
-          )
-        );
+    // ───────────────────────────────────────────────────────────────────────
+    // 3. FIELD LOOKUP FIRST
+    // ───────────────────────────────────────────────────────────────────────
+    if (fieldNames.length || isFieldLookup) {
+      const fieldResult = await searchFields({
+        SUPABASE_URL,
+        SUPABASE_KEY,
+        q,
+        qLower,
+        fieldNames,
+        sapWords,
+      })
+
+      if (fieldResult?.match || fieldResult?.matches?.length) {
+        return res.status(200).json(fieldResult)
       }
     }
 
-    // 4) DIRECT TECH NAME
-    if (isLikelyTechName(q)) {
-      const tech = q.toUpperCase();
-      const objectData = await searchObjectByTechName(tech);
+    // ───────────────────────────────────────────────────────────────────────
+    // 4. OBJECT / TABLE / TCODE / APP LOOKUP
+    // ───────────────────────────────────────────────────────────────────────
+    const objectResult = await searchObjects({
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      q,
+      qLower,
+      tcodes,
+      sapWords,
+      objectHints,
+      isReferenceLookup,
+      isComparison,
+    })
 
-      if (objectData) {
-        const related = await getRelated(objectData.object_type, objectData.tech_name);
-
-        return res.status(200).json(
-          buildResponse('TECH_NAME_LOOKUP', q, objectData, related, 0.97, 'tech_exact')
-        );
-      }
+    if (objectResult?.match || objectResult?.matches?.length) {
+      return res.status(200).json(objectResult)
     }
 
-    // 5) OBJECT / ALIAS LOOKUP
-    if (isLikelyObjectLookup(q) || q.split(' ').length <= 6) {
-      const cleaned = cleanSearchPhrase(q);
+    // ───────────────────────────────────────────────────────────────────────
+    // 5. ALIAS LOOKUP (important fallback)
+    // ───────────────────────────────────────────────────────────────────────
+    const aliasResult = await searchAliases({
+      SUPABASE_URL,
+      SUPABASE_KEY,
+      q,
+      qLower,
+      sapWords,
+    })
 
-      const exactAlias = await searchAliasExact(cleaned);
-      if (exactAlias) {
-        const objectData = await searchObjectByTechName(exactAlias.mapped_tech_name);
-        const related = await getRelated(exactAlias.mapped_object_type, exactAlias.mapped_tech_name);
-
-        return res.status(200).json(
-          buildResponse('OBJECT_LOOKUP', q, objectData || exactAlias, related, 0.93, 'alias_exact')
-        );
-      }
-
-      const looseAliases = await searchAliasLoose(cleaned);
-      if (looseAliases.length) {
-        const techNames = [...new Set(looseAliases.map(a => a.mapped_tech_name))];
-        const objects = await searchObjectsByTechNames(techNames);
-
-        if (objects.length >= 2) {
-          return res.status(200).json(
-            buildResponse(
-              'MULTI_OBJECT_LOOKUP',
-              q,
-              objects[0],
-              [],
-              0.78,
-              'alias_loose_multi',
-              objects
-            )
-          );
-        }
-
-        const best = looseAliases[0];
-        const objectData = await searchObjectByTechName(best.mapped_tech_name);
-        const related = await getRelated(best.mapped_object_type, best.mapped_tech_name);
-
-        return res.status(200).json(
-          buildResponse('OBJECT_LOOKUP', q, objectData || best, related, 0.72, 'alias_loose')
-        );
-      }
-
-      const objectMatches = await searchObjectByKeywords(cleaned);
-      if (objectMatches.length >= 2) {
-        return res.status(200).json(
-          buildResponse(
-            'MULTI_OBJECT_LOOKUP',
-            q,
-            objectMatches[0],
-            [],
-            0.68,
-            'object_keyword_multi',
-            objectMatches
-          )
-        );
-      }
-
-      if (objectMatches.length === 1) {
-        const best = objectMatches[0];
-        const related = await getRelated(best.object_type, best.tech_name);
-
-        return res.status(200).json(
-          buildResponse('OBJECT_LOOKUP', q, best, related, 0.58, 'object_keyword')
-        );
-      }
+    if (aliasResult?.match || aliasResult?.matches?.length) {
+      return res.status(200).json(aliasResult)
     }
 
-    return res.status(200).json(
-      buildResponse('NO_MATCH', q, null, [], 0, 'none')
-    );
+    return res.status(200).json({
+      confidence: 0,
+      intent: isFieldLookup ? 'FIELD_LOOKUP' : 'REFERENCE',
+      match: null,
+      matches: [],
+      message: 'No confident SAP reference found',
+    })
 
-  } catch (error) {
-    console.error('reference-search error:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function extractSearchTerms(text = '') {
+  const upperText = text.toUpperCase()
+
+  const tcodes = [...new Set(upperText.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || [])]
+  const fieldNames = [...new Set(upperText.match(/\b[A-Z][A-Z0-9_]{2,14}\b/g) || [])]
+
+  const stopWords = new Set([
+    'WHAT','IS','THE','FOR','IN','OF','TO','USED','USE','TABLE','FIELD','TCODE',
+    'FIORI','APP','WHICH','DIFFERENCE','BETWEEN','AND','STORES','WHERE','MEANING'
+  ])
+
+  const sapWords = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter(w => !stopWords.has(w.toUpperCase()))
+    .filter(w => w.length > 2)
+
+  const objectHints = []
+  if (text.toLowerCase().includes('storage location')) objectHints.push('storage location')
+  if (text.toLowerCase().includes('equipment')) objectHints.push('equipment')
+  if (text.toLowerCase().includes('production version')) objectHints.push('production version')
+  if (text.toLowerCase().includes('mrp area')) objectHints.push('mrp area')
+  if (text.toLowerCase().includes('planner group')) objectHints.push('planner group')
+  if (text.toLowerCase().includes('functional location')) objectHints.push('functional location')
+  if (text.toLowerCase().includes('notification')) objectHints.push('notification')
+  if (text.toLowerCase().includes('maintenance order')) objectHints.push('maintenance order')
+
+  return {
+    tcodes,
+    fieldNames,
+    sapWords: [...new Set(sapWords)],
+    objectHints: [...new Set(objectHints)],
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIELD SEARCH
+// ─────────────────────────────────────────────────────────────────────────────
+async function searchFields({ SUPABASE_URL, SUPABASE_KEY, q, qLower, fieldNames, sapWords }) {
+  let candidates = []
+
+  // 1. direct field match
+  if (fieldNames.length) {
+    const direct = await supabaseGet(
+      `${SUPABASE_URL}/rest/v1/sap_fields?field_name=in.(${fieldNames.map(x => `"${x}"`).join(',')})&select=*`,
+      SUPABASE_KEY
+    )
+    candidates.push(...direct)
+  }
+
+  // 2. description search
+  for (const word of sapWords.slice(0, 5)) {
+    const descMatches = await supabaseGet(
+      `${SUPABASE_URL}/rest/v1/sap_fields?or=(short_desc.ilike.*${encodeURIComponent(word)}*,common_meaning.ilike.*${encodeURIComponent(word)}*)&select=*`,
+      SUPABASE_KEY
+    )
+    candidates.push(...descMatches)
+  }
+
+  candidates = dedupeBy(candidates, x => `${x.table_name}_${x.field_name}`)
+
+  if (!candidates.length) return null
+
+  const scored = candidates
+    .map(c => ({
+      ...c,
+      _score: scoreFieldMatch(c, qLower),
+    }))
+    .sort((a, b) => b._score - a._score)
+
+  const best = scored[0]
+  if (!best || best._score < 0.45) return null
+
+  if (scored.length > 1 && scored[1]._score > 0.55) {
+    return {
+      confidence: best._score,
+      intent: 'MULTI_FIELD_LOOKUP',
+      match: null,
+      matches: scored.slice(0, 6),
+    }
+  }
+
+  return {
+    confidence: best._score,
+    intent: 'FIELD_LOOKUP',
+    match: best,
+    matches: [],
+  }
+}
+
+function scoreFieldMatch(field, qLower) {
+  let score = 0
+
+  const fieldName = (field.field_name || '').toLowerCase()
+  const tableName = (field.table_name || '').toLowerCase()
+  const shortDesc = (field.short_desc || '').toLowerCase()
+  const commonMeaning = (field.common_meaning || '').toLowerCase()
+
+  if (qLower.includes(fieldName)) score += 0.55
+  if (qLower.includes(tableName)) score += 0.15
+
+  const words = qLower.split(/\s+/)
+  for (const w of words) {
+    if (shortDesc.includes(w)) score += 0.08
+    if (commonMeaning.includes(w)) score += 0.08
+  }
+
+  return Math.min(score, 0.99)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OBJECT SEARCH
+// ─────────────────────────────────────────────────────────────────────────────
+async function searchObjects({
+  SUPABASE_URL,
+  SUPABASE_KEY,
+  q,
+  qLower,
+  tcodes,
+  sapWords,
+  objectHints,
+  isReferenceLookup,
+  isComparison,
+}) {
+  let candidates = []
+
+  // 1. direct tech_name match
+  const upperWords = [...new Set((q.toUpperCase().match(/\b[A-Z][A-Z0-9_]{2,14}\b/g) || []))]
+  if (upperWords.length) {
+    const direct = await supabaseGet(
+      `${SUPABASE_URL}/rest/v1/sap_objects?tech_name=in.(${upperWords.map(x => `"${x}"`).join(',')})&select=*`,
+      SUPABASE_KEY
+    )
+    candidates.push(...direct)
+  }
+
+  // 2. title / description search
+  for (const word of [...sapWords, ...objectHints].slice(0, 6)) {
+    const matches = await supabaseGet(
+      `${SUPABASE_URL}/rest/v1/sap_objects?or=(title.ilike.*${encodeURIComponent(word)}*,short_desc.ilike.*${encodeURIComponent(word)}*)&select=*`,
+      SUPABASE_KEY
+    )
+    candidates.push(...matches)
+  }
+
+  candidates = dedupeBy(candidates, x => `${x.object_type}_${x.tech_name}`)
+
+  if (!candidates.length) return null
+
+  const scored = candidates
+    .map(c => ({
+      ...c,
+      _score: scoreObjectMatch(c, qLower),
+    }))
+    .sort((a, b) => b._score - a._score)
+
+  const best = scored[0]
+  if (!best || best._score < 0.45) return null
+
+  // comparison or broad multi lookup
+  if (isComparison || (scored.length > 1 && scored[1]._score > 0.58)) {
+    return {
+      confidence: best._score,
+      intent: isComparison ? 'COMPARISON' : 'MULTI_OBJECT_LOOKUP',
+      match: null,
+      matches: scored.slice(0, 6),
+    }
+  }
+
+  return {
+    confidence: best._score,
+    intent: isReferenceLookup ? 'REFERENCE' : 'OBJECT_LOOKUP',
+    match: best,
+    matches: [],
+  }
+}
+
+function scoreObjectMatch(obj, qLower) {
+  let score = 0
+
+  const techName = (obj.tech_name || '').toLowerCase()
+  const title = (obj.title || '').toLowerCase()
+  const shortDesc = (obj.short_desc || '').toLowerCase()
+  const objectType = (obj.object_type || '').toLowerCase()
+
+  if (qLower.includes(techName)) score += 0.65
+  if (qLower.includes(title)) score += 0.45
+
+  const words = qLower.split(/\s+/)
+  for (const w of words) {
+    if (title.includes(w)) score += 0.08
+    if (shortDesc.includes(w)) score += 0.06
+  }
+
+  if (qLower.includes('table') && objectType === 'table') score += 0.18
+  if (qLower.includes('tcode') && objectType === 'tcode') score += 0.18
+  if (qLower.includes('fiori') && objectType === 'fiori') score += 0.18
+  if (qLower.includes('app') && objectType === 'fiori') score += 0.12
+
+  return Math.min(score, 0.99)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ALIAS SEARCH
+// ─────────────────────────────────────────────────────────────────────────────
+async function searchAliases({ SUPABASE_URL, SUPABASE_KEY, q, qLower, sapWords }) {
+  let aliasCandidates = []
+
+  for (const word of sapWords.slice(0, 6)) {
+    const rows = await supabaseGet(
+      `${SUPABASE_URL}/rest/v1/sap_aliases?alias.ilike.*${encodeURIComponent(word)}*&select=*`,
+      SUPABASE_KEY
+    )
+    aliasCandidates.push(...rows)
+  }
+
+  aliasCandidates = dedupeBy(aliasCandidates, x => `${x.object_type}_${x.tech_name}_${x.alias}`)
+
+  if (!aliasCandidates.length) return null
+
+  const scoredAliases = aliasCandidates
+    .map(a => ({
+      ...a,
+      _score: scoreAliasMatch(a, qLower),
+    }))
+    .sort((a, b) => b._score - a._score)
+
+  const bestAlias = scoredAliases[0]
+  if (!bestAlias || bestAlias._score < 0.45) return null
+
+  const objectRows = await supabaseGet(
+    `${SUPABASE_URL}/rest/v1/sap_objects?tech_name=eq.${encodeURIComponent(bestAlias.tech_name)}&object_type=eq.${encodeURIComponent(bestAlias.object_type)}&select=*`,
+    SUPABASE_KEY
+  )
+
+  const obj = objectRows?.[0]
+  if (!obj) return null
+
+  return {
+    confidence: bestAlias._score,
+    intent: 'REFERENCE',
+    match: obj,
+    matches: [],
+    via_alias: bestAlias.alias,
+  }
+}
+
+function scoreAliasMatch(aliasRow, qLower) {
+  let score = 0
+  const alias = (aliasRow.alias || '').toLowerCase()
+
+  if (qLower.includes(alias)) score += 0.75
+
+  const words = qLower.split(/\s+/)
+  for (const w of words) {
+    if (alias.includes(w)) score += 0.08
+  }
+
+  return Math.min(score, 0.99)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────────────────────────────────────
+async function supabaseGet(url, key) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+      },
+    })
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
+function dedupeBy(arr, keyFn) {
+  const seen = new Set()
+  const out = []
+
+  for (const item of arr) {
+    const k = keyFn(item)
+    if (!seen.has(k)) {
+      seen.add(k)
+      out.push(item)
+    }
+  }
+
+  return out
 }
