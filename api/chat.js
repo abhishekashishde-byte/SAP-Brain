@@ -1,8 +1,8 @@
-// api/chat.js — v19 FULL STABLE LOOKUP-FIRST
+// api/chat.js — v20 FINAL ROUTING FIX
 // DB first + Gemini second + Claude only last for lookup questions
 // Groq only for conceptual/process questions
+// FIX: removes "previousClaude" sticky routing bug
 // No validator
-// Logs included for routing visibility
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -127,10 +127,7 @@ function guardAnswer(answer) {
 // 7. GROQ CALL
 // ─────────────────────────────────────────────────────────────────────────────
 async function callGroq(systemPrompt, messages, maxTokens = 700) {
-  if (!process.env.GROQ_API_KEY) {
-    console.log('GROQ SKIPPED: no API key')
-    return null
-  }
+  if (!process.env.GROQ_API_KEY) return null
 
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -148,15 +145,9 @@ async function callGroq(systemPrompt, messages, maxTokens = 700) {
     })
 
     const data = await res.json()
-
-    if (!res.ok) {
-      console.error('GROQ ERROR:', data)
-      return null
-    }
-
+    if (!res.ok) return null
     return data.choices?.[0]?.message?.content?.trim() || null
-  } catch (err) {
-    console.error('GROQ CALL ERROR:', err.message)
+  } catch {
     return null
   }
 }
@@ -166,11 +157,7 @@ async function callGroq(systemPrompt, messages, maxTokens = 700) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function callGemini(promptText, maxOutputTokens = 400) {
   const key = process.env.GEMINI_API_KEY
-
-  if (!key) {
-    console.log('GEMINI SKIPPED: no API key')
-    return null
-  }
+  if (!key) return null
 
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
@@ -187,8 +174,7 @@ async function callGemini(promptText, maxOutputTokens = 400) {
 
     const data = await res.json()
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null
-  } catch (err) {
-    console.error('GEMINI CALL ERROR:', err.message)
+  } catch {
     return null
   }
 }
@@ -197,10 +183,7 @@ async function callGemini(promptText, maxOutputTokens = 400) {
 // 9. CLAUDE CALL
 // ─────────────────────────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, messages) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.log('CLAUDE SKIPPED: no API key')
-    return null
-  }
+  if (!process.env.ANTHROPIC_API_KEY) return null
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -220,14 +203,13 @@ async function callClaude(systemPrompt, messages) {
 
     const data = await res.json()
     return data.content?.[0]?.text?.trim() || null
-  } catch (err) {
-    console.error('CLAUDE CALL ERROR:', err.message)
+  } catch {
     return null
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. GROQ EXPLANATION (ONLY FOR NON-LOOKUP QUESTIONS)
+// 10. GROQ EXPLANATION (NON-LOOKUP ONLY)
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqExplainOnly(question) {
   const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
@@ -239,18 +221,15 @@ CRITICAL RULES:
 - Do NOT give Fiori app names
 - Do NOT invent SAP facts
 - Keep it concise
-- Max 5 bullets or short paragraphs
 
 Question:
-${question}
-
-Return only the explanation.`
+${question}`
 
   return await callGroq(prompt, [{ role: 'user', content: question }], 350)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 11. GEMINI NUANCE (ONLY FOR NON-LOOKUP QUESTIONS)
+// 11. GEMINI NUANCE (NON-LOOKUP ONLY)
 // ─────────────────────────────────────────────────────────────────────────────
 async function geminiNuance(question) {
   const prompt = `You are an SAP S/4HANA assistant.
@@ -274,7 +253,7 @@ ${question}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 12. GEMINI LOOKUP (FOR TABLE / FIELD / TCODE / APP QUESTIONS)
+// 12. GEMINI LOOKUP
 // ─────────────────────────────────────────────────────────────────────────────
 async function geminiLookup(question) {
   const prompt = `You are an SAP lookup assistant.
@@ -299,7 +278,7 @@ ${question}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. GROQ MERGE (ONLY FOR NON-LOOKUP QUESTIONS)
+// 13. GROQ MERGE (NON-LOOKUP ONLY)
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqStrictMerge(question, explanation, dbFacts, nuance) {
   const mergePrompt = `You are a formatter that merges SAP answer parts.
@@ -365,24 +344,20 @@ async function saveCorrectionMemory({ userId, module, topic, userMessage, previo
         fact,
       }),
     })
-  } catch (err) {
-    console.error('saveCorrectionMemory error:', err.message)
-  }
+  } catch {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  console.log('WANI CHAT VERSION = V19 LOOKUP-FIRST')
+  console.log('WANI CHAT VERSION = V20 FINAL')
 
   if (req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' })
 
   const { messages, tone='balanced', userName, userId, module, topic } = req.body
   const lastMsg = messages[messages.length-1]?.content || ''
   const lastAIMsg = [...messages].reverse().find(m => m.role === 'assistant')?.content || ''
-
-  console.log('QUESTION:', lastMsg)
 
   const previousAssistantMessage =
     [...messages].reverse().find((m, idx) => m.role === 'assistant' && idx > 0)?.content || lastAIMsg
@@ -400,10 +375,7 @@ export default async function handler(req, res) {
   const intent = classifyIntent(lastMsg)
   const complex = isComplexQuestion(lastMsg)
   const correcting = isCorrecting(lastMsg)
-  const previousClaude = lastAIMsg.includes('_✦ Claude_')
   const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
-
-  console.log('ROUTING:', { intent, complex, correcting, previousClaude, isStrictLookup })
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -413,11 +385,8 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-    // ───────────────────────────────────────────────────────────────────────
     // STEP 1 — DB FIRST
-    // ───────────────────────────────────────────────────────────────────────
     const ref = await callReferenceSearch(lastMsg)
-    console.log('REFERENCE SEARCH RESULT:', JSON.stringify(ref))
 
     let dbAnswer = null
     let dbHit = false
@@ -439,53 +408,33 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log('DB HIT:', dbHit)
-    console.log('DB ANSWER:', dbAnswer)
-
-    // ───────────────────────────────────────────────────────────────────────
     // STEP 2 — STRICT LOOKUP FLOW
-    // table / field / tcode / app → NO GROQ FIRST
-    // ───────────────────────────────────────────────────────────────────────
     if (isStrictLookup) {
-      console.log('STRICT LOOKUP FLOW START')
-
-      // 2A. Database first
+      // DB first
       if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
-        console.log('PATH USED: DATABASE')
-
         const output = withSource(guardAnswer(dbAnswer), 'Database')
         send({ type:'chunk', text: output })
         send({ type:'done', model:'database', full: output })
         return
       }
 
-      // 2B. Gemini second
+      // Gemini second
       const lookupAnswer = await geminiLookup(lastMsg)
-      console.log('GEMINI LOOKUP RESULT:', lookupAnswer)
-
       if (lookupAnswer && lookupAnswer.trim().length > 10) {
-        console.log('PATH USED: GEMINI')
-
         const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
         send({ type:'chunk', text: output })
         send({ type:'done', model:'gemini', full: output })
         return
       }
 
-      // 2C. Only then Claude
-      console.log('STRICT LOOKUP FALLBACK TO CLAUDE')
+      // Only then Claude
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // STEP 3 — CHEAP PIPELINE FOR NON-LOOKUP QUESTIONS
-    // ───────────────────────────────────────────────────────────────────────
+    // STEP 3 — NON-LOOKUP CHEAP PIPELINE
     const shouldUseCheapPipeline =
       !complex &&
       !correcting &&
-      !previousClaude &&
       !isStrictLookup
-
-    console.log('SHOULD USE CHEAP PIPELINE:', shouldUseCheapPipeline)
 
     if (shouldUseCheapPipeline) {
       const [explanation, nuance] = await Promise.all([
@@ -493,12 +442,7 @@ export default async function handler(req, res) {
         geminiNuance(lastMsg),
       ])
 
-      console.log('GROQ EXPLANATION:', explanation)
-      console.log('GEMINI NUANCE:', nuance)
-
       if (dbHit && dbAnswer) {
-        console.log('PATH USED: GROQ + DB + GEMINI')
-
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
         const output = withSource(finalAnswer, 'Groq + Database + Gemini')
@@ -509,8 +453,6 @@ export default async function handler(req, res) {
       }
 
       if (explanation || nuance) {
-        console.log('PATH USED: GROQ + GEMINI')
-
         const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
 
@@ -525,11 +467,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // ───────────────────────────────────────────────────────────────────────
     // STEP 4 — CLAUDE ONLY LAST
-    // ───────────────────────────────────────────────────────────────────────
-    console.log('PATH USED: CLAUDE FALLBACK')
-
     const systemPrompt =
       BASE_SYSTEM_PROMPT +
       (TONE_ADDITIONS[tone] || '') +
@@ -559,9 +497,8 @@ IMPORTANT:
     send({ type:'error', error:'No model available' })
 
   } catch (err) {
-    console.error('CHAT HANDLER ERROR:', err)
     send({ type:'error', error: err.message })
   } finally {
     res.end()
   }
-                                                           }
+              }
