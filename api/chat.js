@@ -1,3 +1,4 @@
+```javascript
 // api/chat.js — CLEAN VERSION (NO DEBUG IN CHAT)
 
 import {
@@ -7,13 +8,17 @@ import {
 } from './_shared.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. INTENT CLASSIFIER
+// 1. INTENT CLASSIFIER (FIXED)
 // ─────────────────────────────────────────────────────────────────────────────
 function classifyIntent(q = '') {
   const text = q.toLowerCase()
 
   if (
-    text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bfield\b|\bstores\b|\bwhere is\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b|\btble\b/)
+    text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bfield\b|\bstores\b|\bwhere is\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b|\btble\b/) ||
+    // Add these patterns for direct SAP object queries:
+    text.match(/\bwhat is\b.*\b[A-Z]{3,8}\b/) ||  // "what is MKAL"
+    text.match(/\b[A-Z]{3,8}\b/) ||               // Direct codes like "MKAL", "EQUI"
+    text.match(/\bproduction version\b|\bequipment\b|\bstorage location\b|\bproduction order\b|\brouting\b|\bbom\b|\bmaterial master\b|\bnotification\b|\bfunctional location\b/)
   ) return 'REFERENCE'
 
   if (text.match(/\bdifference\b|\bvs\b|\bcompare\b/)) return 'COMPARISON'
@@ -371,100 +376,4 @@ export default async function handler(req, res) {
           dbAnswer = `**Relevant SAP objects:**\n\n` +
             ref.matches.slice(0, 6).map(o => `- \`${o.tech_name}\` — ${o.title || o.short_desc || ''}`).join('\n')
         }
-      } else if (ref.match) {
-        const related = await fetchRelated(ref.match)
-        dbAnswer = formatReferenceAnswer(intent, ref.match, related)
-      }
-    }
-
-    // STEP 3 — STRICT LOOKUP FLOW
-    if (isStrictLookup) {
-      if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
-        const output = withSource(guardAnswer(dbAnswer), 'Database')
-        send({ type:'chunk', text: output })
-        send({ type:'done', model:'database', full: output })
-        return
-      }
-
-      const lookupAnswer = await geminiLookup(lastMsg)
-
-      if (lookupAnswer && lookupAnswer.trim().length > 10) {
-        const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
-        send({ type:'chunk', text: output })
-        send({ type:'done', model:'gemini', full: output })
-        return
-      }
-    }
-
-    // STEP 4 — NON-LOOKUP CHEAP PIPELINE
-    const shouldUseCheapPipeline =
-      !complex &&
-      !correcting &&
-      !isStrictLookup
-
-    if (shouldUseCheapPipeline) {
-      const [explanation, nuance] = await Promise.all([
-        groqExplainOnly(lastMsg),
-        geminiNuance(lastMsg),
-      ])
-
-      if (dbHit && dbAnswer) {
-        const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
-        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
-        const output = withSource(finalAnswer, 'Groq + Database + Gemini')
-
-        send({ type:'chunk', text: output })
-        send({ type:'done', model:'groq+db+gemini', full: output })
-        return
-      }
-
-      if (explanation || nuance) {
-        const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
-        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
-
-        if (finalAnswer && finalAnswer.length > 20) {
-          const source = nuance ? 'Groq + Gemini' : 'Groq'
-          const output = withSource(finalAnswer, source)
-
-          send({ type:'chunk', text: output })
-          send({ type:'done', model:'groq+gemini', full: output })
-          return
-        }
-      }
-    }
-
-    // STEP 5 — CLAUDE LAST
-    const systemPrompt =
-      BASE_SYSTEM_PROMPT +
-      (TONE_ADDITIONS[tone] || '') +
-      (userName ? `\n\nUser name: ${userName}` : '')
-
-    const { anonymised } = tokenize(messages)
-
-    const claudePrompt = systemPrompt + `
-
-You are the high-accuracy fallback for difficult SAP consultant questions.
-Use deeper reasoning only when needed.
-Avoid unnecessary long answers.
-
-IMPORTANT:
-- If user is asking a lookup-style SAP question, answer directly and specifically.
-- Do NOT drift into generic definitions if the user is clearly asking for a table / field / object.`
-
-    const claudeAnswer = await callClaude(claudePrompt, anonymised)
-
-    if (claudeAnswer) {
-      const output = withSource(guardAnswer(claudeAnswer), 'Claude')
-      send({ type:'chunk', text: output })
-      send({ type:'done', model:'claude', full: output })
-      return
-    }
-
-    send({ type:'error', error:'No model available' })
-
-  } catch (err) {
-    send({ type:'error', error: err.message })
-  } finally {
-    res.end()
-  }
-}
+      
