@@ -1,8 +1,8 @@
-// api/chat.js — v13: DB + Groq + Gemini + Groq Merge + Claude fallback + source label + fact validator
+// api/chat.js — v14 FULL: DB + Groq + Gemini + Groq Merge + Claude fallback + source label + fact validator + correction memory
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
-  isComplexQuestion, isUltraSimple, isCorrecting,
+  isComplexQuestion, isCorrecting,
   tokenize,
 } from './_shared.js'
 
@@ -357,7 +357,6 @@ async function validateAndCleanAnswer(answer) {
     validateTables(tables),
   ])
 
-  // remove invalid T-codes
   for (const tcode of tcodes) {
     if (!validTcodes.has(tcode)) {
       const regex = new RegExp(`\\b${tcode}\\b`, 'g')
@@ -365,7 +364,6 @@ async function validateAndCleanAnswer(answer) {
     }
   }
 
-  // remove invalid tables
   for (const table of tables) {
     if (!validTables.has(table)) {
       const regex = new RegExp(`\\b${table}\\b`, 'g')
@@ -373,7 +371,6 @@ async function validateAndCleanAnswer(answer) {
     }
   }
 
-  // clean ugly duplicates after replacement
   cleaned = cleaned
     .replace(/\[unverified\](,\s*\[unverified\])+/g, '[unverified]')
     .replace(/\(\s*\[unverified\]\s*\)/g, '')
@@ -384,14 +381,71 @@ async function validateAndCleanAnswer(answer) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 14. CORRECTION MEMORY SAVE
+// ─────────────────────────────────────────────────────────────────────────────
+function isCorrectionMessage(text = '') {
+  const t = text.toLowerCase()
+
+  return (
+    t.includes('wrong') ||
+    t.includes('not correct') ||
+    t.includes('incorrect') ||
+    t.includes('no no') ||
+    t.includes('i asked for') ||
+    t.includes('i meant') ||
+    t.includes('not this') ||
+    t.includes('that is not what i asked')
+  )
+}
+
+async function saveCorrectionMemory({ userId, module, topic, userMessage, previousAnswer }) {
+  try {
+    if (!userId || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SUPABASE_URL) return
+
+    const fact = `User correction: ${userMessage}. Previous assistant answer was: ${previousAnswer || 'N/A'}`
+
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/sap_memories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        module: module || 'General',
+        topic: topic || 'Corrections',
+        fact,
+      }),
+    })
+  } catch (err) {
+    console.error('saveCorrectionMemory error:', err.message)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' })
 
-  const { messages, tone='balanced', userName } = req.body
+  const { messages, tone='balanced', userName, userId, module, topic } = req.body
   const lastMsg = messages[messages.length-1]?.content || ''
   const lastAIMsg = [...messages].reverse().find(m => m.role === 'assistant')?.content || ''
+
+  const previousAssistantMessage =
+    [...messages].reverse().find((m, idx) => m.role === 'assistant' && idx > 0)?.content || lastAIMsg
+
+  if (isCorrectionMessage(lastMsg)) {
+    await saveCorrectionMemory({
+      userId,
+      module,
+      topic,
+      userMessage: lastMsg,
+      previousAnswer: previousAssistantMessage,
+    })
+  }
 
   const intent = classifyIntent(lastMsg)
   const complex = isComplexQuestion(lastMsg)
@@ -406,9 +460,7 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-    // ───────────────────────────────────────────────────────────────────────
     // STEP 1 — DB FIRST
-    // ───────────────────────────────────────────────────────────────────────
     const ref = await callReferenceSearch(lastMsg)
 
     let dbAnswer = null
@@ -431,9 +483,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // ───────────────────────────────────────────────────────────────────────
     // STEP 2 — CHEAP PIPELINE
-    // ───────────────────────────────────────────────────────────────────────
     const shouldUseCheapPipeline =
       !complex &&
       !correcting &&
@@ -471,9 +521,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // ───────────────────────────────────────────────────────────────────────
     // STEP 3 — DB + Gemini direct fallback
-    // ───────────────────────────────────────────────────────────────────────
     if (dbHit && dbAnswer) {
       const refined = await callGemini(`Refine this SAP answer for consultant readability. Do not add new facts.\n\n${dbAnswer}`, 300)
       let finalAnswer = guardAnswer(refined || dbAnswer)
@@ -487,9 +535,7 @@ export default async function handler(req, res) {
       return
     }
 
-    // ───────────────────────────────────────────────────────────────────────
     // STEP 4 — Claude only last
-    // ───────────────────────────────────────────────────────────────────────
     const systemPrompt =
       BASE_SYSTEM_PROMPT +
       (TONE_ADDITIONS[tone] || '') +
