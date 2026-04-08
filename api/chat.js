@@ -1,10 +1,4 @@
-// api/chat.js — v22 GROQ NORMALIZER + DEBUG
-// Flow:
-// 1. Groq normalizes messy SAP question into better DB search terms
-// 2. DB search tries with normalized query
-// 3. Gemini lookup if DB weak
-// 4. Claude only last
-// Debug stays visible in answer
+// api/chat.js — CLEAN VERSION (NO DEBUG IN CHAT)
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -31,24 +25,11 @@ function classifyIntent(q = '') {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. SOURCE LABEL + DEBUG
+// 2. SOURCE LABEL
 // ─────────────────────────────────────────────────────────────────────────────
-function withSource(answer, sourceLabel, debugBlock = '') {
+function withSource(answer, sourceLabel) {
   const body = answer?.trim() || ''
-  return `${debugBlock}${body}\n\n_✦ ${sourceLabel}_`
-}
-
-function buildDebugBlock(debug) {
-  return `[ROUTING DEBUG]
-intent: ${debug.intent || '-'}
-normalized_query: ${debug.normalized_query || '-'}
-db: ${debug.db || '-'}
-gemini_lookup: ${debug.gemini_lookup || '-'}
-cheap_pipeline: ${debug.cheap_pipeline || '-'}
-fallback: ${debug.fallback || '-'}
-reason: ${debug.reason || '-'}
-
-`
+  return `${body}\n\n_✦ ${sourceLabel}_`
 }
 
 function guardAnswer(answer) {
@@ -142,8 +123,7 @@ async function callClaude(systemPrompt, messages) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. GROQ NORMALIZER (NEW)
-// only converts messy user question into SAP-friendly DB query
+// 6. GROQ NORMALIZER
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqNormalizeQuery(question) {
   const prompt = `You are an SAP search normalizer.
@@ -356,16 +336,6 @@ export default async function handler(req, res) {
   const correcting = isCorrecting(lastMsg)
   const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
 
-  const debug = {
-    intent,
-    normalized_query: '-',
-    db: 'NOT_TRIED',
-    gemini_lookup: 'NOT_TRIED',
-    cheap_pipeline: 'NOT_TRIED',
-    fallback: 'NONE',
-    reason: '-',
-  }
-
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
@@ -381,9 +351,6 @@ export default async function handler(req, res) {
       const normalized = await groqNormalizeQuery(lastMsg)
       if (normalized && normalized.length > 2) {
         dbSearchQuestion = normalized
-        debug.normalized_query = normalized
-      } else {
-        debug.normalized_query = lastMsg
       }
     }
 
@@ -395,7 +362,6 @@ export default async function handler(req, res) {
 
     if (ref && ref.confidence >= 0.40 && (ref.match || (ref.matches && ref.matches.length))) {
       dbHit = true
-      debug.db = 'HIT'
 
       if (ref.matches?.length) {
         if (ref.intent === 'MULTI_FIELD_LOOKUP') {
@@ -409,19 +375,12 @@ export default async function handler(req, res) {
         const related = await fetchRelated(ref.match)
         dbAnswer = formatReferenceAnswer(intent, ref.match, related)
       }
-    } else {
-      debug.db = 'MISS'
     }
 
     // STEP 3 — STRICT LOOKUP FLOW
     if (isStrictLookup) {
-      debug.cheap_pipeline = 'SKIPPED (strict lookup)'
-
       if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
-        debug.fallback = 'DATABASE'
-        debug.reason = 'DB returned usable answer after Groq normalization'
-
-        const output = withSource(guardAnswer(dbAnswer), 'Database', buildDebugBlock(debug))
+        const output = withSource(guardAnswer(dbAnswer), 'Database')
         send({ type:'chunk', text: output })
         send({ type:'done', model:'database', full: output })
         return
@@ -430,18 +389,10 @@ export default async function handler(req, res) {
       const lookupAnswer = await geminiLookup(lastMsg)
 
       if (lookupAnswer && lookupAnswer.trim().length > 10) {
-        debug.gemini_lookup = 'HIT'
-        debug.fallback = 'GEMINI'
-        debug.reason = 'DB miss, Gemini lookup succeeded'
-
-        const output = withSource(guardAnswer(lookupAnswer), 'Gemini', buildDebugBlock(debug))
+        const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
         send({ type:'chunk', text: output })
         send({ type:'done', model:'gemini', full: output })
         return
-      } else {
-        debug.gemini_lookup = 'MISS'
-        debug.fallback = 'CLAUDE'
-        debug.reason = 'DB miss + Gemini lookup miss'
       }
     }
 
@@ -452,20 +403,15 @@ export default async function handler(req, res) {
       !isStrictLookup
 
     if (shouldUseCheapPipeline) {
-      debug.cheap_pipeline = 'RUNNING'
-
       const [explanation, nuance] = await Promise.all([
         groqExplainOnly(lastMsg),
         geminiNuance(lastMsg),
       ])
 
       if (dbHit && dbAnswer) {
-        debug.fallback = 'GROQ + DB + GEMINI'
-        debug.reason = 'Cheap conceptual pipeline succeeded with DB'
-
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
-        const output = withSource(finalAnswer, 'Groq + Database + Gemini', buildDebugBlock(debug))
+        const output = withSource(finalAnswer, 'Groq + Database + Gemini')
 
         send({ type:'chunk', text: output })
         send({ type:'done', model:'groq+db+gemini', full: output })
@@ -473,32 +419,21 @@ export default async function handler(req, res) {
       }
 
       if (explanation || nuance) {
-        debug.fallback = 'GROQ + GEMINI'
-        debug.reason = 'Cheap conceptual pipeline succeeded'
-
         const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
 
         if (finalAnswer && finalAnswer.length > 20) {
           const source = nuance ? 'Groq + Gemini' : 'Groq'
-          const output = withSource(finalAnswer, source, buildDebugBlock(debug))
+          const output = withSource(finalAnswer, source)
 
           send({ type:'chunk', text: output })
           send({ type:'done', model:'groq+gemini', full: output })
           return
         }
       }
-
-      debug.reason = 'Cheap conceptual pipeline returned weak/empty answer'
-    } else if (!isStrictLookup) {
-      debug.cheap_pipeline = 'SKIPPED'
-      debug.reason = complex ? 'Question classified as complex' : correcting ? 'Correction message' : 'Skipped by routing'
     }
 
     // STEP 5 — CLAUDE LAST
-    debug.fallback = 'CLAUDE'
-    if (debug.reason === '-') debug.reason = 'Final fallback'
-
     const systemPrompt =
       BASE_SYSTEM_PROMPT +
       (TONE_ADDITIONS[tone] || '') +
@@ -519,7 +454,7 @@ IMPORTANT:
     const claudeAnswer = await callClaude(claudePrompt, anonymised)
 
     if (claudeAnswer) {
-      const output = withSource(guardAnswer(claudeAnswer), 'Claude', buildDebugBlock(debug))
+      const output = withSource(guardAnswer(claudeAnswer), 'Claude')
       send({ type:'chunk', text: output })
       send({ type:'done', model:'claude', full: output })
       return
