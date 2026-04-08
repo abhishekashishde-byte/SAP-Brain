@@ -1,8 +1,5 @@
-// api/chat.js — v20 FINAL ROUTING FIX
-// DB first + Gemini second + Claude only last for lookup questions
-// Groq only for conceptual/process questions
-// FIX: removes "previousClaude" sticky routing bug
-// No validator
+// api/chat.js — v21 ROUTING DEBUG VISIBLE
+// Shows DB / Gemini / Claude routing reasons directly in chat output
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -31,9 +28,21 @@ function classifyIntent(q = '') {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. SOURCE LABEL
 // ─────────────────────────────────────────────────────────────────────────────
-function withSource(answer, sourceLabel) {
-  if (!answer) return `_✦ ${sourceLabel}_`
-  return `${answer.trim()}\n\n_✦ ${sourceLabel}_`
+function withSource(answer, sourceLabel, debugBlock = '') {
+  const body = answer?.trim() || ''
+  return `${debugBlock}${body}\n\n_✦ ${sourceLabel}_`
+}
+
+function buildDebugBlock(debug) {
+  return `[ROUTING DEBUG]
+intent: ${debug.intent || '-'}
+db: ${debug.db || '-'}
+gemini_lookup: ${debug.gemini_lookup || '-'}
+cheap_pipeline: ${debug.cheap_pipeline || '-'}
+fallback: ${debug.fallback || '-'}
+reason: ${debug.reason || '-'}
+
+`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,10 +54,7 @@ async function callReferenceSearch(question) {
       process.env.BASE_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
 
-    if (!baseUrl) {
-      console.log('REFERENCE SEARCH SKIPPED: no BASE_URL / VERCEL_URL')
-      return null
-    }
+    if (!baseUrl) return null
 
     const res = await fetch(`${baseUrl}/api/reference-search`, {
       method: 'POST',
@@ -56,10 +62,8 @@ async function callReferenceSearch(question) {
       body: JSON.stringify({ question }),
     })
 
-    const data = await res.json()
-    return data
-  } catch (err) {
-    console.error('REFERENCE SEARCH ERROR:', err.message)
+    return await res.json()
+  } catch {
     return null
   }
 }
@@ -81,8 +85,7 @@ async function fetchRelated(object) {
 
     const data = await res.json()
     return Array.isArray(data) ? data : []
-  } catch (err) {
-    console.error('FETCH RELATED ERROR:', err.message)
+  } catch {
     return []
   }
 }
@@ -209,7 +212,7 @@ async function callClaude(systemPrompt, messages) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. GROQ EXPLANATION (NON-LOOKUP ONLY)
+// 10. GROQ EXPLANATION
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqExplainOnly(question) {
   const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
@@ -229,7 +232,7 @@ ${question}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 11. GEMINI NUANCE (NON-LOOKUP ONLY)
+// 11. GEMINI NUANCE
 // ─────────────────────────────────────────────────────────────────────────────
 async function geminiNuance(question) {
   const prompt = `You are an SAP S/4HANA assistant.
@@ -278,7 +281,7 @@ ${question}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 13. GROQ MERGE (NON-LOOKUP ONLY)
+// 13. GROQ MERGE
 // ─────────────────────────────────────────────────────────────────────────────
 async function groqStrictMerge(question, explanation, dbFacts, nuance) {
   const mergePrompt = `You are a formatter that merges SAP answer parts.
@@ -306,76 +309,27 @@ ${nuance || ''}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 14. CORRECTION MEMORY
-// ─────────────────────────────────────────────────────────────────────────────
-function isCorrectionMessage(text = '') {
-  const t = text.toLowerCase()
-
-  return (
-    t.includes('wrong') ||
-    t.includes('not correct') ||
-    t.includes('incorrect') ||
-    t.includes('no no') ||
-    t.includes('i asked for') ||
-    t.includes('i meant') ||
-    t.includes('not this') ||
-    t.includes('that is not what i asked')
-  )
-}
-
-async function saveCorrectionMemory({ userId, module, topic, userMessage, previousAnswer }) {
-  try {
-    if (!userId || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SUPABASE_URL) return
-
-    const fact = `User correction: ${userMessage}. Previous assistant answer was: ${previousAnswer || 'N/A'}`
-
-    await fetch(`${process.env.SUPABASE_URL}/rest/v1/sap_memories`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({
-        user_id: userId,
-        module: module || 'General',
-        topic: topic || 'Corrections',
-        fact,
-      }),
-    })
-  } catch {}
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // MAIN HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  console.log('WANI CHAT VERSION = V20 FINAL')
-
   if (req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' })
 
-  const { messages, tone='balanced', userName, userId, module, topic } = req.body
+  const { messages, tone='balanced', userName } = req.body
   const lastMsg = messages[messages.length-1]?.content || ''
-  const lastAIMsg = [...messages].reverse().find(m => m.role === 'assistant')?.content || ''
-
-  const previousAssistantMessage =
-    [...messages].reverse().find((m, idx) => m.role === 'assistant' && idx > 0)?.content || lastAIMsg
-
-  if (isCorrectionMessage(lastMsg)) {
-    await saveCorrectionMemory({
-      userId,
-      module,
-      topic,
-      userMessage: lastMsg,
-      previousAnswer: previousAssistantMessage,
-    })
-  }
 
   const intent = classifyIntent(lastMsg)
   const complex = isComplexQuestion(lastMsg)
   const correcting = isCorrecting(lastMsg)
   const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
+
+  const debug = {
+    intent,
+    db: 'NOT_TRIED',
+    gemini_lookup: 'NOT_TRIED',
+    cheap_pipeline: 'NOT_TRIED',
+    fallback: 'NONE',
+    reason: '-',
+  }
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -393,6 +347,7 @@ export default async function handler(req, res) {
 
     if (ref && ref.confidence >= 0.40 && (ref.match || (ref.matches && ref.matches.length))) {
       dbHit = true
+      debug.db = 'HIT'
 
       if (ref.matches?.length) {
         if (ref.intent === 'MULTI_FIELD_LOOKUP') {
@@ -406,28 +361,40 @@ export default async function handler(req, res) {
         const related = await fetchRelated(ref.match)
         dbAnswer = formatReferenceAnswer(intent, ref.match, related)
       }
+    } else {
+      debug.db = 'MISS'
     }
 
     // STEP 2 — STRICT LOOKUP FLOW
     if (isStrictLookup) {
-      // DB first
+      debug.cheap_pipeline = 'SKIPPED (strict lookup)'
+
       if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
-        const output = withSource(guardAnswer(dbAnswer), 'Database')
+        debug.fallback = 'DATABASE'
+        debug.reason = 'DB returned usable answer'
+
+        const output = withSource(guardAnswer(dbAnswer), 'Database', buildDebugBlock(debug))
         send({ type:'chunk', text: output })
         send({ type:'done', model:'database', full: output })
         return
       }
 
-      // Gemini second
       const lookupAnswer = await geminiLookup(lastMsg)
+
       if (lookupAnswer && lookupAnswer.trim().length > 10) {
-        const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
+        debug.gemini_lookup = 'HIT'
+        debug.fallback = 'GEMINI'
+        debug.reason = 'DB missed, Gemini lookup succeeded'
+
+        const output = withSource(guardAnswer(lookupAnswer), 'Gemini', buildDebugBlock(debug))
         send({ type:'chunk', text: output })
         send({ type:'done', model:'gemini', full: output })
         return
+      } else {
+        debug.gemini_lookup = 'MISS'
+        debug.fallback = 'CLAUDE'
+        debug.reason = 'DB miss + Gemini lookup miss'
       }
-
-      // Only then Claude
     }
 
     // STEP 3 — NON-LOOKUP CHEAP PIPELINE
@@ -437,15 +404,20 @@ export default async function handler(req, res) {
       !isStrictLookup
 
     if (shouldUseCheapPipeline) {
+      debug.cheap_pipeline = 'RUNNING'
+
       const [explanation, nuance] = await Promise.all([
         groqExplainOnly(lastMsg),
         geminiNuance(lastMsg),
       ])
 
       if (dbHit && dbAnswer) {
+        debug.fallback = 'GROQ + DB + GEMINI'
+        debug.reason = 'Cheap conceptual pipeline succeeded with DB'
+
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
-        const output = withSource(finalAnswer, 'Groq + Database + Gemini')
+        const output = withSource(finalAnswer, 'Groq + Database + Gemini', buildDebugBlock(debug))
 
         send({ type:'chunk', text: output })
         send({ type:'done', model:'groq+db+gemini', full: output })
@@ -453,21 +425,32 @@ export default async function handler(req, res) {
       }
 
       if (explanation || nuance) {
+        debug.fallback = 'GROQ + GEMINI'
+        debug.reason = 'Cheap conceptual pipeline succeeded'
+
         const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
 
         if (finalAnswer && finalAnswer.length > 20) {
           const source = nuance ? 'Groq + Gemini' : 'Groq'
-          const output = withSource(finalAnswer, source)
+          const output = withSource(finalAnswer, source, buildDebugBlock(debug))
 
           send({ type:'chunk', text: output })
           send({ type:'done', model:'groq+gemini', full: output })
           return
         }
       }
+
+      debug.reason = 'Cheap conceptual pipeline returned weak/empty answer'
+    } else if (!isStrictLookup) {
+      debug.cheap_pipeline = 'SKIPPED'
+      debug.reason = complex ? 'Question classified as complex' : correcting ? 'Correction message' : 'Skipped by routing'
     }
 
     // STEP 4 — CLAUDE ONLY LAST
+    debug.fallback = 'CLAUDE'
+    if (debug.reason === '-') debug.reason = 'Final fallback'
+
     const systemPrompt =
       BASE_SYSTEM_PROMPT +
       (TONE_ADDITIONS[tone] || '') +
@@ -488,7 +471,7 @@ IMPORTANT:
     const claudeAnswer = await callClaude(claudePrompt, anonymised)
 
     if (claudeAnswer) {
-      const output = withSource(guardAnswer(claudeAnswer), 'Claude')
+      const output = withSource(guardAnswer(claudeAnswer), 'Claude', buildDebugBlock(debug))
       send({ type:'chunk', text: output })
       send({ type:'done', model:'claude', full: output })
       return
@@ -501,4 +484,4 @@ IMPORTANT:
   } finally {
     res.end()
   }
-              }
+}
