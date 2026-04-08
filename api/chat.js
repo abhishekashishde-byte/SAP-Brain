@@ -1,29 +1,37 @@
-// api/chat.js — v11: DB → Gemini → Groq → Claude (correct cost-first routing)
+// api/chat.js — v12: DB + Groq + Gemini + Groq Merge + Claude fallback + source label always
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
   isComplexQuestion, isUltraSimple, isCorrecting,
-  tokenize, detokenize,
+  tokenize,
 } from './_shared.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. INTENT CLASSIFIER
 // ─────────────────────────────────────────────────────────────────────────────
-function classifyIntent(q) {
+function classifyIntent(q = '') {
   const text = q.toLowerCase()
 
   if (text.match(/\bfield\b|\bstores\b|\bwhere is\b/)) return 'FIELD_LOOKUP'
   if (text.match(/\bdifference\b|\bvs\b|\bcompare\b/)) return 'COMPARISON'
-  if (text.match(/\bconfig\b|\bspro\b|\bsetting\b/)) return 'CONFIG'
-  if (text.match(/\berror\b|\bdump\b|\bissue\b/)) return 'DEBUG'
-  if (text.match(/\bhow\b|\bprocess\b|\bflow\b/)) return 'PROCESS'
+  if (text.match(/\bconfig\b|\bspro\b|\bsetting\b|\bcustomizing\b/)) return 'CONFIG'
+  if (text.match(/\berror\b|\bdump\b|\bissue\b|\bnot working\b/)) return 'DEBUG'
+  if (text.match(/\bhow\b|\bprocess\b|\bflow\b|\bwhat is\b/)) return 'PROCESS'
   if (text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b/)) return 'REFERENCE'
 
   return 'GENERAL'
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. REFERENCE SEARCH
+// 2. SOURCE LABEL HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+function withSource(answer, sourceLabel) {
+  if (!answer) return `_✦ ${sourceLabel}_`
+  return `${answer.trim()}\n\n_✦ ${sourceLabel}_`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. REFERENCE SEARCH
 // ─────────────────────────────────────────────────────────────────────────────
 async function callReferenceSearch(question) {
   try {
@@ -46,7 +54,7 @@ async function callReferenceSearch(question) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. RELATED OBJECT EXPANSION
+// 4. RELATED OBJECT EXPANSION
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchRelated(object) {
   try {
@@ -68,22 +76,7 @@ async function fetchRelated(object) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. HALLUCINATION GUARD
-// ─────────────────────────────────────────────────────────────────────────────
-function guardAnswer(answer) {
-  if (!answer) return answer
-
-  let cleaned = answer
-
-  if (cleaned.includes('Z_') || cleaned.includes('Custom app')) {
-    cleaned = cleaned.replace(/Z_\w+/g, '[custom object]')
-  }
-
-  return cleaned
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. FORMATTER
+// 5. FORMAT DB OUTPUT
 // ─────────────────────────────────────────────────────────────────────────────
 function formatReferenceAnswer(intent, ref, related = []) {
   if (!ref) return ''
@@ -111,56 +104,65 @@ ${ref.short_desc || ''}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. GEMINI ENRICHMENT / FALLBACK
+// 6. HALLUCINATION GUARD
 // ─────────────────────────────────────────────────────────────────────────────
-async function callGemini(question, contextText, mode = 'answer') {
+function guardAnswer(answer) {
+  if (!answer) return answer
+
+  let cleaned = answer
+
+  // basic cleanup only
+  if (cleaned.includes('Z_') || cleaned.includes('Custom app')) {
+    cleaned = cleaned.replace(/Z_\w+/g, '[custom object]')
+  }
+
+  return cleaned.trim()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. GROQ CALL
+// ─────────────────────────────────────────────────────────────────────────────
+async function callGroq(systemPrompt, messages, maxTokens = 700) {
+  if (!process.env.GROQ_API_KEY) return null
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        messages: [{ role:'system', content:systemPrompt }, ...messages],
+      }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) return null
+    return data.choices?.[0]?.message?.content?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. GEMINI CALL
+// ─────────────────────────────────────────────────────────────────────────────
+async function callGemini(promptText, maxOutputTokens = 400) {
   const key = process.env.GEMINI_API_KEY
   if (!key) return null
-
-  let prompt = ''
-
-  if (mode === 'refine') {
-    prompt = `You are an SAP S/4HANA assistant.
-
-Refine this SAP answer for a consultant.
-Rules:
-- keep it concise
-- do not invent facts
-- do not add extra T-codes or tables unless obvious from input
-- keep it practical
-
-User question:
-${question}
-
-Base answer:
-${contextText}
-
-Return only the improved answer.`
-  } else {
-    prompt = `You are an SAP S/4HANA assistant.
-
-Answer this SAP question.
-Rules:
-- Be concise and practical
-- Mention tables / T-codes only if reasonably confident
-- Do NOT invent SAP objects
-- If uncertain, say so briefly
-- Max 8 bullets or short paragraphs
-
-Question:
-${question}
-
-Return only the answer.`
-  }
 
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
-          maxOutputTokens: 500,
+          maxOutputTokens,
           temperature: 0.2,
         },
       }),
@@ -174,63 +176,112 @@ Return only the answer.`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. GROQ
-// ─────────────────────────────────────────────────────────────────────────────
-async function callGroq(systemPrompt, messages, maxTokens = 900) {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type':'application/json',
-      'Authorization':`Bearer ${process.env.GROQ_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: maxTokens,
-      temperature: 0.2,
-      messages: [{ role:'system', content:systemPrompt }, ...messages],
-    }),
-  })
-
-  const data = await res.json()
-  if (!res.ok) throw new Error(data?.error?.message || 'Groq error')
-  return data.choices?.[0]?.message?.content || ''
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. CLAUDE
+// 9. CLAUDE CALL
 // ─────────────────────────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, messages) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1200,
-      system: systemPrompt,
-      messages,
-    }),
-  })
+  if (!process.env.ANTHROPIC_API_KEY) return null
 
-  const data = await res.json()
-  return data.content?.[0]?.text || ''
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 1200,
+        system: systemPrompt,
+        messages,
+      }),
+    })
+
+    const data = await res.json()
+    return data.content?.[0]?.text?.trim() || null
+  } catch {
+    return null
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. CORRECTION MEMORY HOOK (placeholder for future save)
+// 10. GROQ EXPLANATION LAYER (SAFE USE)
 // ─────────────────────────────────────────────────────────────────────────────
-function isLikelyCorrection(text = '') {
-  const t = text.toLowerCase()
-  return (
-    t.includes('wrong') ||
-    t.includes('no no') ||
-    t.includes('not correct') ||
-    t.includes('you are wrong') ||
-    t.includes('incorrect')
-  )
+async function groqExplainOnly(question) {
+  const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
+
+CRITICAL RULES:
+- Explain only the concept in plain SAP consultant language
+- Do NOT give T-codes
+- Do NOT give table names
+- Do NOT give Fiori app names
+- Do NOT invent SAP facts
+- Keep it concise
+- Max 5 bullets or short paragraphs
+
+Question:
+${question}
+
+Return only the explanation.`
+
+  return await callGroq(prompt, [{ role: 'user', content: question }], 350)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. GEMINI NUANCE LAYER
+// ─────────────────────────────────────────────────────────────────────────────
+async function geminiNuance(question) {
+  const prompt = `You are an SAP S/4HANA assistant.
+
+Provide only useful practical SAP nuance for this question.
+
+CRITICAL RULES:
+- Do NOT explain the full concept
+- Do NOT repeat generic definition
+- Focus only on practical options / caveats / system behavior
+- Mention T-codes or tables only if reasonably confident
+- If nothing useful, reply exactly: NO_NUANCE
+- Keep it short
+
+Question:
+${question}
+
+Return only the nuance.`
+
+  const out = await callGemini(prompt, 250)
+  if (!out || out.trim() === 'NO_NUANCE') return null
+  return out
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. GROQ STRICT MERGE (SAFE)
+// ─────────────────────────────────────────────────────────────────────────────
+async function groqStrictMerge(question, explanation, dbFacts, nuance) {
+  const mergePrompt = `You are a formatter that merges SAP answer parts.
+
+CRITICAL RULES:
+- Use ONLY the information provided
+- Do NOT add any new SAP facts
+- Do NOT invent T-codes, tables, Fiori apps, statuses, options, or fields
+- If something is missing, ignore it
+- Do NOT guess
+- Keep the answer concise and consultant-friendly
+- Structure naturally
+- Output only the final merged answer
+
+User question:
+${question}
+
+PART 1 — Explanation:
+${explanation || ''}
+
+PART 2 — Structured DB Facts:
+${dbFacts || ''}
+
+PART 3 — Practical Nuance:
+${nuance || ''}`
+
+  return await callGroq(mergePrompt, [{ role: 'user', content: question }], 500)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -246,7 +297,7 @@ export default async function handler(req, res) {
   const intent = classifyIntent(lastMsg)
   const complex = isComplexQuestion(lastMsg)
   const ultraSimple = isUltraSimple(lastMsg)
-  const correcting = isCorrecting(lastMsg) || isLikelyCorrection(lastMsg)
+  const correcting = isCorrecting(lastMsg)
   const previousClaude = lastAIMsg.includes('_✦ Claude_')
 
   res.setHeader('Content-Type', 'text/event-stream')
@@ -262,60 +313,79 @@ export default async function handler(req, res) {
     // ───────────────────────────────────────────────────────────────────────
     const ref = await callReferenceSearch(lastMsg)
 
-    if (ref && ref.match && ref.confidence >= 0.55) {
-      let answer = ''
+    let dbAnswer = null
+    let dbHit = false
 
-      // MULTI OBJECT / MULTI FIELD
+    if (ref && ref.match && ref.confidence >= 0.55) {
+      dbHit = true
+
       if (ref.matches?.length) {
         if (ref.intent === 'MULTI_FIELD_LOOKUP') {
-          answer = `**Relevant fields:**\n\n` +
+          dbAnswer = `**Relevant fields:**\n\n` +
             ref.matches.slice(0, 6).map(f => `- \`${f.field_name}\` — ${f.short_desc}`).join('\n')
         } else {
-          answer = `**Relevant SAP objects:**\n\n` +
+          dbAnswer = `**Relevant SAP objects:**\n\n` +
             ref.matches.slice(0, 6).map(o => `- \`${o.tech_name}\` — ${o.title}`).join('\n')
         }
       } else {
         const related = await fetchRelated(ref.match)
-        answer = formatReferenceAnswer(intent, ref.match, related)
+        dbAnswer = formatReferenceAnswer(intent, ref.match, related)
+      }
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 2 — SIMPLE / MID SAP QUESTIONS
+    // DB + Groq + Gemini + Groq merge
+    // ───────────────────────────────────────────────────────────────────────
+    const shouldUseCheapPipeline =
+      !complex &&
+      !correcting &&
+      !previousClaude
+
+    if (shouldUseCheapPipeline) {
+      const [explanation, nuance] = await Promise.all([
+        groqExplainOnly(lastMsg),
+        geminiNuance(lastMsg),
+      ])
+
+      // If DB exists, merge all 3
+      if (dbHit && dbAnswer) {
+        const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
+        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
+
+        send({ type:'chunk', text: withSource(finalAnswer, 'Groq + Database + Gemini') })
+        send({ type:'done', model:'groq+db+gemini', full: withSource(finalAnswer, 'Groq + Database + Gemini') })
+        return
       }
 
-      // DB answer → Gemini refine
-      const geminiRefined = await callGemini(lastMsg, answer, 'refine')
-      const finalAnswer = guardAnswer(geminiRefined || answer)
+      // No DB but Gemini has enough
+      if (!dbHit && (explanation || nuance)) {
+        const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
+        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
 
-      send({ type:'chunk', text: finalAnswer })
-      send({ type:'done', model:'reference+gemini', full: finalAnswer })
+        if (finalAnswer && finalAnswer.length > 20) {
+          send({ type:'chunk', text: withSource(finalAnswer, nuance ? 'Groq + Gemini' : 'Groq') })
+          send({ type:'done', model:'groq+gemini', full: withSource(finalAnswer, nuance ? 'Groq + Gemini' : 'Groq') })
+          return
+        }
+      }
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 3 — DB + Gemini direct fallback
+    // ───────────────────────────────────────────────────────────────────────
+    if (dbHit && dbAnswer) {
+      const refined = await callGemini(`Refine this SAP answer for consultant readability. Do not add new facts.\n\n${dbAnswer}`, 300)
+      const finalAnswer = guardAnswer(refined || dbAnswer)
+
+      send({ type:'chunk', text: withSource(finalAnswer, refined ? 'Database + Gemini' : 'Database') })
+      send({ type:'done', model:'db+gemini', full: withSource(finalAnswer, refined ? 'Database + Gemini' : 'Database') })
       return
     }
 
     // ───────────────────────────────────────────────────────────────────────
-    // STEP 2 — GEMINI DIRECT (before Groq / Claude)
+    // STEP 4 — Claude only last
     // ───────────────────────────────────────────────────────────────────────
-    const shouldTryGeminiFirst =
-      intent === 'REFERENCE' ||
-      intent === 'FIELD_LOOKUP' ||
-      intent === 'COMPARISON' ||
-      ultraSimple
-
-    if (shouldTryGeminiFirst) {
-      const geminiAnswer = await callGemini(lastMsg, '', 'answer')
-
-      if (geminiAnswer && geminiAnswer.length > 20) {
-        const finalAnswer = guardAnswer(geminiAnswer)
-        send({ type:'chunk', text: finalAnswer })
-        send({ type:'done', model:'gemini', full: finalAnswer })
-        return
-      }
-    }
-
-    // ───────────────────────────────────────────────────────────────────────
-    // STEP 3 — GROQ (cheap conceptual fallback)
-    // ───────────────────────────────────────────────────────────────────────
-    const useClaude =
-      complex ||
-      correcting ||
-      previousClaude
-
     const systemPrompt =
       BASE_SYSTEM_PROMPT +
       (TONE_ADDITIONS[tone] || '') +
@@ -323,39 +393,18 @@ export default async function handler(req, res) {
 
     const { anonymised } = tokenize(messages)
 
-    if (!useClaude && process.env.GROQ_API_KEY) {
-      const groqPrompt = systemPrompt + `
-
-You are answering SAP consultant questions.
-Rules:
-- Be practical and concise
-- Do not invent tables / T-codes / Fiori apps
-- If unsure, say "check in system" briefly instead of guessing
-- Prefer standard SAP explanation`
-
-      const groqAnswer = await callGroq(groqPrompt, anonymised, 900)
-      const finalAnswer = guardAnswer(groqAnswer)
-
-      send({ type:'chunk', text: finalAnswer })
-      send({ type:'done', model:'groq', full: finalAnswer })
-      return
-    }
-
-    // ───────────────────────────────────────────────────────────────────────
-    // STEP 4 — CLAUDE ONLY LAST
-    // ───────────────────────────────────────────────────────────────────────
-    if (process.env.ANTHROPIC_API_KEY) {
-      const claudePrompt = systemPrompt + `
+    const claudePrompt = systemPrompt + `
 
 You are the high-accuracy fallback for difficult SAP consultant questions.
 Use deeper reasoning only when needed.
 Avoid unnecessary long answers.`
 
-      const claudeAnswer = await callClaude(claudePrompt, anonymised)
-      const finalAnswer = guardAnswer(claudeAnswer)
+    const claudeAnswer = await callClaude(claudePrompt, anonymised)
 
-      send({ type:'chunk', text: finalAnswer })
-      send({ type:'done', model:'claude', full: finalAnswer })
+    if (claudeAnswer) {
+      const finalAnswer = guardAnswer(claudeAnswer)
+      send({ type:'chunk', text: withSource(finalAnswer, 'Claude') })
+      send({ type:'done', model:'claude', full: withSource(finalAnswer, 'Claude') })
       return
     }
 
