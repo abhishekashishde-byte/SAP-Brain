@@ -23,19 +23,30 @@ async function groqClassify(question) {
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `You are an SAP question classifier. Classify this question and return ONLY valid JSON, nothing else.
+          content: `You are an SAP question classifier. Return ONLY valid JSON, nothing else.
 
-Rules for needsBlogSearch:
-- true: how-to questions, process questions, app usage, BAdI/BAPI implementation, configuration steps, troubleshooting workflows
-- false: table name lookups, T-code lookups, field names, simple definitions, comparisons
+Pick ONE intent from: TABLE, TCODE, PROCESS, CONFIG, DEBUG, BAPI, GENERAL
 
-Rules for isCorrection:
-- true: user is saying previous answer was wrong, correcting a fact, providing the right answer
+Intent rules:
+- TABLE: asking for a table name or where data is stored
+- TCODE: asking for a transaction code
+- PROCESS: how something works, process flow, steps
+- CONFIG: SPRO configuration, customizing settings
+- DEBUG: error, issue, not working, troubleshooting
+- BAPI: BAPI, function module, enhancement, BAdI, user exit
+- GENERAL: anything else
+
+needsBlogSearch rules:
+- true ONLY for: how-to questions, process flows, app usage guides, BAPI/BAdI implementation, configuration walkthroughs, refurbishment/maintenance procedures
+- false for: table lookups, T-code lookups, simple definitions, comparisons, document creation requests
+
+isCorrection rules:
+- true ONLY if user explicitly says previous answer was wrong
 
 Question: "${question}"
 
-Return exactly this JSON:
-{"intent":"TABLE|TCODE|PROCESS|CONFIG|DEBUG|BAPI|GENERAL","needsBlogSearch":false,"isCorrection":false}`
+Respond with exactly this structure (replace values only):
+{"intent":"GENERAL","needsBlogSearch":false,"isCorrection":false}`
         }],
       }),
     })
@@ -43,8 +54,9 @@ Return exactly this JSON:
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
     const cleaned = raw.replace(/```json|```/g, '').trim()
     const result = JSON.parse(cleaned)
+    const validIntents = ['TABLE','TCODE','PROCESS','CONFIG','DEBUG','BAPI','GENERAL']
     return {
-      intent: result.intent || 'GENERAL',
+      intent: validIntents.includes(result.intent) ? result.intent : 'GENERAL',
       needsBlogSearch: result.needsBlogSearch === true,
       isCorrection: result.isCorrection === true,
     }
