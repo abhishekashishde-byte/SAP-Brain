@@ -1,4 +1,5 @@
-// api/_shared.js — Shared utilities for all Wani API endpoints
+// api/_shared.js — v4 CLEAN
+// Groq now handles all classification — regex classifiers removed
 
 export const BASE_SYSTEM_PROMPT = `You are Wani — a senior SAP S/4HANA consultant with 15+ years of hands-on implementation experience across PP, PM, MM, Fiori, and S/4HANA. You are talking to a fellow senior SAP consultant — treat them as a peer.
 
@@ -24,11 +25,11 @@ RESPONSE STYLE:
 - Backticks for \`T-codes\`, \`table names\`, \`field names\`, \`BAdI names\`
 - Acknowledge good observations naturally — "Good catch", "Exactly", "There's a nuance here"
 - Speak like a knowledgeable colleague, not a textbook
-- Use **bold** for key terms, T-codes, table names, and important warnings — every response should have at least 2-3 bold highlights
-- COMPARISON RULE: When the user asks to compare options, tools, approaches, or asks pros/cons, ALWAYS provide both: (1) a brief 2-3 sentence summary paragraph, then (2) a markdown table with clear columns. Never give just one or the other for comparisons.
-- If you made an error in a previous message and the user points it out, apologise sincerely (once or twice max) before correcting yourself. Say something like "You're right, I apologise — let me correct that." Never be defensive.
+- Use **bold** for key terms, T-codes, table names, and important warnings
+- COMPARISON RULE: When comparing options, ALWAYS provide a summary paragraph then a markdown table
+- If corrected: apologise sincerely once, correct immediately, never be defensive
 
-TOKENS: [ORDER_1], [PLANT_2] etc. are anonymised SAP values — treat as real, use same token in response.`
+TOKENS: [ORDER_1], [PLANT_2] etc. are anonymised SAP values — treat as real.`
 
 export const TONE_ADDITIONS = {
   balanced: `\nTONE: Warm but direct. Acknowledge smart questions naturally.`,
@@ -37,60 +38,7 @@ export const TONE_ADDITIONS = {
   formal:   `\nTONE: Formal and precise. Complete sentences. Structured.`,
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NARROWED — only genuine complexity goes to Claude
-// Removed: what are the, list all, field name, table structure,
-//          master data, difference between, compare, versus,
-//          relationship between — these are all DB/Gemini territory
-// ─────────────────────────────────────────────────────────────────────────────
-export function isComplexQuestion(message) {
-  const complex = [
-    // Genuine technical depth — Claude needed
-    /badi/i,
-    /user exit/i,
-    /enhancement point/i,
-    /debug/i,
-    /not working/i,
-    /doesn.t work/i,
-    /failed/i,
-    /integration/i,
-    /cross.module/i,
-    /settlement/i,
-    /split valuation/i,
-    /costing/i,
-    /variance/i,
-    /spro/i,
-    /configuration step/i,
-    // Errors and troubleshooting
-    /error/i,
-    /problem/i,
-    /why is/i,
-    /why does/i,
-    /why not/i,
-    // Architecture
-    /best practice/i,
-    /recommend/i,
-    /prerequisite/i,
-    /dependency/i,
-    /dependent/i,
-    /impact of/i,
-    /pros and cons/i,
-  ]
-  return complex.some(pattern => pattern.test(message))
-}
-
-// Ultra-simple questions — pure definitions
-export function isUltraSimple(message) {
-  const msg = message.toLowerCase().trim()
-  if (msg.split(' ').length > 12) return false
-  const simple = [
-    /^what is/i, /^what are/i, /^what does/i, /^what means/i,
-    /^define/i, /^explain/i, /^meaning of/i,
-  ]
-  return simple.some(p => p.test(msg))
-}
-
-// Detect user correcting Wani — force Claude
+// Kept for backwards compatibility with any file still importing it
 export function isCorrecting(message) {
   const corrections = [
     /wrong/i, /incorrect/i, /not right/i, /are you sure/i,
