@@ -1,5 +1,4 @@
 // api/_shared.js — Shared utilities for all Wani API endpoints
-// Exports: tokenize, detokenize, callClaude, callGroq, isComplexQuestion, BASE_SYSTEM_PROMPT, TONE_ADDITIONS
 
 export const BASE_SYSTEM_PROMPT = `You are Wani — a senior SAP S/4HANA consultant with 15+ years of hands-on implementation experience across PP, PM, MM, Fiori, and S/4HANA. You are talking to a fellow senior SAP consultant — treat them as a peer.
 
@@ -38,38 +37,55 @@ export const TONE_ADDITIONS = {
   formal:   `\nTONE: Formal and precise. Complete sentences. Structured.`,
 }
 
-// Classify question complexity
-// NARROW routing — only genuine complexity goes to Claude
-// T-codes, Fiori apps, simple how-to → parallel specialist (Groq+Gemini)
+// ─────────────────────────────────────────────────────────────────────────────
+// NARROWED — only genuine complexity goes to Claude
+// Removed: what are the, list all, field name, table structure,
+//          master data, difference between, compare, versus,
+//          relationship between — these are all DB/Gemini territory
+// ─────────────────────────────────────────────────────────────────────────────
 export function isComplexQuestion(message) {
   const complex = [
     // Genuine technical depth — Claude needed
-    /badi/i, /user exit/i, /debug/i, /not working/i, /issue/i,
-    /enhancement/i, /cross.module/i, /integration/i,
-    /settlement/i, /split valuation/i, /costing/i, /variance/i,
-    /compare/i, /versus/i, /vs\b/i, /pros and cons/i,
-    /spro/i, /configuration step/i,
+    /badi/i,
+    /user exit/i,
+    /enhancement point/i,
+    /debug/i,
+    /not working/i,
+    /doesn.t work/i,
+    /failed/i,
+    /integration/i,
+    /cross.module/i,
+    /settlement/i,
+    /split valuation/i,
+    /costing/i,
+    /variance/i,
+    /spro/i,
+    /configuration step/i,
     // Errors and troubleshooting
-    /error/i, /problem/i, /why is/i, /why does/i, /why not/i,
-    /doesn.t work/i, /failed/i,
-    // Architecture and dependency questions — multiple objects involved
-    /difference between/i, /when should/i, /impact of/i,
-    /best practice/i, /recommend/i,
-    /prerequisite/i, /master data/i, /dependency/i, /dependent/i,
-    /relationship between/i, /what are the/i, /list all/i,
-    /table structure/i, /field name/i,
+    /error/i,
+    /problem/i,
+    /why is/i,
+    /why does/i,
+    /why not/i,
+    // Architecture
+    /best practice/i,
+    /recommend/i,
+    /prerequisite/i,
+    /dependency/i,
+    /dependent/i,
+    /impact of/i,
+    /pros and cons/i,
   ]
   return complex.some(pattern => pattern.test(message))
 }
 
-// Ultra-simple questions — pure definitions, no T-codes needed from Groq
+// Ultra-simple questions — pure definitions
 export function isUltraSimple(message) {
   const msg = message.toLowerCase().trim()
-  // Short question + definitional pattern
-  if (msg.split(' ').length > 12) return false  // longer questions need specialist
+  if (msg.split(' ').length > 12) return false
   const simple = [
-    /^what is/i, /^what are/i, /^what does/i, /^what means/i,
-    /^define/i, /^explain/i, /^meaning of/i,
+    /^what is/i, /^what are/i, /^what does/i, /^what means/i,
+    /^define/i, /^explain/i, /^meaning of/i,
   ]
   return simple.some(p => p.test(msg))
 }
