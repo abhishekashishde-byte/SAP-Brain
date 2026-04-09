@@ -1,4 +1,4 @@
-// api/chat.js — CLEAN VERSION (NO DEBUG IN CHAT)
+// api/chat.js — WITH ROUTING DEBUG LOGGING
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
@@ -47,14 +47,14 @@ async function callGroq(systemPrompt, messages, maxTokens = 700) {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Content-Type':'application/json',
-        'Authorization':`Bearer ${process.env.GROQ_API_KEY}`
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         max_tokens: maxTokens,
         temperature: 0.1,
-        messages: [{ role:'system', content:systemPrompt }, ...messages],
+        messages: [{ role: 'system', content: systemPrompt }, ...messages],
       }),
     })
 
@@ -161,6 +161,8 @@ async function callReferenceSearch(question) {
       process.env.BASE_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
 
+    console.log('REFERENCE SEARCH baseUrl:', baseUrl || 'MISSING — DB will be skipped!')
+
     if (!baseUrl) return null
 
     const res = await fetch(`${baseUrl}/api/reference-search`, {
@@ -169,8 +171,18 @@ async function callReferenceSearch(question) {
       body: JSON.stringify({ question }),
     })
 
-    return await res.json()
-  } catch {
+    const result = await res.json()
+    console.log('REFERENCE SEARCH result:', JSON.stringify({
+      intent: result.intent,
+      confidence: result.confidence,
+      hasMatch: !!result.match,
+      matchCount: result.matches?.length || 0,
+      topMatch: result.match?.tech_name || result.match?.field_name || null,
+    }))
+
+    return result
+  } catch (err) {
+    console.log('REFERENCE SEARCH error:', err.message)
     return null
   }
 }
@@ -326,15 +338,32 @@ ${nuance || ''}`
 // MAIN HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error:'Method not allowed' })
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { messages, tone='balanced', userName } = req.body
-  const lastMsg = messages[messages.length-1]?.content || ''
+  const { messages, tone = 'balanced', userName } = req.body
+  const lastMsg = messages[messages.length - 1]?.content || ''
 
   const intent = classifyIntent(lastMsg)
   const complex = isComplexQuestion(lastMsg)
   const correcting = isCorrecting(lastMsg)
   const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
+  const shouldUseCheapPipeline = !complex && !correcting && !isStrictLookup
+
+  // ─── ROUTING DEBUG LOG — remove after fixing ───
+  console.log('ROUTING DEBUG:', JSON.stringify({
+    question: lastMsg.slice(0, 80),
+    intent,
+    complex,
+    correcting,
+    isStrictLookup,
+    shouldUseCheapPipeline,
+    baseUrl: process.env.BASE_URL || process.env.VERCEL_URL || 'MISSING',
+    path: complex ? 'CLAUDE_DIRECT' :
+          correcting ? 'CLAUDE_CORRECTION' :
+          isStrictLookup ? 'STRICT_LOOKUP' :
+          shouldUseCheapPipeline ? 'CHEAP_PIPELINE' : 'CLAUDE_FALLBACK'
+  }))
+  // ───────────────────────────────────────────────
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -351,6 +380,7 @@ export default async function handler(req, res) {
       const normalized = await groqNormalizeQuery(lastMsg)
       if (normalized && normalized.length > 2) {
         dbSearchQuestion = normalized
+        console.log('NORMALIZED QUERY:', dbSearchQuestion)
       }
     }
 
@@ -375,34 +405,39 @@ export default async function handler(req, res) {
         const related = await fetchRelated(ref.match)
         dbAnswer = formatReferenceAnswer(intent, ref.match, related)
       }
+
+      console.log('DB HIT:', { dbHit, dbAnswerLength: dbAnswer?.length || 0 })
+    } else {
+      console.log('DB MISS:', { confidence: ref?.confidence, hasMatch: !!ref?.match })
     }
 
     // STEP 3 — STRICT LOOKUP FLOW
     if (isStrictLookup) {
       if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
+        console.log('ANSWERING FROM: Database')
         const output = withSource(guardAnswer(dbAnswer), 'Database')
-        send({ type:'chunk', text: output })
-        send({ type:'done', model:'database', full: output })
+        send({ type: 'chunk', text: output })
+        send({ type: 'done', model: 'database', full: output })
         return
       }
 
+      console.log('DB miss for strict lookup — trying Gemini lookup')
       const lookupAnswer = await geminiLookup(lastMsg)
 
       if (lookupAnswer && lookupAnswer.trim().length > 10) {
+        console.log('ANSWERING FROM: Gemini lookup')
         const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
-        send({ type:'chunk', text: output })
-        send({ type:'done', model:'gemini', full: output })
+        send({ type: 'chunk', text: output })
+        send({ type: 'done', model: 'gemini', full: output })
         return
       }
+
+      console.log('Gemini lookup also missed — falling through to Claude')
     }
 
     // STEP 4 — NON-LOOKUP CHEAP PIPELINE
-    const shouldUseCheapPipeline =
-      !complex &&
-      !correcting &&
-      !isStrictLookup
-
     if (shouldUseCheapPipeline) {
+      console.log('ENTERING: Cheap pipeline (Groq + Gemini)')
       const [explanation, nuance] = await Promise.all([
         groqExplainOnly(lastMsg),
         geminiNuance(lastMsg),
@@ -412,9 +447,9 @@ export default async function handler(req, res) {
         const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
         const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
         const output = withSource(finalAnswer, 'Groq + Database + Gemini')
-
-        send({ type:'chunk', text: output })
-        send({ type:'done', model:'groq+db+gemini', full: output })
+        console.log('ANSWERING FROM: Groq + DB + Gemini')
+        send({ type: 'chunk', text: output })
+        send({ type: 'done', model: 'groq+db+gemini', full: output })
         return
       }
 
@@ -425,15 +460,16 @@ export default async function handler(req, res) {
         if (finalAnswer && finalAnswer.length > 20) {
           const source = nuance ? 'Groq + Gemini' : 'Groq'
           const output = withSource(finalAnswer, source)
-
-          send({ type:'chunk', text: output })
-          send({ type:'done', model:'groq+gemini', full: output })
+          console.log('ANSWERING FROM:', source)
+          send({ type: 'chunk', text: output })
+          send({ type: 'done', model: 'groq+gemini', full: output })
           return
         }
       }
     }
 
-    // STEP 5 — CLAUDE LAST
+    // STEP 5 — CLAUDE LAST RESORT
+    console.log('ANSWERING FROM: Claude (last resort)')
     const systemPrompt =
       BASE_SYSTEM_PROMPT +
       (TONE_ADDITIONS[tone] || '') +
@@ -455,16 +491,17 @@ IMPORTANT:
 
     if (claudeAnswer) {
       const output = withSource(guardAnswer(claudeAnswer), 'Claude')
-      send({ type:'chunk', text: output })
-      send({ type:'done', model:'claude', full: output })
+      send({ type: 'chunk', text: output })
+      send({ type: 'done', model: 'claude', full: output })
       return
     }
 
-    send({ type:'error', error:'No model available' })
+    send({ type: 'error', error: 'No model available' })
 
   } catch (err) {
-    send({ type:'error', error: err.message })
+    console.log('HANDLER ERROR:', err.message)
+    send({ type: 'error', error: err.message })
   } finally {
     res.end()
   }
-         }
+}
