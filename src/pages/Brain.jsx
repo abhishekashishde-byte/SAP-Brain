@@ -579,6 +579,9 @@ export default function Brain({ session }) {
   const [profile, setProfile]             = useState(null)
   const [showSummarise, setShowSummarise] = useState(false)
   const [isSummarising, setIsSummarising] = useState(false)
+  const [autoCompacting, setAutoCompacting] = useState(false)
+  const [compactProgress, setCompactProgress] = useState(0)
+  const hasAutoSummarisedRef = useRef(new Set())
   const [sidebarOpen, setSidebarOpen]     = useState(!isMobileWidth())
   const [tone, setTone]                   = useState('balanced')
   const [isMobile, setIsMobile]           = useState(isMobileWidth())
@@ -633,7 +636,16 @@ export default function Brain({ session }) {
   },[])
 
   useEffect(()=>{ if(view==='chat') setTimeout(()=>inputRef.current?.focus(),100) },[view,activeConvId])
-  useEffect(()=>{ if(messages.length>=SUMMARISE_THRESHOLD&&!showSummarise) setShowSummarise(true) },[messages.length])
+  // Auto-summarise every 5 assistant messages silently
+  useEffect(()=>{
+    if (!activeConvId || !messages.length) return
+    const assistantCount = messages.filter(m=>m.role==='assistant').length
+    const key = `${activeConvId}-${assistantCount}`
+    if (assistantCount > 0 && assistantCount % 5 === 0 && !hasAutoSummarisedRef.current.has(key) && !autoCompacting) {
+      hasAutoSummarisedRef.current.add(key)
+      autoSummarise()
+    }
+  },[messages.length, activeConvId])
 
   const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);window.history.replaceState({ view:'home' },'') }
   const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);window.history.pushState({ view:'topic',mod,topic },'') }
@@ -735,6 +747,50 @@ export default function Brain({ session }) {
       setIsLoading(false);setIsStreaming(false);setStreamingText('')
       const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:errMsgs}:c))
+    }
+  }
+
+  const autoSummarise = async () => {
+    if (!activeConvId || autoCompacting) return
+    const convMessages = conversations.find(c=>c.id===activeConvId)?.messages || []
+    if (convMessages.length < 6) return
+
+    setAutoCompacting(true)
+    setCompactProgress(0)
+
+    // Animate progress bar — simulate progress while waiting for API
+    const progressInterval = setInterval(() => {
+      setCompactProgress(prev => {
+        if (prev >= 85) { clearInterval(progressInterval); return 85 }
+        return prev + Math.random() * 12 + 3
+      })
+    }, 300)
+
+    try {
+      const activeConvData = conversations.find(c=>c.id===activeConvId)
+      const res = await fetch('/api/summarise', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ messages:convMessages, module:activeConvData?.module, topic:activeConvData?.topic })
+      })
+      const { summary } = await res.json()
+
+      clearInterval(progressInterval)
+      setCompactProgress(95)
+
+      if (summary) {
+        const summaryMsg = { role:'assistant', content:`📋 **Conversation Compacted**\n\n${summary}\n\n---\n_Earlier messages summarised to save context. Continuing from here._` }
+        const newMsgs = [summaryMsg]
+        await updateConversation(activeConvId, { messages:newMsgs, is_summarised:true })
+        setConversations(prev=>prev.map(c=>c.id===activeConvId?{...c,messages:newMsgs,is_summarised:true}:c))
+      }
+
+      setCompactProgress(100)
+      setTimeout(()=>{ setAutoCompacting(false); setCompactProgress(0) }, 600)
+    } catch {
+      clearInterval(progressInterval)
+      setAutoCompacting(false)
+      setCompactProgress(0)
     }
   }
 
@@ -865,13 +921,21 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {/* Summarise banner */}
-        {showSummarise&&activeConv&&view==='chat'&&(
-          <div style={{ background:t.summarise,borderBottom:`1px solid ${t.summariseBdr}`,padding:'9px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',fontSize:13,flexShrink:0,position:'relative',zIndex:2,flexWrap:'wrap',gap:8 }}>
-            <span style={{ color:t.summariseTxt }}>⚡ Getting long — summarise to keep it sharp?</span>
-            <div style={{ display:'flex',gap:8 }}>
-              <button onClick={handleSummarise} disabled={isSummarising} style={{ padding:'5px 14px',background:'#4F46E5',border:'none',borderRadius:8,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:"'DM Sans',sans-serif" }}>{isSummarising?'Summarising…':'Summarise'}</button>
-              <button onClick={()=>setShowSummarise(false)} style={{ padding:'5px 12px',background:'none',border:`1px solid ${t.summariseBdr}`,borderRadius:8,color:t.summariseTxt,fontSize:12,cursor:'pointer',fontFamily:"'DM Sans',sans-serif" }}>Dismiss</button>
+        {/* Auto-compact progress overlay — like Claude.ai */}
+        {autoCompacting&&(
+          <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center' }}>
+            <div style={{ background:dark?'#1A1530':'#fff',border:`1px solid ${dark?'#3D3560':'#E0E0E0'}`,borderRadius:20,padding:'32px 40px',width:'min(90vw,380px)',textAlign:'center',boxShadow:'0 24px 64px rgba(0,0,0,0.3)' }}>
+              <div style={{ width:44,height:44,borderRadius:'50%',border:'3px solid rgba(79,70,229,0.2)',borderTopColor:'#4F46E5',animation:'spin 0.9s linear infinite',margin:'0 auto 20px' }}/>
+              <div style={{ fontSize:16,fontWeight:600,color:dark?'#F0EEF8':'#1C1C1E',marginBottom:8,fontFamily:"'DM Sans',sans-serif" }}>
+                Compacting conversation…
+              </div>
+              <div style={{ fontSize:13,color:dark?'#8A849E':'#8A8A8E',marginBottom:20,lineHeight:1.5 }}>
+                Summarising earlier messages so we can keep chatting
+              </div>
+              <div style={{ background:dark?'#2A2440':'#F0F0F0',borderRadius:999,height:6,overflow:'hidden' }}>
+                <div style={{ height:'100%',borderRadius:999,background:'linear-gradient(90deg,#4F46E5,#7C3AED)',width:`${compactProgress}%`,transition:'width 0.3s ease' }}/>
+              </div>
+              <div style={{ fontSize:12,color:dark?'#5A5470':'#AEAEB2',marginTop:10 }}>{Math.round(compactProgress)}%</div>
             </div>
           </div>
         )}
