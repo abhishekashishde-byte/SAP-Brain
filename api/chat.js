@@ -1,337 +1,270 @@
-// api/chat.js — WITH ROUTING DEBUG LOGGING
+// api/chat.js — v4 CLEAN ARCHITECTURE
+// Groq classifies → Claude answers → Gemini finds resources → DB stores corrections
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
-  isComplexQuestion, isCorrecting,
-  tokenize,
+  isCorrecting, tokenize,
 } from './_shared.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. INTENT CLASSIFIER
+// 1. GROQ CLASSIFIER — replaces all regex pattern matching
 // ─────────────────────────────────────────────────────────────────────────────
-function classifyIntent(q = '') {
-  const text = q.toLowerCase()
-
-  if (
-    text.match(/\btable\b|\btcode\b|\bfiori\b|\bapp\b|\bfield\b|\bstores\b|\bwhere is\b|\bwhich table\b|\bwhich tcode\b|\bwhich app\b|\btble\b/)
-  ) return 'REFERENCE'
-
-  if (text.match(/\bdifference\b|\bvs\b|\bcompare\b/)) return 'COMPARISON'
-  if (text.match(/\bconfig\b|\bspro\b|\bsetting\b|\bcustomizing\b/)) return 'CONFIG'
-  if (text.match(/\berror\b|\bdump\b|\bissue\b|\bnot working\b/)) return 'DEBUG'
-  if (text.match(/\bhow\b|\bprocess\b|\bflow\b|\bwhat is\b/)) return 'PROCESS'
-
-  return 'GENERAL'
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. SOURCE LABEL
-// ─────────────────────────────────────────────────────────────────────────────
-function withSource(answer, sourceLabel) {
-  const body = answer?.trim() || ''
-  return `${body}\n\n_✦ ${sourceLabel}_`
-}
-
-function guardAnswer(answer) {
-  if (!answer) return answer
-  return answer.trim()
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. GROQ CALL
-// ─────────────────────────────────────────────────────────────────────────────
-async function callGroq(systemPrompt, messages, maxTokens = 700) {
-  if (!process.env.GROQ_API_KEY) return null
-
+async function groqClassify(question) {
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: maxTokens,
-        temperature: 0.1,
-        messages: [{ role: 'system', content: systemPrompt }, ...messages],
+        max_tokens: 120,
+        temperature: 0,
+        messages: [{
+          role: 'user',
+          content: `You are an SAP question classifier. Classify this question and return ONLY valid JSON, nothing else.
+
+Rules for needsBlogSearch:
+- true: how-to questions, process questions, app usage, BAdI/BAPI implementation, configuration steps, troubleshooting workflows
+- false: table name lookups, T-code lookups, field names, simple definitions, comparisons
+
+Rules for isCorrection:
+- true: user is saying previous answer was wrong, correcting a fact, providing the right answer
+
+Question: "${question}"
+
+Return exactly this JSON:
+{"intent":"TABLE|TCODE|PROCESS|CONFIG|DEBUG|BAPI|GENERAL","needsBlogSearch":false,"isCorrection":false}`
+        }],
       }),
     })
-
     const data = await res.json()
-    if (!res.ok) return null
-    return data.choices?.[0]?.message?.content?.trim() || null
+    const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
+    const cleaned = raw.replace(/```json|```/g, '').trim()
+    const result = JSON.parse(cleaned)
+    return {
+      intent: result.intent || 'GENERAL',
+      needsBlogSearch: result.needsBlogSearch === true,
+      isCorrection: result.isCorrection === true,
+    }
   } catch {
-    return null
+    return { intent: 'GENERAL', needsBlogSearch: false, isCorrection: false }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. GEMINI CALL
+// 2. LOAD VERIFIED CORRECTIONS FROM MEMORY
 // ─────────────────────────────────────────────────────────────────────────────
-async function callGemini(promptText, maxOutputTokens = 400) {
-  const key = process.env.GEMINI_API_KEY
-  if (!key) return null
-
+async function loadVerifiedCorrections(userId) {
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }],
-        generationConfig: {
-          maxOutputTokens,
-          temperature: 0.2,
+    const SUPABASE_URL = process.env.SUPABASE_URL
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    if (!SUPABASE_URL || !SUPABASE_KEY) return []
+
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&select=content&order=created_at.desc&limit=20`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
         },
-      }),
-    })
-
+      }
+    )
+    if (!res.ok) return []
     const data = await res.json()
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null
-  } catch {
-    return null
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. CLAUDE CALL
-// ─────────────────────────────────────────────────────────────────────────────
-async function callClaude(systemPrompt, messages) {
-  if (!process.env.ANTHROPIC_API_KEY) return null
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1200,
-        system: systemPrompt,
-        messages,
-      }),
-    })
-
-    const data = await res.json()
-    return data.content?.[0]?.text?.trim() || null
-  } catch {
-    return null
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. GROQ NORMALIZER
-// ─────────────────────────────────────────────────────────────────────────────
-async function groqNormalizeQuery(question) {
-  const prompt = `You are an SAP search normalizer.
-
-Your job:
-Convert the user question into a SHORT SAP database lookup query.
-
-CRITICAL RULES:
-- Do NOT answer the user
-- Do NOT explain
-- Do NOT hallucinate
-- Return only one short search string
-- Prefer SAP object names and common SAP terms
-- Fix typos if obvious
-- Max 8 words
-
-Examples:
-"what is tble for prod version" -> "production version MKAL VERID"
-"where is equipment stored" -> "equipment EQUI"
-"table for storage location" -> "storage location T001L MARD"
-
-User question:
-${question}`
-
-  const out = await callGroq(prompt, [{ role: 'user', content: question }], 80)
-  return out?.replace(/["']/g, '').trim() || question
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. REFERENCE SEARCH
-// ─────────────────────────────────────────────────────────────────────────────
-async function callReferenceSearch(question) {
-  try {
-    const baseUrl =
-      process.env.BASE_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-
-    console.log('REFERENCE SEARCH baseUrl:', baseUrl || 'MISSING — DB will be skipped!')
-
-    if (!baseUrl) return null
-
-    const res = await fetch(`${baseUrl}/api/reference-search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-    })
-
-    const result = await res.json()
-    console.log('REFERENCE SEARCH result:', JSON.stringify({
-      intent: result.intent,
-      confidence: result.confidence,
-      hasMatch: !!result.match,
-      matchCount: result.matches?.length || 0,
-      topMatch: result.match?.tech_name || result.match?.field_name || null,
-    }))
-
-    return result
-  } catch (err) {
-    console.log('REFERENCE SEARCH error:', err.message)
-    return null
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. RELATED OBJECTS
-// ─────────────────────────────────────────────────────────────────────────────
-async function fetchRelated(object) {
-  try {
-    if (!object?.tech_name) return []
-
-    const url = `${process.env.SUPABASE_URL}/rest/v1/sap_relationships?from_tech_name=eq.${object.tech_name}`
-    const res = await fetch(url, {
-      headers: {
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-    })
-
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
+    return Array.isArray(data) ? data.map(d => d.content).filter(Boolean) : []
   } catch {
     return []
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. FORMAT DB OUTPUT
+// 3. SAVE CORRECTION TO MEMORY
 // ─────────────────────────────────────────────────────────────────────────────
-function formatReferenceAnswer(intent, ref, related = []) {
-  if (!ref) return ''
+async function saveCorrection(userId, userMsg, assistantMsg) {
+  try {
+    // Use Groq to extract the corrected fact
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 200,
+        temperature: 0,
+        messages: [{
+          role: 'user',
+          content: `Extract the corrected SAP fact from this exchange as a single clear statement.
+Return ONLY the fact as a string, no JSON, no explanation.
+If no clear correction, return: NO_CORRECTION
 
-  if (intent === 'FIELD_LOOKUP' || ref.field_name) {
-    let out = `**Field:** \`${ref.field_name}\`
-**Table:** \`${ref.table_name}\`
+User correction: "${userMsg}"
+Previous answer: "${assistantMsg}"
 
-**Meaning:** ${ref.short_desc || 'No description available'}`
+Example output: "BAPI_PRODVERSION_CREATE does not exist — use C_MKAL_MAINTAIN FM instead for production version creation"`
+        }],
+      }),
+    })
+    const data = await res.json()
+    const fact = data.choices?.[0]?.message?.content?.trim()
+    if (!fact || fact === 'NO_CORRECTION') return
 
-    if (ref.common_meaning) out += `\n\n${ref.common_meaning}`
-    return out
+    const SUPABASE_URL = process.env.SUPABASE_URL
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    if (!SUPABASE_URL || !SUPABASE_KEY) return
+
+    await fetch(`${SUPABASE_URL}/rest/v1/memories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify([{
+        user_id: userId,
+        content: `[VERIFIED CORRECTION] ${fact}`,
+        created_at: new Date().toISOString(),
+      }]),
+    })
+    console.log('CORRECTION SAVED:', fact)
+  } catch (err) {
+    console.error('saveCorrection error:', err.message)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. GEMINI RESOURCE SEARCH
+// ─────────────────────────────────────────────────────────────────────────────
+async function geminiSearchResources(question) {
+  const key = process.env.GEMINI_API_KEY
+  if (!key) return null
+
+  try {
+    const prompt = `Search for SAP official resources about this topic.
+Focus ONLY on these domains: help.sap.com, community.sap.com, blogs.sap.com
+
+Return ONLY a JSON array of max 3 results. Each result must have real, working URLs.
+Format: [{"title":"...","url":"https://...","source":"SAP Help|SAP Community|SAP Blog"}]
+
+If you cannot find real URLs with confidence, return: []
+
+Topic: ${question}`
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { maxOutputTokens: 400, temperature: 0.1 },
+        }),
+      }
+    )
+    const data = await res.json()
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+    if (!raw) return null
+
+    const cleaned = raw.replace(/```json|```/g, '').trim()
+    const results = JSON.parse(cleaned)
+    if (!Array.isArray(results) || results.length === 0) return null
+
+    // Filter to only SAP official domains
+    const valid = results.filter(r =>
+      r.url &&
+      r.title &&
+      (r.url.includes('help.sap.com') ||
+       r.url.includes('community.sap.com') ||
+       r.url.includes('blogs.sap.com'))
+    )
+    return valid.length > 0 ? valid : null
+  } catch {
+    return null
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. FORMAT RESOURCES
+// ─────────────────────────────────────────────────────────────────────────────
+function formatResources(resources) {
+  if (!resources || resources.length === 0) return ''
+
+  const sourceIcon = {
+    'SAP Help': '📖',
+    'SAP Community': '💬',
+    'SAP Blog': '✍️',
   }
 
-  let out = `**${ref.object_type || 'Object'}:** \`${ref.tech_name}\`
-**${ref.title || ref.tech_name}**
-${ref.short_desc || ''}`
+  const links = resources
+    .map(r => `${sourceIcon[r.source] || '🔗'} [${r.title}](${r.url}) — _${r.source}_`)
+    .join('\n')
 
-  if (related.length) {
-    const grouped = related.slice(0, 8).map(r => `- \`${r.to_tech_name}\``).join('\n')
-    out += `\n\n**Related objects:**\n${grouped}`
+  return `\n\n---\n**📚 Further Reading**\n${links}`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. CLAUDE CALL — streaming
+// ─────────────────────────────────────────────────────────────────────────────
+async function streamClaude(systemPrompt, messages, onChunk) {
+  if (!process.env.ANTHROPIC_API_KEY) return null
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1200,
+      system: systemPrompt,
+      messages,
+      stream: true,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err?.error?.message || 'Claude error')
   }
 
-  return out
-}
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullText = ''
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 10. GEMINI LOOKUP
-// ─────────────────────────────────────────────────────────────────────────────
-async function geminiLookup(question) {
-  const prompt = `You are an SAP lookup assistant.
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
 
-User is asking for a SAP object like table / field / tcode / app.
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
 
-CRITICAL RULES:
-- Answer directly with correct SAP objects
-- Prefer standard SAP tables like T001L, MARD, EQUI, AUFK, AFKO, MKAL etc.
-- If multiple answers possible, list them clearly
-- Keep answer short
-- Do NOT explain concepts
-- Do NOT hallucinate
-- If unsure, say exactly: NOT_FOUND
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') continue
+      try {
+        const json = JSON.parse(data)
+        if (json.type === 'content_block_delta') {
+          const text = json.delta?.text || ''
+          if (text) {
+            fullText += text
+            onChunk(text)
+          }
+        }
+      } catch { }
+    }
+  }
 
-Question:
-${question}`
-
-  const out = await callGemini(prompt, 220)
-  if (!out || out.includes('NOT_FOUND')) return null
-  return out
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 11. GROQ EXPLANATION (NON-LOOKUP)
-// ─────────────────────────────────────────────────────────────────────────────
-async function groqExplainOnly(question) {
-  const prompt = `You are writing ONLY the high-level conceptual explanation for an SAP question.
-
-CRITICAL RULES:
-- Explain only the concept in plain SAP consultant language
-- Do NOT give T-codes
-- Do NOT give table names
-- Do NOT give Fiori app names
-- Do NOT invent SAP facts
-- Keep it concise
-
-Question:
-${question}`
-
-  return await callGroq(prompt, [{ role: 'user', content: question }], 350)
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 12. GEMINI NUANCE (NON-LOOKUP)
-// ─────────────────────────────────────────────────────────────────────────────
-async function geminiNuance(question) {
-  const prompt = `You are an SAP S/4HANA assistant.
-
-Provide only useful practical SAP nuance for this question.
-
-CRITICAL RULES:
-- Do NOT explain the full concept
-- Do NOT repeat generic definition
-- Focus only on practical options / caveats / system behavior
-- Mention T-codes or tables only if reasonably confident
-- If nothing useful, reply exactly: NO_NUANCE
-- Keep it short
-
-Question:
-${question}`
-
-  const out = await callGemini(prompt, 250)
-  if (!out || out.trim() === 'NO_NUANCE') return null
-  return out
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 13. GROQ MERGE (NON-LOOKUP)
-// ─────────────────────────────────────────────────────────────────────────────
-async function groqStrictMerge(question, explanation, dbFacts, nuance) {
-  const mergePrompt = `You are a formatter that merges SAP answer parts.
-
-CRITICAL RULES:
-- Use ONLY the information provided
-- Do NOT add any new SAP facts
-- Do NOT invent T-codes, tables, Fiori apps, statuses, options, or fields
-- Keep the answer concise and consultant-friendly
-- Output only the final merged answer
-
-User question:
-${question}
-
-PART 1 — Explanation:
-${explanation || ''}
-
-PART 2 — Structured DB Facts:
-${dbFacts || ''}
-
-PART 3 — Practical Nuance:
-${nuance || ''}`
-
-  return await callGroq(mergePrompt, [{ role: 'user', content: question }], 500)
+  return fullText
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,30 +273,9 @@ ${nuance || ''}`
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { messages, tone = 'balanced', userName } = req.body
+  const { messages, tone = 'balanced', userName, userId } = req.body
   const lastMsg = messages[messages.length - 1]?.content || ''
-
-  const intent = classifyIntent(lastMsg)
-  const complex = isComplexQuestion(lastMsg)
-  const correcting = isCorrecting(lastMsg)
-  const isStrictLookup = ['REFERENCE', 'FIELD_LOOKUP', 'COMPARISON'].includes(intent)
-  const shouldUseCheapPipeline = !complex && !correcting && !isStrictLookup
-
-  // ─── ROUTING DEBUG LOG — remove after fixing ───
-  console.log('ROUTING DEBUG:', JSON.stringify({
-    question: lastMsg.slice(0, 80),
-    intent,
-    complex,
-    correcting,
-    isStrictLookup,
-    shouldUseCheapPipeline,
-    baseUrl: process.env.BASE_URL || process.env.VERCEL_URL || 'MISSING',
-    path: complex ? 'CLAUDE_DIRECT' :
-          correcting ? 'CLAUDE_CORRECTION' :
-          isStrictLookup ? 'STRICT_LOOKUP' :
-          shouldUseCheapPipeline ? 'CHEAP_PIPELINE' : 'CLAUDE_FALLBACK'
-  }))
-  // ───────────────────────────────────────────────
+  const prevAssistantMsg = messages[messages.length - 2]?.content || ''
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -373,133 +285,72 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-    // STEP 1 — GROQ NORMALIZATION FOR LOOKUP QUERIES
-    let dbSearchQuestion = lastMsg
+    // STEP 1 — Groq classifies in parallel with loading memories
+    const [classification, corrections] = await Promise.all([
+      groqClassify(lastMsg),
+      userId ? loadVerifiedCorrections(userId) : Promise.resolve([]),
+    ])
 
-    if (isStrictLookup) {
-      const normalized = await groqNormalizeQuery(lastMsg)
-      if (normalized && normalized.length > 2) {
-        dbSearchQuestion = normalized
-        console.log('NORMALIZED QUERY:', dbSearchQuestion)
-      }
+    const { intent, needsBlogSearch, isCorrection } = classification
+
+    console.log('CLASSIFICATION:', JSON.stringify({
+      question: lastMsg.slice(0, 60),
+      intent,
+      needsBlogSearch,
+      isCorrection,
+      correctionsLoaded: corrections.length,
+    }))
+
+    // STEP 2 — Save correction if user is correcting
+    if (isCorrection && userId && prevAssistantMsg) {
+      saveCorrection(userId, lastMsg, prevAssistantMsg).catch(() => { })
     }
 
-    // STEP 2 — DB SEARCH
-    const ref = await callReferenceSearch(dbSearchQuestion)
+    // STEP 3 — Build system prompt with verified corrections injected
+    let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
 
-    let dbAnswer = null
-    let dbHit = false
-
-    if (ref && ref.confidence >= 0.40 && (ref.match || (ref.matches && ref.matches.length))) {
-      dbHit = true
-
-      if (ref.matches?.length) {
-        if (ref.intent === 'MULTI_FIELD_LOOKUP') {
-          dbAnswer = `**Relevant fields:**\n\n` +
-            ref.matches.slice(0, 6).map(f => `- \`${f.field_name}\` — ${f.short_desc || ''}`).join('\n')
-        } else {
-          dbAnswer = `**Relevant SAP objects:**\n\n` +
-            ref.matches.slice(0, 6).map(o => `- \`${o.tech_name}\` — ${o.title || o.short_desc || ''}`).join('\n')
-        }
-      } else if (ref.match) {
-        const related = await fetchRelated(ref.match)
-        dbAnswer = formatReferenceAnswer(intent, ref.match, related)
-      }
-
-      console.log('DB HIT:', { dbHit, dbAnswerLength: dbAnswer?.length || 0 })
-    } else {
-      console.log('DB MISS:', { confidence: ref?.confidence, hasMatch: !!ref?.match })
+    if (userName) {
+      systemPrompt += `\n\nUser name: ${userName}`
     }
 
-    // STEP 3 — STRICT LOOKUP FLOW
-    if (isStrictLookup) {
-      if (dbHit && dbAnswer && dbAnswer.trim().length > 10) {
-        console.log('ANSWERING FROM: Database')
-        const output = withSource(guardAnswer(dbAnswer), 'Database')
-        send({ type: 'chunk', text: output })
-        send({ type: 'done', model: 'database', full: output })
-        return
-      }
-
-      console.log('DB miss for strict lookup — trying Gemini lookup')
-      const lookupAnswer = await geminiLookup(lastMsg)
-
-      if (lookupAnswer && lookupAnswer.trim().length > 10) {
-        console.log('ANSWERING FROM: Gemini lookup')
-        const output = withSource(guardAnswer(lookupAnswer), 'Gemini')
-        send({ type: 'chunk', text: output })
-        send({ type: 'done', model: 'gemini', full: output })
-        return
-      }
-
-      console.log('Gemini lookup also missed — falling through to Claude')
+    if (corrections.length > 0) {
+      const correctionList = corrections.map(c => `- ${c}`).join('\n')
+      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS — These are facts confirmed correct by the user. Use them as ground truth, they override your training data:\n${correctionList}`
     }
 
-    // STEP 4 — NON-LOOKUP CHEAP PIPELINE
-    if (shouldUseCheapPipeline) {
-      console.log('ENTERING: Cheap pipeline (Groq + Gemini)')
-      const [explanation, nuance] = await Promise.all([
-        groqExplainOnly(lastMsg),
-        geminiNuance(lastMsg),
-      ])
+    // STEP 4 — Start blog search in parallel if needed
+    const blogSearchPromise = needsBlogSearch
+      ? geminiSearchResources(lastMsg)
+      : Promise.resolve(null)
 
-      if (dbHit && dbAnswer) {
-        const merged = await groqStrictMerge(lastMsg, explanation, dbAnswer, nuance)
-        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${dbAnswer || ''}\n\n${nuance || ''}`)
-        const output = withSource(finalAnswer, 'Groq + Database + Gemini')
-        console.log('ANSWERING FROM: Groq + DB + Gemini')
-        send({ type: 'chunk', text: output })
-        send({ type: 'done', model: 'groq+db+gemini', full: output })
-        return
-      }
-
-      if (explanation || nuance) {
-        const merged = await groqStrictMerge(lastMsg, explanation, '', nuance)
-        const finalAnswer = guardAnswer(merged || `${explanation || ''}\n\n${nuance || ''}`)
-
-        if (finalAnswer && finalAnswer.length > 20) {
-          const source = nuance ? 'Groq + Gemini' : 'Groq'
-          const output = withSource(finalAnswer, source)
-          console.log('ANSWERING FROM:', source)
-          send({ type: 'chunk', text: output })
-          send({ type: 'done', model: 'groq+gemini', full: output })
-          return
-        }
-      }
-    }
-
-    // STEP 5 — CLAUDE LAST RESORT
-    console.log('ANSWERING FROM: Claude (last resort)')
-    const systemPrompt =
-      BASE_SYSTEM_PROMPT +
-      (TONE_ADDITIONS[tone] || '') +
-      (userName ? `\n\nUser name: ${userName}` : '')
-
+    // STEP 5 — Stream Claude answer
     const { anonymised } = tokenize(messages)
+    let fullAnswer = ''
 
-    const claudePrompt = systemPrompt + `
+    send({ type: 'start' })
 
-You are the high-accuracy fallback for difficult SAP consultant questions.
-Use deeper reasoning only when needed.
-Avoid unnecessary long answers.
+    fullAnswer = await streamClaude(systemPrompt, anonymised, (chunk) => {
+      send({ type: 'chunk', text: chunk })
+    })
 
-IMPORTANT:
-- If user is asking a lookup-style SAP question, answer directly and specifically.
-- Do NOT drift into generic definitions if the user is clearly asking for a table / field / object.`
+    // STEP 6 — Append blog resources if found
+    const resources = await blogSearchPromise
+    const resourceSection = formatResources(resources)
 
-    const claudeAnswer = await callClaude(claudePrompt, anonymised)
-
-    if (claudeAnswer) {
-      const output = withSource(guardAnswer(claudeAnswer), 'Claude')
-      send({ type: 'chunk', text: output })
-      send({ type: 'done', model: 'claude', full: output })
-      return
+    if (resourceSection) {
+      send({ type: 'chunk', text: resourceSection })
+      fullAnswer += resourceSection
+      console.log('RESOURCES APPENDED:', resources.length, 'links')
     }
 
-    send({ type: 'error', error: 'No model available' })
+    send({
+      type: 'done',
+      model: needsBlogSearch ? 'claude+gemini' : 'claude',
+      full: fullAnswer,
+    })
 
   } catch (err) {
-    console.log('HANDLER ERROR:', err.message)
+    console.error('HANDLER ERROR:', err.message)
     send({ type: 'error', error: err.message })
   } finally {
     res.end()
