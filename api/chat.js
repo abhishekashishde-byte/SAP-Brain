@@ -1,14 +1,13 @@
-// api/chat.js — v4 CLEAN ARCHITECTURE
-// Groq classifies → Claude answers → Gemini finds resources → DB stores corrections
+// api/chat.js — v5 with GLOBAL corrections (shared across all users)
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
-  isCorrecting, tokenize,
+  tokenize,
 } from './_shared.js'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. GROQ CLASSIFIER — replaces all regex pattern matching
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// 1. GROQ CLASSIFIER
+// ──────────────────────────────────────────────────────────────────────────────
 async function groqClassify(question) {
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -23,40 +22,26 @@ async function groqClassify(question) {
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `You are an SAP question classifier. Return ONLY valid JSON, nothing else.
+          content: `You are an SAP question classifier. Classify this question and return ONLY valid JSON.
 
-Pick ONE intent from: TABLE, TCODE, PROCESS, CONFIG, DEBUG, BAPI, GENERAL
+Rules for needsBlogSearch:
+- true: how-to questions, process questions, BAdI/BAPI implementation, config steps, troubleshooting workflows
+- false: table lookups, T-code lookups, field names, simple definitions, comparisons
 
-Intent rules:
-- TABLE: asking for a table name or where data is stored
-- TCODE: asking for a transaction code
-- PROCESS: how something works, process flow, steps
-- CONFIG: SPRO configuration, customizing settings
-- DEBUG: error, issue, not working, troubleshooting
-- BAPI: BAPI, function module, enhancement, BAdI, user exit
-- GENERAL: anything else
-
-needsBlogSearch rules:
-- true ONLY for: how-to questions, process flows, app usage guides, BAPI/BAdI implementation, configuration walkthroughs, refurbishment/maintenance procedures
-- false for: table lookups, T-code lookups, simple definitions, comparisons, document creation requests
-
-isCorrection rules:
-- true ONLY if user explicitly says previous answer was wrong
+Rules for isCorrection:
+- true: user is saying previous answer was wrong, correcting a fact, providing the right answer
 
 Question: "${question}"
 
-Respond with exactly this structure (replace values only):
-{"intent":"GENERAL","needsBlogSearch":false,"isCorrection":false}`
+Return exactly: {"intent":"TABLE|TCODE|PROCESS|CONFIG|DEBUG|BAPI|GENERAL","needsBlogSearch":false,"isCorrection":false}`
         }],
       }),
     })
     const data = await res.json()
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
-    const cleaned = raw.replace(/```json|```/g, '').trim()
-    const result = JSON.parse(cleaned)
-    const validIntents = ['TABLE','TCODE','PROCESS','CONFIG','DEBUG','BAPI','GENERAL']
+    const result = JSON.parse(raw.replace(/```json|```/g, '').trim())
     return {
-      intent: validIntents.includes(result.intent) ? result.intent : 'GENERAL',
+      intent: result.intent || 'GENERAL',
       needsBlogSearch: result.needsBlogSearch === true,
       isCorrection: result.isCorrection === true,
     }
@@ -65,17 +50,17 @@ Respond with exactly this structure (replace values only):
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. LOAD VERIFIED CORRECTIONS FROM MEMORY
-// ─────────────────────────────────────────────────────────────────────────────
-async function loadVerifiedCorrections(userId) {
+// ──────────────────────────────────────────────────────────────────────────────
+// 2. LOAD GLOBAL SAP CORRECTIONS — shared across ALL users
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadGlobalCorrections() {
   try {
     const SUPABASE_URL = process.env.SUPABASE_URL
     const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
     if (!SUPABASE_URL || !SUPABASE_KEY) return []
 
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&select=content&order=created_at.desc&limit=20`,
+      `${SUPABASE_URL}/rest/v1/sap_corrections?select=fact,topic&order=created_at.desc&limit=50`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -85,18 +70,18 @@ async function loadVerifiedCorrections(userId) {
     )
     if (!res.ok) return []
     const data = await res.json()
-    return Array.isArray(data) ? data.map(d => d.content).filter(Boolean) : []
+    return Array.isArray(data) ? data.map(d => d.fact).filter(Boolean) : []
   } catch {
     return []
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. SAVE CORRECTION TO MEMORY
-// ─────────────────────────────────────────────────────────────────────────────
-async function saveCorrection(userId, userMsg, assistantMsg) {
+// ──────────────────────────────────────────────────────────────────────────────
+// 3. SAVE GLOBAL CORRECTION — benefits ALL users
+// ──────────────────────────────────────────────────────────────────────────────
+async function saveGlobalCorrection(userMsg, assistantMsg, userId) {
   try {
-    // Use Groq to extract the corrected fact
+    // Use Groq to extract the corrected fact clearly
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -105,30 +90,52 @@ async function saveCorrection(userId, userMsg, assistantMsg) {
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 200,
+        max_tokens: 300,
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `Extract the corrected SAP fact from this exchange as a single clear statement.
-Return ONLY the fact as a string, no JSON, no explanation.
-If no clear correction, return: NO_CORRECTION
+          content: `Extract the corrected SAP fact from this exchange.
+Return JSON with two fields:
+- "fact": a clear, standalone SAP fact statement (what is CORRECT)
+- "topic": 1-3 word SAP topic (e.g. "Production Orders", "MM Tables", "PM BAdIs")
+
+If no clear correction exists, return: {"fact":"","topic":""}
 
 User correction: "${userMsg}"
-Previous answer: "${assistantMsg}"
+Previous (wrong) answer: "${assistantMsg?.slice(0, 500)}"
 
-Example output: "BAPI_PRODVERSION_CREATE does not exist — use C_MKAL_MAINTAIN FM instead for production version creation"`
+Example output: {"fact":"Table MKAL stores production versions — not MAST which stores BOM headers","topic":"Production Versions"}`
         }],
       }),
     })
     const data = await res.json()
-    const fact = data.choices?.[0]?.message?.content?.trim()
-    if (!fact || fact === 'NO_CORRECTION') return
+    const raw = data.choices?.[0]?.message?.content?.trim()
+    if (!raw) return
+
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    if (!parsed.fact || parsed.fact.length < 10) return
 
     const SUPABASE_URL = process.env.SUPABASE_URL
     const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
     if (!SUPABASE_URL || !SUPABASE_KEY) return
 
-    await fetch(`${SUPABASE_URL}/rest/v1/memories`, {
+    // Check if similar correction already exists (avoid duplicates)
+    const checkRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/sap_corrections?topic=eq.${encodeURIComponent(parsed.topic)}&limit=5`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    )
+    if (checkRes.ok) {
+      const existing = await checkRes.json()
+      const isDuplicate = existing.some(e =>
+        e.fact?.toLowerCase().includes(parsed.fact.toLowerCase().slice(0, 30))
+      )
+      if (isDuplicate) {
+        console.log('CORRECTION ALREADY EXISTS — skipping duplicate')
+        return
+      }
+    }
+
+    await fetch(`${SUPABASE_URL}/rest/v1/sap_corrections`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -137,42 +144,32 @@ Example output: "BAPI_PRODVERSION_CREATE does not exist — use C_MKAL_MAINTAIN 
         Prefer: 'return=minimal',
       },
       body: JSON.stringify([{
-        user_id: userId,
-        content: `[VERIFIED CORRECTION] ${fact}`,
+        fact: parsed.fact,
+        topic: parsed.topic,
+        corrected_by: userId || 'anonymous',
         created_at: new Date().toISOString(),
       }]),
     })
-    console.log('CORRECTION SAVED:', fact)
+    console.log('GLOBAL CORRECTION SAVED:', parsed.fact)
   } catch (err) {
-    console.error('saveCorrection error:', err.message)
+    console.error('saveGlobalCorrection error:', err.message)
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 // 4. GEMINI RESOURCE SEARCH
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 async function geminiSearchResources(question) {
   const key = process.env.GEMINI_API_KEY
   if (!key) return null
-
   try {
-    const prompt = `Search for SAP official resources about this topic.
-Focus ONLY on these domains: help.sap.com, community.sap.com, blogs.sap.com
-
-Return ONLY a JSON array of max 3 results. Each result must have real, working URLs.
-Format: [{"title":"...","url":"https://...","source":"SAP Help|SAP Community|SAP Blog"}]
-
-If you cannot find real URLs with confidence, return: []
-
-Topic: ${question}`
-
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts: [{ text: `Find SAP official resources about: ${question}\nReturn JSON array of max 3: [{"title":"...","url":"https://...","source":"SAP Help|SAP Community|SAP Blog"}]\nOnly use help.sap.com, community.sap.com, blogs.sap.com. Return [] if unsure.` }] }],
           tools: [{ google_search: {} }],
           generationConfig: { maxOutputTokens: 400, temperature: 0.1 },
         }),
@@ -181,50 +178,25 @@ Topic: ${question}`
     const data = await res.json()
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
     if (!raw) return null
-
-    const cleaned = raw.replace(/```json|```/g, '').trim()
-    const results = JSON.parse(cleaned)
-    if (!Array.isArray(results) || results.length === 0) return null
-
-    // Filter to only SAP official domains
-    const valid = results.filter(r =>
-      r.url &&
-      r.title &&
-      (r.url.includes('help.sap.com') ||
-       r.url.includes('community.sap.com') ||
-       r.url.includes('blogs.sap.com'))
-    )
+    const results = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    const valid = results.filter(r => r.url && r.title && (
+      r.url.includes('help.sap.com') || r.url.includes('community.sap.com') || r.url.includes('blogs.sap.com')
+    ))
     return valid.length > 0 ? valid : null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. FORMAT RESOURCES
-// ─────────────────────────────────────────────────────────────────────────────
 function formatResources(resources) {
-  if (!resources || resources.length === 0) return ''
-
-  const sourceIcon = {
-    'SAP Help': '📖',
-    'SAP Community': '💬',
-    'SAP Blog': '✍️',
-  }
-
-  const links = resources
-    .map(r => `${sourceIcon[r.source] || '🔗'} [${r.title}](${r.url}) — _${r.source}_`)
-    .join('\n')
-
+  if (!resources?.length) return ''
+  const icon = { 'SAP Help': '📖', 'SAP Community': '💬', 'SAP Blog': '✍️' }
+  const links = resources.map(r => `${icon[r.source] || '🔗'} [${r.title}](${r.url}) — _${r.source}_`).join('\n')
   return `\n\n---\n**📚 Further Reading**\n${links}`
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. CLAUDE CALL — streaming
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// 5. CLAUDE STREAMING
+// ──────────────────────────────────────────────────────────────────────────────
 async function streamClaude(systemPrompt, messages, onChunk) {
-  if (!process.env.ANTHROPIC_API_KEY) return null
-
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -248,17 +220,14 @@ async function streamClaude(systemPrompt, messages, onChunk) {
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
-  let buffer = ''
-  let fullText = ''
+  let buffer = '', fullText = ''
 
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
     buffer = lines.pop() || ''
-
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue
       const data = line.slice(6).trim()
@@ -267,27 +236,23 @@ async function streamClaude(systemPrompt, messages, onChunk) {
         const json = JSON.parse(data)
         if (json.type === 'content_block_delta') {
           const text = json.delta?.text || ''
-          if (text) {
-            fullText += text
-            onChunk(text)
-          }
+          if (text) { fullText += text; onChunk(text) }
         }
       } catch { }
     }
   }
-
   return fullText
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 // MAIN HANDLER
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const { messages, tone = 'balanced', userName, userId } = req.body
   const lastMsg = messages[messages.length - 1]?.content || ''
-  const prevAssistantMsg = messages[messages.length - 2]?.content || ''
+  const prevAssistantMsg = messages.filter(m => m.role === 'assistant').slice(-1)[0]?.content || ''
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -297,40 +262,33 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-    // STEP 1 — Groq classifies in parallel with loading memories
-    const [classification, corrections] = await Promise.all([
+    // STEP 1 — Classify + load global corrections in parallel
+    const [classification, globalCorrections] = await Promise.all([
       groqClassify(lastMsg),
-      userId ? loadVerifiedCorrections(userId) : Promise.resolve([]),
+      loadGlobalCorrections(),
     ])
 
     const { intent, needsBlogSearch, isCorrection } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
-      question: lastMsg.slice(0, 60),
-      intent,
-      needsBlogSearch,
-      isCorrection,
-      correctionsLoaded: corrections.length,
+      q: lastMsg.slice(0, 60), intent, needsBlogSearch, isCorrection,
+      corrections: globalCorrections.length,
     }))
 
-    // STEP 2 — Save correction if user is correcting
-    if (isCorrection && userId && prevAssistantMsg) {
-      saveCorrection(userId, lastMsg, prevAssistantMsg).catch(() => { })
+    // STEP 2 — Save correction globally if detected
+    if (isCorrection && prevAssistantMsg) {
+      saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
 
-    // STEP 3 — Build system prompt with verified corrections injected
+    // STEP 3 — Build system prompt with global corrections as ground truth
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
+    if (userName) systemPrompt += `\n\nUser: ${userName}`
 
-    if (userName) {
-      systemPrompt += `\n\nUser name: ${userName}`
+    if (globalCorrections.length > 0) {
+      systemPrompt += `\n\n⚠️ VERIFIED SAP CORRECTIONS — Confirmed correct by senior consultants. These override your training data. Treat as absolute ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
     }
 
-    if (corrections.length > 0) {
-      const correctionList = corrections.map(c => `- ${c}`).join('\n')
-      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS — These are facts confirmed correct by the user. Use them as ground truth, they override your training data:\n${correctionList}`
-    }
-
-    // STEP 4 — Start blog search in parallel if needed
+    // STEP 4 — Start blog search in parallel
     const blogSearchPromise = needsBlogSearch
       ? geminiSearchResources(lastMsg)
       : Promise.resolve(null)
@@ -345,21 +303,15 @@ export default async function handler(req, res) {
       send({ type: 'chunk', text: chunk })
     })
 
-    // STEP 6 — Append blog resources if found
+    // STEP 6 — Append resources if found
     const resources = await blogSearchPromise
     const resourceSection = formatResources(resources)
-
     if (resourceSection) {
       send({ type: 'chunk', text: resourceSection })
       fullAnswer += resourceSection
-      console.log('RESOURCES APPENDED:', resources.length, 'links')
     }
 
-    send({
-      type: 'done',
-      model: needsBlogSearch ? 'claude+gemini' : 'claude',
-      full: fullAnswer,
-    })
+    send({ type: 'done', model: needsBlogSearch ? 'claude+gemini' : 'claude', full: fullAnswer })
 
   } catch (err) {
     console.error('HANDLER ERROR:', err.message)
