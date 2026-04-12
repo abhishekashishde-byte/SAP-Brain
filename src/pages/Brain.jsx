@@ -667,16 +667,21 @@ export default function Brain({ session }) {
   },[])
 
   useEffect(()=>{ if(view==='chat') setTimeout(()=>inputRef.current?.focus(),100) },[view,activeConvId])
-  // Auto-summarise every 5 assistant messages silently
+  // Auto-summarise — but ONLY when user sends a new message (not while reading)
+  // We check on user message count, not total messages
   useEffect(()=>{
     if (!activeConvId || !messages.length) return
+    const userCount = messages.filter(m=>m.role==='user').length
     const assistantCount = messages.filter(m=>m.role==='assistant').length
+    // Only trigger after user sends a message AND there are enough assistant replies
+    // This ensures we never compact while user is reading the last answer
     const key = `${activeConvId}-${assistantCount}`
-    if (assistantCount > 0 && assistantCount % 5 === 0 && !hasAutoSummarisedRef.current.has(key) && !autoCompacting) {
+    if (userCount > 0 && assistantCount >= 5 && assistantCount % 5 === 0 &&
+        !hasAutoSummarisedRef.current.has(key) && !autoCompacting && !isStreaming) {
       hasAutoSummarisedRef.current.add(key)
       autoSummarise()
     }
-  },[messages.length, activeConvId])
+  },[messages.filter(m=>m.role==='user').length, activeConvId])
 
   const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);window.history.replaceState({ view:'home' },'') }
   const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);window.history.pushState({ view:'topic',mod,topic },'') }
