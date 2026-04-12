@@ -366,24 +366,59 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
 
 function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
   const [name, setName] = useState(profile?.name||'')
+  const [modules, setModules] = useState(profile?.modules||[])
+  const [role, setRole] = useState(profile?.role||'')
   const [saving, setSaving] = useState(false)
   const initials = getInitials(name||profile?.name, session.user.email)
+
+  const SAP_MODULES = ['PP','PM','MM','SD','FI','CO','HR','Fiori','S/4HANA','WM/EWM','QM','PS']
+
+  const toggleModule = (m) => setModules(prev =>
+    prev.includes(m) ? prev.filter(x=>x!==m) : [...prev, m]
+  )
+
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:16 }} onClick={onClose}>
-      <div style={{ background:'linear-gradient(145deg,#1A1035,#0F0A2A)',border:'1px solid rgba(79,70,229,0.2)',borderRadius:24,padding:32,width:340,maxWidth:'100%',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards' }} onClick={e=>e.stopPropagation()}>
+      <div style={{ background:'linear-gradient(145deg,#1A1035,#0F0A2A)',border:'1px solid rgba(79,70,229,0.2)',borderRadius:24,padding:32,width:360,maxWidth:'100%',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards' }} onClick={e=>e.stopPropagation()}>
         <div style={{ textAlign:'center',marginBottom:24 }}>
           <div style={{ width:72,height:72,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:26,fontWeight:700,color:'#fff',margin:'0 auto 12px',boxShadow:'0 4px 20px rgba(79,70,229,0.25)' }}>{initials}</div>
           <div style={{ fontSize:13,color:'rgba(255,255,255,0.5)' }}>{session.user.email}</div>
         </div>
-        <div style={{ marginBottom:20 }}>
-          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Display Name</label>
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder={profile?.name||'Enter your name'}
-            style={{ width:'100%',padding:'12px 16px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:12,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
-            onFocus={e=>e.target.style.borderColor='rgba(79,70,229,0.7)'}
-            onBlur={e=>e.target.style.borderColor='rgba(79,70,229,0.25)'}
+
+        {/* Name */}
+        <div style={{ marginBottom:16 }}>
+          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Name</label>
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Enter your name"
+            style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
           />
         </div>
-        <button onClick={async()=>{ setSaving(true); await onSave({name}); setSaving(false); onClose() }} style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
+
+        {/* Role */}
+        <div style={{ marginBottom:16 }}>
+          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Role</label>
+          <input value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g. SAP Consultant, Project Manager"
+            style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
+          />
+        </div>
+
+        {/* SAP Module Focus */}
+        <div style={{ marginBottom:20 }}>
+          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>SAP Module Focus</label>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+            {SAP_MODULES.map(m => (
+              <button key={m} onClick={()=>toggleModule(m)} style={{
+                padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',
+                border:`1px solid ${modules.includes(m)?'#4F46E5':'rgba(255,255,255,0.15)'}`,
+                background:modules.includes(m)?'rgba(79,70,229,0.3)':'rgba(255,255,255,0.05)',
+                color:modules.includes(m)?'#a5b4fc':'rgba(255,255,255,0.5)',
+                transition:'all 0.15s',
+              }}>{m}</button>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={async()=>{ setSaving(true); await onSave({name, role, modules}); setSaving(false); onClose() }}
+          style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
           {saving?'Saving...':'Save Profile'}
         </button>
         <button onClick={onSignOut} style={{ width:'100%',padding:12,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}
@@ -675,7 +710,7 @@ export default function Brain({ session }) {
       const res = await fetch('/api/chat',{
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userId:session.user.id, userName:profile?.name||null }),
+        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userId:session.user.id, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[] }),
       })
 
       if (!res.ok) throw new Error('Network error')
