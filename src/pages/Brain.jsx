@@ -127,8 +127,8 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
         }
         els.push(<div key={`t${i}`} style={{ margin:'10px 0' }}>
           <div style={{ display:'flex',gap:6,marginBottom:6,justifyContent:'flex-end' }}>
-            <button onClick={copyTableAsCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'DM Sans',sans-serif" }}>Copy CSV</button>
-            <button onClick={downloadCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'DM Sans',sans-serif" }}>↓ Download CSV</button>
+            <button onClick={copyTableAsCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>Copy CSV</button>
+            <button onClick={downloadCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>↓ Download CSV</button>
           </div>
           <div style={{ overflowX:'auto' }}>
           <table style={{ borderCollapse:'collapse',width:'100%',fontSize:15 }}>
@@ -137,7 +137,7 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
           </table></div></div>)
         continue
       }
-      if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700,fontSize:18,color:t.text,margin:'14px 0 6px',fontFamily:"'Playfair Display',serif" }}>{line.slice(3)}</div>); i++; continue }
+      if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700,fontSize:18,color:t.text,margin:'14px 0 6px',fontFamily:"'Inter',sans-serif" }}>{line.slice(3)}</div>); i++; continue }
       if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600,fontSize:16,color:t.text,margin:'10px 0 4px' }}>{line.slice(4)}</div>); i++; continue }
       if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex',gap:8,margin:'4px 0',paddingLeft:4 }}><span style={{ color:'#4F46E5',marginTop:1,flexShrink:0,fontSize:14 }}>•</span><span style={{ lineHeight:1.7,color:t.text2,fontSize:16 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
       if (/^\s+[\+\-\*] /.test(line)) {
@@ -187,7 +187,7 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
       <button title="Copy" onClick={handleCopy} style={{
         background:'transparent',border:`1px solid ${t.border}`,
         borderRadius:8,padding:'3px 9px',cursor:'pointer',fontSize:11,
-        color:copied?'#4F46E5':t.text4,transition:'all 0.15s',fontFamily:"'DM Sans',sans-serif",
+        color:copied?'#4F46E5':t.text4,transition:'all 0.15s',fontFamily:"'Inter','DM Sans',sans-serif",
       }}>{copied?'✓ Copied':'Copy'}</button>
     </div>
   )
@@ -330,7 +330,7 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
       <div style={{ background:t.surface,border:`1px solid ${t.border}`,borderRadius:18,padding:'28px 28px 24px',width:'min(90vw,400px)',boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20 }}>
           <div>
-            <div style={{ fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:600,color:t.text }}>Export Conversation</div>
+            <div style={{ fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:600,color:t.text }}>Export Conversation</div>
             <div style={{ fontSize:12,color:t.text3,marginTop:3 }}>Choose your document format</div>
           </div>
           <button onClick={onClose} style={{ background:'none',border:'none',cursor:'pointer',fontSize:20,color:t.text3,padding:'4px 8px' }}>×</button>
@@ -355,7 +355,7 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
           ))}
         </div>
         {error && <div style={{ fontSize:12,color:'#DC2626',marginBottom:12 }}>{error}</div>}
-        <button onClick={()=>mode&&generateDocx(mode)} disabled={!mode||loading} style={{ width:'100%',padding:'12px',borderRadius:10,border:'none',background:mode&&!loading?'linear-gradient(135deg,#1a1a2e,#4F46E5)':t.border,color:mode&&!loading?'#fff':t.text4,fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif",cursor:mode&&!loading?'pointer':'not-allowed',transition:'all 0.2s',display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
+        <button onClick={()=>mode&&generateDocx(mode)} disabled={!mode||loading} style={{ width:'100%',padding:'12px',borderRadius:10,border:'none',background:mode&&!loading?'linear-gradient(135deg,#1a1a2e,#4F46E5)':t.border,color:mode&&!loading?'#fff':t.text4,fontSize:14,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",cursor:mode&&!loading?'pointer':'not-allowed',transition:'all 0.2s',display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
           {loading?<><div style={{ width:16,height:16,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 0.8s linear infinite' }}/> Generating…</>:<>↓ Download Word Document</>}
         </button>
         <div style={{ fontSize:11,color:t.text4,textAlign:'center',marginTop:10 }}>.docx — opens in Word, Google Docs, LibreOffice</div>
@@ -378,15 +378,15 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
         <div style={{ marginBottom:20 }}>
           <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Display Name</label>
           <input value={name} onChange={e=>setName(e.target.value)} placeholder={profile?.name||'Enter your name'}
-            style={{ width:'100%',padding:'12px 16px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:12,fontSize:14,fontFamily:"'DM Sans',sans-serif",color:'#fff',outline:'none' }}
+            style={{ width:'100%',padding:'12px 16px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:12,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
             onFocus={e=>e.target.style.borderColor='rgba(79,70,229,0.7)'}
             onBlur={e=>e.target.style.borderColor='rgba(79,70,229,0.25)'}
           />
         </div>
-        <button onClick={async()=>{ setSaving(true); await onSave({name}); setSaving(false); onClose() }} style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
+        <button onClick={async()=>{ setSaving(true); await onSave({name}); setSaving(false); onClose() }} style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
           {saving?'Saving...':'Save Profile'}
         </button>
-        <button onClick={onSignOut} style={{ width:'100%',padding:12,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer',fontFamily:"'DM Sans',sans-serif" }}
+        <button onClick={onSignOut} style={{ width:'100%',padding:12,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}
           onMouseEnter={e=>e.currentTarget.style.background='rgba(239,68,68,0.15)'}
           onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.06)'}
         >Sign Out</button>
@@ -460,9 +460,9 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
   return (
     <div style={{ flex:1,overflowY:'auto',position:'relative',zIndex:1,display:'flex',flexDirection:'column',alignItems:'center',padding:'2rem 1rem 2.5rem' }}>
       {dark&&(<div style={{ position:'fixed',inset:0,zIndex:0,pointerEvents:'none',background:'#0D0D1A' }}><div style={{ position:'absolute',inset:0,background:'radial-gradient(ellipse 70% 50% at 15% 25%,rgba(79,70,229,0.22) 0%,transparent 60%), radial-gradient(ellipse 55% 45% at 85% 65%,rgba(124,58,237,0.16) 0%,transparent 55%)',animation:'auroraHS 14s ease-in-out infinite alternate' }}/><div style={{ position:'absolute',inset:0,backgroundImage:'radial-gradient(rgba(255,255,255,0.05) 1px,transparent 1px)',backgroundSize:'26px 26px',animation:'gridHS 22s linear infinite' }}/></div>)}
-      <style>{`@keyframes auroraHS{0%{transform:scale(1) translateY(0);opacity:1}50%{transform:scale(1.07) translateY(-18px);opacity:0.7}100%{transform:scale(1) translateY(0);opacity:1}}@keyframes gridHS{from{background-position:0 0}to{background-position:26px 26px}}@keyframes deckIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}.hs-card-wrap{animation:deckIn 0.45s ease both}.hs-topic{font-size:10px;padding:3px 10px;border-radius:20px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.85);white-space:nowrap}.hs-open-btn{font-size:13px;font-weight:600;padding:9px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.45);background:rgba(0,0,0,0.2);color:#fff;font-family:'DM Sans',sans-serif;cursor:pointer;pointer-events:auto;position:relative;z-index:30;transition:background 0.2s;min-width:100px;text-align:center}.hs-open-btn:hover{background:rgba(0,0,0,0.35)}.hs-open-btn:active{transform:scale(0.97)}.hs-recent-row{display:flex;align-items:center;gap:10px;padding:9px 13px;background:${dark?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)'};border:1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'};border-radius:10px;cursor:pointer;transition:background 0.15s,border-color 0.15s}.hs-recent-row:hover{background:${dark?'rgba(79,70,229,0.08)':'rgba(79,70,229,0.05)'};border-color:rgba(79,70,229,0.28)}`}</style>
+      <style>{`@keyframes auroraHS{0%{transform:scale(1) translateY(0);opacity:1}50%{transform:scale(1.07) translateY(-18px);opacity:0.7}100%{transform:scale(1) translateY(0);opacity:1}}@keyframes gridHS{from{background-position:0 0}to{background-position:26px 26px}}@keyframes deckIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}.hs-card-wrap{animation:deckIn 0.45s ease both}.hs-topic{font-size:10px;padding:3px 10px;border-radius:20px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.85);white-space:nowrap}.hs-open-btn{font-size:13px;font-weight:600;padding:9px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.45);background:rgba(0,0,0,0.2);color:#fff;font-family:'Inter','DM Sans',sans-serif;cursor:pointer;pointer-events:auto;position:relative;z-index:30;transition:background 0.2s;min-width:100px;text-align:center}.hs-open-btn:hover{background:rgba(0,0,0,0.35)}.hs-open-btn:active{transform:scale(0.97)}.hs-recent-row{display:flex;align-items:center;gap:10px;padding:9px 13px;background:${dark?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)'};border:1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'};border-radius:10px;cursor:pointer;transition:background 0.15s,border-color 0.15s}.hs-recent-row:hover{background:${dark?'rgba(79,70,229,0.08)':'rgba(79,70,229,0.05)'};border-color:rgba(79,70,229,0.28)}`}</style>
       <div style={{ position:'relative',zIndex:1,textAlign:'center',marginBottom:28 }}>
-        <div style={{ fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:600,color:t.text,marginBottom:5 }}>What would you like to explore?</div>
+        <div style={{ fontFamily:"'Inter',sans-serif",fontSize:21,fontWeight:600,color:t.text,marginBottom:5 }}>What would you like to explore?</div>
         <p style={{ fontSize:11,color:t.text3 }}>click card · swipe to cycle modules</p>
       </div>
       <div className="hs-card-wrap" style={{ position:'relative',zIndex:1,width:'min(100%,420px)',height:`${CARD_H+20}px`,touchAction:'none',cursor:'pointer',flexShrink:0,overflow:'hidden',borderRadius:22 }}
@@ -478,7 +478,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
         {(()=>{
           const usedModules=MODULE_STACK.filter(m=>conversations.some(c=>c.module===m.key))
           const stackToShow=usedModules.length>0?usedModules:null
-          if(!stackToShow)return(<div style={{ position:'absolute',inset:0,borderRadius:22,background:dark?'#1A1830':'#F0EEF8',border:`1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,padding:24 }}><div style={{ fontSize:36,opacity:0.3 }}>💬</div><div style={{ fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:600,color:t.text,textAlign:'center' }}>Start your first conversation</div><p style={{ fontSize:14,color:t.text3,textAlign:'center',maxWidth:260,lineHeight:1.6 }}>Ask any SAP question — your modules will appear here as you explore</p><button onClick={()=>onNewChat(null,null)} style={{ marginTop:8,padding:'10px 24px',borderRadius:10,border:'none',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',color:'#fff',fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif",cursor:'pointer' }}>Ask Wani →</button></div>)
+          if(!stackToShow)return(<div style={{ position:'absolute',inset:0,borderRadius:22,background:dark?'#1A1830':'#F0EEF8',border:`1px solid ${dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)'}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,padding:24 }}><div style={{ fontSize:36,opacity:0.3 }}>💬</div><div style={{ fontFamily:"'Inter',sans-serif",fontSize:18,fontWeight:600,color:t.text,textAlign:'center' }}>Start your first conversation</div><p style={{ fontSize:14,color:t.text3,textAlign:'center',maxWidth:260,lineHeight:1.6 }}>Ask any SAP question — your modules will appear here as you explore</p><button onClick={()=>onNewChat(null,null)} style={{ marginTop:8,padding:'10px 24px',borderRadius:10,border:'none',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',color:'#fff',fontSize:14,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",cursor:'pointer' }}>Ask Wani →</button></div>)
           return stackToShow.map((m,idx)=>{
             const count=conversations.filter(c=>c.module===m.key).length
             const topics=TOPICS[m.key]||[]
@@ -488,7 +488,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
               <div style={{ position:'relative',zIndex:1,display:'flex',alignItems:'flex-start',justifyContent:'space-between' }}>
                 <div style={{ display:'flex',alignItems:'center',gap:13 }}>
                   <div style={{ width:48,height:48,borderRadius:14,background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.28)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0 }}>{m.emoji}</div>
-                  <div><div style={{ fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:600,color:'#fff',letterSpacing:'-0.3px',lineHeight:1 }}>{m.mod}</div><div style={{ fontSize:11,color:'rgba(255,255,255,0.68)',marginTop:4 }}>{m.sub}</div></div>
+                  <div><div style={{ fontFamily:"'Inter',sans-serif",fontSize:22,fontWeight:600,color:'#fff',letterSpacing:'-0.3px',lineHeight:1 }}>{m.mod}</div><div style={{ fontSize:11,color:'rgba(255,255,255,0.68)',marginTop:4 }}>{m.sub}</div></div>
                 </div>
                 <span style={{ fontSize:10,fontWeight:600,padding:'4px 10px',borderRadius:20,background:'rgba(0,0,0,0.22)',border:'1px solid rgba(255,255,255,0.15)',color:'rgba(255,255,255,0.82)',whiteSpace:'nowrap',flexShrink:0 }}>{count} {count===1?'conv':'convs'}</span>
               </div>
@@ -507,7 +507,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
         <div style={{ flex:1,height:1,background:`linear-gradient(90deg,${dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'},transparent)` }}/>
       </div>
       <div style={{ position:'relative',zIndex:1,width:'min(100%,420px)',marginTop:14 }}>
-        <button onClick={()=>onNewChat(null,null)} style={{ width:'100%',padding:'12px 20px',borderRadius:13,border:'none',background:newBtnGrad,color:newBtnColor,fontSize:14,fontWeight:600,fontFamily:"'DM Sans',sans-serif",cursor:'pointer',letterSpacing:0.2,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:dark?'0 4px 18px rgba(0,0,0,0.4)':'0 4px 18px rgba(0,0,0,0.2)',transition:'box-shadow 0.2s,transform 0.15s' }}
+        <button onClick={()=>onNewChat(null,null)} style={{ width:'100%',padding:'12px 20px',borderRadius:13,border:'none',background:newBtnGrad,color:newBtnColor,fontSize:14,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",cursor:'pointer',letterSpacing:0.2,display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:dark?'0 4px 18px rgba(0,0,0,0.4)':'0 4px 18px rgba(0,0,0,0.2)',transition:'box-shadow 0.2s,transform 0.15s' }}
           onMouseEnter={e=>{e.currentTarget.style.boxShadow=dark?'0 6px 26px rgba(0,0,0,0.55)':'0 6px 26px rgba(0,0,0,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
           onMouseLeave={e=>{e.currentTarget.style.boxShadow=dark?'0 4px 18px rgba(0,0,0,0.4)':'0 4px 18px rgba(0,0,0,0.2)';e.currentTarget.style.transform='translateY(0)'}}
         ><span style={{ fontSize:16 }}>+</span> New Conversation</button>
@@ -534,10 +534,10 @@ function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, 
   return (
     <div style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
       <div style={{ maxWidth:720,margin:'0 auto' }}>
-        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:t.text3,fontSize:13,display:'flex',alignItems:'center',gap:6,marginBottom:16,fontFamily:"'DM Sans',sans-serif",padding:0 }}>← Back</button>
+        <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:t.text3,fontSize:13,display:'flex',alignItems:'center',gap:6,marginBottom:16,fontFamily:"'Inter','DM Sans',sans-serif",padding:0 }}>← Back</button>
         <div style={{ borderRadius:16,padding:'18px 22px',marginBottom:20,background:`linear-gradient(135deg,${colors.from},${colors.to})`,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10 }}>
-          <div><div style={{ fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:600,color:'#fff',marginBottom:4 }}>{topic||mod.split('–')[0].trim()}</div><div style={{ fontSize:12,color:'rgba(255,255,255,0.65)' }}>{filtered.length} conversation{filtered.length!==1?'s':''}</div></div>
-          <button onClick={()=>onNewChat(mod,topic)} style={{ padding:'9px 18px',background:'rgba(255,255,255,0.2)',border:'1.5px solid rgba(255,255,255,0.5)',borderRadius:24,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",transition:'all 0.2s' }}
+          <div><div style={{ fontFamily:"'Inter',sans-serif",fontSize:20,fontWeight:600,color:'#fff',marginBottom:4 }}>{topic||mod.split('–')[0].trim()}</div><div style={{ fontSize:12,color:'rgba(255,255,255,0.65)' }}>{filtered.length} conversation{filtered.length!==1?'s':''}</div></div>
+          <button onClick={()=>onNewChat(mod,topic)} style={{ padding:'9px 18px',background:'rgba(255,255,255,0.2)',border:'1.5px solid rgba(255,255,255,0.5)',borderRadius:24,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.2s' }}
             onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.35)'}
             onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.2)'}
           >+ New Conversation</button>
@@ -613,12 +613,8 @@ export default function Brain({ session }) {
     ]).then(([convs,prof])=>{ setConversations(convs||[]); setProfile(prof); setDbLoading(false) })
   },[session])
 
-  // Scroll to bottom when message count changes (new message sent/received)
-  useEffect(()=>{
-    const el = chatScrollRef.current
-    if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  },[messages.length])
+  // No auto-scroll — user scrolls freely
+  // useEffect removed intentionally
 
   useEffect(()=>{
     window.history.replaceState({ view:'home' },'')
@@ -706,12 +702,7 @@ export default function Brain({ session }) {
             if (evt.type === 'chunk') {
               accumulated += evt.text
               setStreamingText(accumulated)
-              // Auto-scroll during streaming if near bottom
-              if (chatScrollRef.current) {
-                const el = chatScrollRef.current
-                const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
-                if (isNearBottom) el.scrollTo({ top:el.scrollHeight, behavior:'instant' })
-              }
+              // Auto-scroll removed — user scrolls freely
             } else if (evt.type === 'done') {
               fullReply = evt.full || accumulated
               modelUsed = evt.model
@@ -818,7 +809,7 @@ export default function Brain({ session }) {
   const groups = groupConversations(filteredConvs)
 
   return (
-    <div style={{ display:'flex',height:'100dvh',background:t.bg,fontFamily:"'DM Sans',sans-serif",overflow:'hidden' }}>
+    <div style={{ display:'flex',height:'100dvh',background:t.bg,fontFamily:"'Inter','DM Sans',sans-serif",overflow:'hidden' }}>
       <style>{`
         @keyframes typingBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
         @keyframes msgSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -829,7 +820,7 @@ export default function Brain({ session }) {
         @keyframes blob1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.08)}66%{transform:translate(-20px,20px) scale(0.95)}}
         @keyframes blob2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-35px,25px) scale(0.93)}66%{transform:translate(25px,-15px) scale(1.05)}}
         @keyframes blob3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(20px,30px) scale(1.06)}}
-        .tone-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.18s;font-weight:500;}
+        .tone-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-family:'Inter','DM Sans',sans-serif;cursor:pointer;transition:all 0.18s;font-weight:500;}
         .tone-btn.active{background:#4F46E5;border-color:transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 10px rgba(79,70,229,0.25);}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(79,70,229,0.25);border-radius:4px}
         @media(max-width:768px){
@@ -848,7 +839,7 @@ export default function Brain({ session }) {
           <div onClick={goHome} style={{ display:'flex',alignItems:'center',gap:10,marginBottom:14,cursor:'pointer' }}>
             <WaniLogo size={30} dark={dark}/><WaniWordmark height={16} dark={dark}/>
           </div>
-          <button onClick={()=>goChat(null,null,null)} style={{ width:'100%',padding:'10px 14px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s' }}
+          <button onClick={()=>goChat(null,null,null)} style={{ width:'100%',padding:'10px 14px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s' }}
             onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
             onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
           ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}> New Conversation</span></button>
@@ -857,7 +848,7 @@ export default function Brain({ session }) {
           <div style={{ position:'relative' }}>
             <span style={{ position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:t.text4,fontSize:13 }}>🔍</span>
             <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search..."
-              style={{ width:'100%',padding:'8px 10px 8px 32px',boxSizing:'border-box',border:`1.5px solid ${t.border}`,borderRadius:10,fontSize:13,color:t.text,background:t.inputBg,fontFamily:"'DM Sans',sans-serif",outline:'none',transition:'border-color 0.2s' }}
+              style={{ width:'100%',padding:'8px 10px 8px 32px',boxSizing:'border-box',border:`1.5px solid ${t.border}`,borderRadius:10,fontSize:13,color:t.text,background:t.inputBg,fontFamily:"'Inter','DM Sans',sans-serif",outline:'none',transition:'border-color 0.2s' }}
               onFocus={e=>e.target.style.borderColor='#4F46E5'}
               onBlur={e=>e.target.style.borderColor=t.border}
             />
@@ -897,14 +888,14 @@ export default function Brain({ session }) {
         </div>
 
         {/* Topbar */}
-        <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap:isMobile?12:8,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,padding:isMobile?'0 18px':'9px 12px',height:isMobile?68:48 }}>
+        <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap:isMobile?12:8,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingLeft:isMobile?'18px':'12px',paddingRight:isMobile?'18px':'12px',paddingBottom:isMobile?'0':'9px',paddingTop:isMobile?'max(14px, calc(env(safe-area-inset-top) + 10px))':'9px',height:isMobile?'auto':48,minHeight:isMobile?68:48 }}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ background:'none',border:'none',cursor:'pointer',borderRadius:10,fontSize:isMobile?24:16,color:t.text,transition:'background 0.15s',flexShrink:0,width:isMobile?48:32,height:isMobile?48:32,display:'flex',alignItems:'center',justifyContent:'center' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>☰</button>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
           {view==='chat'&&activeConv&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><ModuleBadge module={activeConv.module} small={isMobile}/>{!isMobile&&<div style={{ fontSize:13,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0 }}>{activeConv.title}</div>}{isMobile&&<div style={{ fontSize:14,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:1 }}>{activeConv.topic||activeConv.module?.split('–')[0].trim()}</div>}</div>)}
           {view==='topic'&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><span style={{ color:t.text4,fontSize:16 }}>›</span><div style={{ fontSize:isMobile?15:13,fontWeight:500,color:t.text2 }}>{browseTopic||browseModule?.split('–')[0].trim()}</div></div>)}
           {!(view==='chat'||view==='topic')&&<div style={{ flex:1 }}/>}
           {view==='chat'&&messages.some(m=>m.role==='user')&&(
-            <button onClick={()=>setShowExport(true)} title="Export" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'↓':'↓ Export'}</button>
+            <button onClick={()=>setShowExport(true)} title="Export" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'↓':'↓ Export'}</button>
           )}
           <button onClick={toggle} style={{ width:isMobile?46:44,height:isMobile?28:24,borderRadius:14,border:'none',cursor:'pointer',position:'relative',background:dark?'linear-gradient(135deg,#4F46E5,#6366F1)':'#E2E2EA',transition:'background 0.3s',flexShrink:0 }}>
             <div style={{ position:'absolute',top:isMobile?4:2,width:isMobile?20:20,height:isMobile?20:20,borderRadius:'50%',background:'#fff',transition:'left 0.3s',left:dark?(isMobile?22:22):(isMobile?4:2),boxShadow:'0 2px 4px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11 }}>{dark?'🌙':'☀️'}</div>
@@ -926,7 +917,7 @@ export default function Brain({ session }) {
           <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center' }}>
             <div style={{ background:dark?'#1A1530':'#fff',border:`1px solid ${dark?'#3D3560':'#E0E0E0'}`,borderRadius:20,padding:'32px 40px',width:'min(90vw,380px)',textAlign:'center',boxShadow:'0 24px 64px rgba(0,0,0,0.3)' }}>
               <div style={{ width:44,height:44,borderRadius:'50%',border:'3px solid rgba(79,70,229,0.2)',borderTopColor:'#4F46E5',animation:'spin 0.9s linear infinite',margin:'0 auto 20px' }}/>
-              <div style={{ fontSize:16,fontWeight:600,color:dark?'#F0EEF8':'#1C1C1E',marginBottom:8,fontFamily:"'DM Sans',sans-serif" }}>
+              <div style={{ fontSize:16,fontWeight:600,color:dark?'#F0EEF8':'#1C1C1E',marginBottom:8,fontFamily:"'Inter','DM Sans',sans-serif" }}>
                 Compacting conversation…
               </div>
               <div style={{ fontSize:13,color:dark?'#8A849E':'#8A8A8E',marginBottom:20,lineHeight:1.5 }}>
@@ -951,7 +942,7 @@ export default function Brain({ session }) {
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'calc(100vh - 280px)',textAlign:'center',animation:'fadeIn 0.4s ease' }}>
                     <WaniLogo size={window.innerWidth<768?48:80} dark={dark}/>
                     <div style={{ marginTop:16,marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:40} dark={dark}/></div>
-                    {profile?.name&&(<div style={{ fontFamily:"'Playfair Display',serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:t.text,marginTop:12,marginBottom:4 }}>Hello, {profile.name.split(' ')[0]} 👋</div>)}
+                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:t.text,marginTop:12,marginBottom:4 }}>Hello, {profile.name.split(' ')[0]} 👋</div>)}
                     <p style={{ fontSize:15,color:t.text3,maxWidth:300,lineHeight:1.7,marginBottom:22,marginTop:8 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
@@ -986,7 +977,7 @@ export default function Brain({ session }) {
                     onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px'}}
                     onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
                     placeholder="Ask your SAP question…" rows={1}
-                    style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
+                    style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
                   <button onClick={handleSend} disabled={!input.trim()||isLoading||isStreaming}
                     style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:input.trim()&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:input.trim()&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:input.trim()&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
