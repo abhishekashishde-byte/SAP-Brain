@@ -250,9 +250,17 @@ async function streamClaude(systemPrompt, messages, onChunk) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { messages, tone = 'balanced', userName, userId } = req.body
+  const { messages, tone = 'balanced', userName, userRole, userModules = [], userId } = req.body
   const lastMsg = messages[messages.length - 1]?.content || ''
   const prevAssistantMsg = messages.filter(m => m.role === 'assistant').slice(-1)[0]?.content || ''
+
+  // Detect time of day for natural greeting
+  const hour = new Date().getHours()
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const firstName = userName?.split(' ')[0] || null
+
+  // Only greet on first message of session (no previous assistant messages)
+  const isFirstMessage = messages.filter(m => m.role === 'assistant').length === 0
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -280,9 +288,27 @@ export default async function handler(req, res) {
       saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
 
-    // STEP 3 — Build system prompt with global corrections as ground truth
+    // STEP 3 — Build system prompt with personalization + global corrections
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
-    if (userName) systemPrompt += `\n\nUser: ${userName}`
+
+    // Add user context
+    if (firstName || userRole || userModules.length > 0) {
+      systemPrompt += `\n\nUSER PROFILE:`
+      if (firstName) systemPrompt += `\n- Name: ${firstName}`
+      if (userRole) systemPrompt += `\n- Role: ${userRole}`
+      if (userModules.length > 0) systemPrompt += `\n- SAP Focus: ${userModules.join(', ')}`
+      systemPrompt += `\n\nPERSONALIZATION RULES:
+- Use their first name naturally but SPARINGLY — maximum once per conversation, only on the very first response
+- Tailor technical depth to their role and module focus
+- If they ask about a module they work in, go deeper and more specific
+- If they ask about a module outside their focus, be clear and add "this may work differently in your specific implementation"
+- DO NOT say "Great question!" or similar filler — just answer naturally`
+    }
+
+    // Add first message greeting instruction
+    if (isFirstMessage && firstName) {
+      systemPrompt += `\n\nThis is the FIRST message of this session. Start your response with a brief natural greeting like "${timeGreeting}, ${firstName}." — then answer directly. Only do this ONCE, never again in subsequent messages.`
+    }
 
     if (globalCorrections.length > 0) {
       systemPrompt += `\n\n⚠️ VERIFIED SAP CORRECTIONS — Confirmed correct by senior consultants. These override your training data. Treat as absolute ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
