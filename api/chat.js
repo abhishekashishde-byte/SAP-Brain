@@ -2,7 +2,6 @@
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
-  tokenize,
 } from './_shared.js'
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -327,11 +326,18 @@ export default async function handler(req, res) {
       : Promise.resolve(null)
 
     // STEP 5 — Stream Claude answer
-    const { anonymised } = tokenize(messages)
-    let fullAnswer = ''
+    // Send messages directly — tokenize was causing issues
+    const validMessages = messages
+      .filter(m => m.role && m.content && m.content.trim())
+      .map(m => ({ role: m.role, content: String(m.content).trim() }))
+    
+    console.log('SENDING TO CLAUDE:', JSON.stringify({
+      messageCount: validMessages.length,
+      systemPromptLength: systemPrompt.length,
+      firstMsg: validMessages[0]?.content?.slice(0, 50),
+    }))
 
-    // Validate messages before sending
-    const validMessages = anonymised.filter(m => m.role && m.content && m.content.trim())
+    let fullAnswer = ''
     if (validMessages.length === 0) {
       send({ type: 'error', error: 'No valid messages to process' })
       res.end()
