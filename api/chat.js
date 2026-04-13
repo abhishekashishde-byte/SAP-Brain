@@ -105,78 +105,44 @@ Wrong answer: "${assistantMsg?.slice(0, 300)}"`
   } catch (err) { console.error('saveCorrection error:', err.message) }
 }
 
-// ── 4. GEMINI SEARCH — extracts real links from grounding metadata ────────────
+// ── 4. GEMINI SEARCH — full answer with web results (same as Saarthi) ─────────
 async function geminiSearch(question) {
   const key = process.env.GEMINI_API_KEY
   if (!key) return null
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash']
-  for (const model of models) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `SAP documentation search: ${question}` }] }],
-            tools: [{ google_search: {} }],
-            generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
-          }),
-        }
-      )
-      if (!res.ok) continue
-      const data = await res.json()
+  try {
+    // Discover available models
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`)
+    const listData = await listRes.json()
+    const allModels = listData.models || []
+    const model = allModels.find(m => m.supportedGenerationMethods?.includes('generateContent'))
+    if (!model) return null
 
-      // Extract from grounding metadata — this is where real URLs are
-      const groundingChunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || []
-      const groundingSupport = data.candidates?.[0]?.groundingMetadata?.searchEntryPoint
-
-      const links = []
-
-      // Method 1: grounding chunks (most reliable)
-      for (const chunk of groundingChunks) {
-        const web = chunk.web
-        if (!web?.uri || !web?.title) continue
-        const uri = web.uri
-        // Only SAP official domains
-        if (!uri.includes('help.sap.com') && !uri.includes('community.sap.com') && !uri.includes('blogs.sap.com') && !uri.includes('launchpad.support.sap.com')) continue
-        const source = uri.includes('help.sap.com') ? 'SAP Help'
-          : uri.includes('community.sap.com') ? 'SAP Community'
-          : uri.includes('blogs.sap.com') ? 'SAP Blog' : 'SAP Support'
-        links.push({ title: web.title, url: uri, source })
-        if (links.length >= 3) break
-      }
-
-      if (links.length > 0) {
-        console.log('GEMINI LINKS FOUND:', links.length)
-        return links
-      }
-
-      // Method 2: extract URLs from response text as fallback
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-      const urlMatches = text.match(/https?:\/\/(help|community|blogs)\.sap\.com[^\s\)\"]+/g) || []
-      if (urlMatches.length > 0) {
-        return urlMatches.slice(0, 3).map(url => ({
-          title: url.split('/').pop().replace(/-/g, ' ') || 'SAP Documentation',
-          url,
-          source: url.includes('help.sap.com') ? 'SAP Help' : url.includes('community.sap.com') ? 'SAP Community' : 'SAP Blog'
-        }))
-      }
-
-      console.log('GEMINI: no SAP links found in response')
-    } catch (err) {
-      console.log('GEMINI ERROR:', err.message)
-      continue
+    const url = `https://generativelanguage.googleapis.com/v1beta/${model.name}:generateContent?key=${key}`
+    const body = {
+      contents: [{ parts: [{ text: `You are an SAP expert assistant. Search for and answer this SAP question with current, accurate information. Include relevant SAP Help or Community links if found.\n\nQuestion: ${question}` }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.4 },
     }
-  }
-  return null
-}
 
-function formatResources(resources) {
-  if (!resources?.length) return ''
-  const icon = { 'SAP Help': '📖', 'SAP Community': '💬', 'SAP Blog': '✍️', 'SAP Support': '🔧' }
-  const links = resources.map(r => `${icon[r.source] || '🔗'} [${r.title}](${r.url}) — _${r.source}_`).join('\n')
-  return `\n\n---\n**📚 SAP Resources Found**\n${links}`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const parts = data.candidates?.[0]?.content?.parts || []
+    let content = ''
+    for (const part of parts) {
+      if (part.text) content += part.text
+    }
+    console.log('GEMINI SEARCH RESULT length:', content.length)
+    return content.trim() || null
+  } catch (err) {
+    console.log('GEMINI SEARCH ERROR:', err.message)
+    return null
+  }
 }
 
 // ── 5. CLAUDE STREAMING ──────────────────────────────────────────────────────
@@ -319,12 +285,12 @@ export default async function handler(req, res) {
       return
     }
 
-    // STEP 7 — Append resources if found
-    const resources = await blogPromise
-    const resourceSection = formatResources(resources)
-    if (resourceSection) {
-      send({ type: 'chunk', text: resourceSection })
-      fullAnswer += resourceSection
+    // STEP 7 — Append Gemini web search results if found
+    const geminiAnswer = await blogPromise
+    if (geminiAnswer) {
+      const section = `\n\n---\n**🌐 From SAP Community & Documentation**\n${geminiAnswer}`
+      send({ type: 'chunk', text: section })
+      fullAnswer += section
     }
 
     send({ type: 'done', model: needsBlogSearch ? 'claude+gemini' : 'claude', full: fullAnswer })
