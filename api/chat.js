@@ -311,7 +311,10 @@ export default async function handler(req, res) {
     }
 
     if (globalCorrections.length > 0) {
-      systemPrompt += `\n\n⚠️ VERIFIED SAP CORRECTIONS — Confirmed correct by senior consultants. These override your training data. Treat as absolute ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
+      const validCorrections = globalCorrections.filter(c => c && c.length > 5)
+      if (validCorrections.length > 0) {
+        systemPrompt += `\n\n⚠️ VERIFIED SAP CORRECTIONS — Confirmed correct by senior consultants. These override your training data. Treat as absolute ground truth:\n${validCorrections.map(c => `- ${c}`).join('\n')}`
+      }
     }
 
     // STEP 4 — Start blog search in parallel
@@ -323,11 +326,33 @@ export default async function handler(req, res) {
     const { anonymised } = tokenize(messages)
     let fullAnswer = ''
 
+    // Validate messages before sending
+    const validMessages = anonymised.filter(m => m.role && m.content && m.content.trim())
+    if (validMessages.length === 0) {
+      send({ type: 'error', error: 'No valid messages to process' })
+      res.end()
+      return
+    }
+
     send({ type: 'start' })
 
-    fullAnswer = await streamClaude(systemPrompt, anonymised, (chunk) => {
-      send({ type: 'chunk', text: chunk })
-    })
+    try {
+      fullAnswer = await streamClaude(systemPrompt, validMessages, (chunk) => {
+        send({ type: 'chunk', text: chunk })
+      })
+    } catch (claudeErr) {
+      console.error('CLAUDE STREAM ERROR:', claudeErr.message)
+      send({ type: 'error', error: `Claude error: ${claudeErr.message}` })
+      res.end()
+      return
+    }
+
+    if (!fullAnswer || fullAnswer.trim().length === 0) {
+      console.error('CLAUDE RETURNED EMPTY RESPONSE')
+      send({ type: 'error', error: 'Empty response from Claude — please try again' })
+      res.end()
+      return
+    }
 
     // STEP 6 — Append resources if found
     const resources = await blogSearchPromise
