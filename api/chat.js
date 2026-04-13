@@ -24,12 +24,20 @@ async function groqClassify(question) {
           role: 'user',
           content: `You are an SAP question classifier. Classify this question and return ONLY valid JSON.
 
-Rules for needsBlogSearch:
-- true: how-to questions, process questions, BAdI/BAPI implementation, config steps, troubleshooting workflows
-- false: table lookups, T-code lookups, field names, simple definitions, comparisons
+Rules for needsBlogSearch - set TRUE for ANY of these:
+- Questions about S/4HANA changes, simplifications, deprecated fields/features
+- Questions about whether something exists or was removed in S/4HANA
+- How-to process questions, configuration steps
+- BAdI/BAPI/FM implementation questions
+- Troubleshooting and error resolution
+- "is this available in S/4HANA", "does S/4HANA have", "was this removed"
+- Any uncertainty keywords: "not there", "can't find", "missing", "removed", "deprecated"
+- Questions about differences between ECC and S/4HANA
+
+Set FALSE only for: pure table name lookups, pure T-code lookups, simple definitions
 
 Rules for isCorrection:
-- true: user is saying previous answer was wrong, correcting a fact, providing the right answer
+- true: user saying previous answer was wrong, providing the correct fact
 
 Question: "${question}"
 
@@ -296,6 +304,9 @@ export default async function handler(req, res) {
 
     // STEP 3 — Build system prompt
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
+
+    // Critical — never say you can't search
+    systemPrompt += `\n\nCRITICAL: You have access to SAP official documentation and community resources. NEVER say "I can't search online" or "I can't access external documents". If you're uncertain, say "let me check the SAP documentation" — resources will be provided when available.`
     if (firstName || userRole || userModules?.length > 0) {
       systemPrompt += `\n\nUSER PROFILE:`
       if (firstName) systemPrompt += `\n- Name: ${firstName}`
