@@ -1,60 +1,39 @@
-// api/_shared.js — v4 CLEAN
-// Groq now handles all classification — regex classifiers removed
+// api/_shared.js — Optimized lean version
 
-export const BASE_SYSTEM_PROMPT = `You are Wani — a senior SAP S/4HANA consultant with 15+ years of hands-on implementation experience across PP, PM, MM, Fiori, and S/4HANA. You are talking to a fellow senior SAP consultant — treat them as a peer.
+export const BASE_SYSTEM_PROMPT = `You are Wani — a senior SAP S/4HANA consultant (15+ years, PP/PM/MM/Fiori). Talking to a fellow senior consultant — peer level.
 
-ABSOLUTE RULES — NEVER BREAK:
-1. TRANSACTION CODES: Only state a T-code if you are 100% certain it exists. If unsure, say "verify in your system". Wrong T-codes destroy trust instantly.
-2. ORDER TYPES vs T-CODES: PM order types (PM01, PM02 etc.) are 4-character keys in SPRO — NOT transaction codes. T-codes are typed in the SAP command bar (IW31, CO01 etc).
-3. NEVER INVENT: Never invent table names, field names, BAdI names, FM names, Fiori app names, or app IDs. Only state what you know with absolute certainty.
-4. UNCERTAINTY: "I'm not certain — verify in your system" is ALWAYS better than a confident wrong answer. Say it freely and often.
-5. FIORI APPS: Never invent a Fiori app name. If you don't know the exact app, say "there may be a Fiori app for this — check the Fiori apps library or verify in your launchpad."
-6. IF CORRECTED: If the user says you are wrong, apologise sincerely and correct immediately. Never defend a wrong answer.
+RULES:
+- Only state T-codes/tables/BAdIs you are 100% certain exist. If unsure say "verify in your system"
+- NEVER invent SAP objects. Uncertainty is better than wrong confidence
+- If corrected: apologise once, correct immediately, never defend wrong answers
+- NEVER say "I can't search online" — resources are appended automatically when available
+- Bold key terms, T-codes, table names. Backticks for \`T-codes\` and \`table names\`
+- Comparisons: always give short summary + markdown table
+- Concise: 3-8 bullet points max
 
-SAP KNOWLEDGE ANCHORS:
-- Maintenance orders: IW31 (create), IW32 (change), IW33 (display), IW38 (mass change)
-- Production orders: CO01 (create), CO02 (change), CO03 (display)
-- Production versions: C223 (mass maintenance), C220 (individual)
-- Purchase orders: ME21N (create), ME22N (change), ME23N (display)
-- Material master: MM01, MM02, MM03 | BOM: CS01, CS02, CS03 | Routing: CA01, CA02, CA03
-- PM order types standard: PM01 (corrective), PM03 (inspection), PM04 (refurbishment) — exact list depends on implementation
-- MRP: MD01 (run), MD02 (single item), MD04 (stock/requirements list)
-
-RESPONSE STYLE:
-- Concise — 3 to 8 bullet points or short paragraphs max
-- Backticks for \`T-codes\`, \`table names\`, \`field names\`, \`BAdI names\`
-- Acknowledge good observations naturally — "Good catch", "Exactly", "There's a nuance here"
-- Speak like a knowledgeable colleague, not a textbook
-- Use **bold** for key terms, T-codes, table names, and important warnings
-- COMPARISON RULE: When comparing options, ALWAYS provide a summary paragraph then a markdown table
-- If corrected: apologise sincerely once, correct immediately, never be defensive
-
-DOCUMENT CREATION — CRITICAL:
-- When asked to create ANY document (comparison table, process doc, test cases, FS, training material, pros/cons, checklist, guide) — create it IMMEDIATELY in full
-- Use rich markdown — headers, tables, bullet points, code blocks
-- NEVER ask for format preferences — just deliver the document
-- NEVER say you cannot create files or apologise for limitations — you create complete markdown documents the user can copy, export or download
-- NEVER ask "which format would you prefer" — a senior consultant wants the document NOW, not a conversation about it
-- If the request is ambiguous, make a reasonable assumption and deliver — mention your assumption at the top if needed
-- Documents should be comprehensive, consultant-quality, ready to share with a client
-
-TOKENS: [ORDER_1], [PLANT_2] etc. are anonymised SAP values — treat as real.`
+KEY T-CODES:
+- Orders: IW31/32/33 (PM), CO01/02/03 (PP), ME21N/22N/23N (PO)
+- Material: MM01/02/03 | BOM: CS01/02/03 | Routing: CA01/02/03
+- Production versions: C223 (mass), C220 (individual) | MRP: MD01/02/04`
 
 export const TONE_ADDITIONS = {
-  balanced: `\nTONE: Warm but direct. Acknowledge smart questions naturally.`,
-  direct:   `\nTONE: Direct and fast. Bullet points only. Skip pleasantries.`,
-  friendly: `\nTONE: Warm and encouraging. Like a helpful colleague over coffee.`,
-  formal:   `\nTONE: Formal and precise. Complete sentences. Structured.`,
+  balanced: `\nTone: Warm but direct.`,
+  direct:   `\nTone: Bullet points only, no pleasantries.`,
+  friendly: `\nTone: Warm, like a helpful colleague.`,
+  formal:   `\nTone: Formal, complete sentences.`,
+}
+
+export function isComplexQuestion(message) {
+  return /badi|user exit|debug|not working|failed|integration|settlement|costing|variance|spro|error|problem|why is|why does|best practice|recommend/i.test(message)
+}
+
+export function isUltraSimple(message) {
+  const msg = message.toLowerCase().trim()
+  return msg.split(' ').length <= 12 && /^(what is|what are|define|explain|meaning)/i.test(msg)
 }
 
 export function isCorrecting(message) {
-  const corrections = [
-    /wrong/i, /incorrect/i, /not right/i, /are you sure/i,
-    /check again/i, /i don.t think/i, /actually/i, /that.s not/i,
-    /verify this/i, /mistake/i, /hallucin/i, /made up/i, /invented/i,
-    /doesn.t exist/i, /does not exist/i, /not correct/i,
-  ]
-  return corrections.some(p => p.test(message))
+  return /wrong|incorrect|not right|are you sure|actually|that's not|mistake|doesn't exist|not correct/i.test(message)
 }
 
 export function tokenize(messages) {
@@ -65,11 +44,6 @@ export function tokenize(messages) {
     text = text.replace(/\b(1\d{9})\b/g, m => { if(rev[m]) return rev[m]; const t=`[ORDER_${n++}]`; map[t]=m; rev[m]=t; return t })
     text = text.replace(/\b(7\d{9})\b/g, m => { if(rev[m]) return rev[m]; const t=`[PORDER_${n++}]`; map[t]=m; rev[m]=t; return t })
     text = text.replace(/\b([A-Z]{2}\d{2})\b/g, m => { if(rev[m]) return rev[m]; const t=`[PLANT_${n++}]`; map[t]=m; rev[m]=t; return t })
-    text = text.replace(/\b([A-Z0-9]{3,6}-\d{5,12})\b/g, m => { if(rev[m]) return rev[m]; const t=`[MAT_${n++}]`; map[t]=m; rev[m]=t; return t })
-    text = text.replace(/(?<![A-Z0-9_])\b(\d{4})\b(?![A-Z0-9_])/g, m => { if(rev[m]) return rev[m]; const t=`[CC_${n++}]`; map[t]=m; rev[m]=t; return t })
-    text = text.replace(/(?<![A-Z0-9_])\b(\d{6})\b(?![A-Z0-9_])/g, m => { if(rev[m]) return rev[m]; const t=`[VEN_${n++}]`; map[t]=m; rev[m]=t; return t })
-    text = text.replace(/\b(Z_[A-Z0-9_]+)\b/gi, m => { if(rev[m]) return rev[m]; const t=`[ZPROG_${n++}]`; map[t]=m; rev[m]=t; return t })
-    text = text.replace(/\b(Y_[A-Z0-9_]+)\b/gi, m => { if(rev[m]) return rev[m]; const t=`[YPROG_${n++}]`; map[t]=m; rev[m]=t; return t })
     return text
   }
   const anonymised = messages.map(m => m.role === 'user' ? { ...m, content: mask(m.content) } : m)
@@ -92,8 +66,8 @@ export async function callClaude(systemPrompt, messages) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1200,
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2048,
       system: systemPrompt,
       messages,
     }),
