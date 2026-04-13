@@ -1,12 +1,11 @@
-// api/chat.js — v5 with GLOBAL corrections (shared across all users)
+// api/chat.js — Final stable version
+// Groq classifies → Claude answers → Gemini finds resources → DB stores corrections
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS,
 } from './_shared.js'
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 1. GROQ CLASSIFIER
-// ──────────────────────────────────────────────────────────────────────────────
+// ── 1. GROQ CLASSIFIER ────────────────────────────────────────────────────────
 async function groqClassify(question) {
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -17,30 +16,26 @@ async function groqClassify(question) {
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 120,
+        max_tokens: 80,
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `You are an SAP question classifier. Classify this question and return ONLY valid JSON.
+          content: `SAP question classifier. Return ONLY valid JSON.
 
-Rules for needsBlogSearch - set TRUE for ANY of these:
-- Questions about S/4HANA changes, simplifications, deprecated fields/features
-- Questions about whether something exists or was removed in S/4HANA
-- How-to process questions, configuration steps
-- BAdI/BAPI/FM implementation questions
-- Troubleshooting and error resolution
-- "is this available in S/4HANA", "does S/4HANA have", "was this removed"
-- Any uncertainty keywords: "not there", "can't find", "missing", "removed", "deprecated"
-- Questions about differences between ECC and S/4HANA
+needsBlogSearch = true if ANY of:
+- S/4HANA changes, deprecated/removed fields/features
+- "not there", "missing", "removed", "can you search", "find document"
+- how-to, config steps, process questions, BAdI/BAPI implementation
+- troubleshooting, errors, "why is", "why doesn't"
+- differences between ECC and S/4HANA
 
-Set FALSE only for: pure table name lookups, pure T-code lookups, simple definitions
+needsBlogSearch = false ONLY for: pure table/T-code/field name lookups
 
-Rules for isCorrection:
-- true: user saying previous answer was wrong, providing the correct fact
+isCorrection = true if user is correcting a previous wrong answer
 
 Question: "${question}"
 
-Return exactly: {"intent":"TABLE|TCODE|PROCESS|CONFIG|DEBUG|BAPI|GENERAL","needsBlogSearch":false,"isCorrection":false}`
+{"intent":"TABLE|TCODE|PROCESS|CONFIG|DEBUG|GENERAL","needsBlogSearch":false,"isCorrection":false}`
         }],
       }),
     })
@@ -57,139 +52,96 @@ Return exactly: {"intent":"TABLE|TCODE|PROCESS|CONFIG|DEBUG|BAPI|GENERAL","needs
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 2. LOAD GLOBAL SAP CORRECTIONS — shared across ALL users
-// ──────────────────────────────────────────────────────────────────────────────
+// ── 2. LOAD GLOBAL CORRECTIONS ───────────────────────────────────────────────
 async function loadGlobalCorrections() {
   try {
-    const SUPABASE_URL = process.env.SUPABASE_URL
-    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-    if (!SUPABASE_URL || !SUPABASE_KEY) return []
-
+    const URL = process.env.SUPABASE_URL
+    const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    if (!URL || !KEY) return []
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/sap_corrections?select=fact,topic&order=created_at.desc&limit=50`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
+      `${URL}/rest/v1/sap_corrections?select=fact&order=created_at.desc&limit=10`,
+      { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } }
     )
     if (!res.ok) return []
     const data = await res.json()
-    return Array.isArray(data) ? data.map(d => d.fact).filter(Boolean) : []
-  } catch {
-    return []
-  }
+    return Array.isArray(data)
+      ? data.map(d => d.fact).filter(f => f && f.length > 10 && f.length < 300)
+      : []
+  } catch { return [] }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 3. SAVE GLOBAL CORRECTION — benefits ALL users
-// ──────────────────────────────────────────────────────────────────────────────
+// ── 3. SAVE GLOBAL CORRECTION ────────────────────────────────────────────────
 async function saveGlobalCorrection(userMsg, assistantMsg, userId) {
   try {
-    // Use Groq to extract the corrected fact clearly
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 300,
+        max_tokens: 150,
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `Extract the corrected SAP fact from this exchange.
-Return JSON with two fields:
-- "fact": a clear, standalone SAP fact statement (what is CORRECT)
-- "topic": 1-3 word SAP topic (e.g. "Production Orders", "MM Tables", "PM BAdIs")
-
-If no clear correction exists, return: {"fact":"","topic":""}
-
-User correction: "${userMsg}"
-Previous (wrong) answer: "${assistantMsg?.slice(0, 500)}"
-
-Example output: {"fact":"Table MKAL stores production versions — not MAST which stores BOM headers","topic":"Production Versions"}`
+          content: `Extract the corrected SAP fact. Return JSON: {"fact":"clear statement","topic":"1-3 word topic"} or {"fact":"","topic":""}
+User: "${userMsg}"
+Wrong answer: "${assistantMsg?.slice(0, 300)}"`
         }],
       }),
     })
-    const data = await res.json()
-    const raw = data.choices?.[0]?.message?.content?.trim()
-    if (!raw) return
-
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    const data = await groqRes.json()
+    const parsed = JSON.parse(data.choices?.[0]?.message?.content?.replace(/```json|```/g, '').trim() || '{}')
     if (!parsed.fact || parsed.fact.length < 10) return
 
-    const SUPABASE_URL = process.env.SUPABASE_URL
-    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-    if (!SUPABASE_URL || !SUPABASE_KEY) return
+    const URL = process.env.SUPABASE_URL
+    const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    if (!URL || !KEY) return
 
-    // Check if similar correction already exists (avoid duplicates)
-    const checkRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/sap_corrections?topic=eq.${encodeURIComponent(parsed.topic)}&limit=5`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
-    )
-    if (checkRes.ok) {
-      const existing = await checkRes.json()
-      const isDuplicate = existing.some(e =>
-        e.fact?.toLowerCase().includes(parsed.fact.toLowerCase().slice(0, 30))
-      )
-      if (isDuplicate) {
-        console.log('CORRECTION ALREADY EXISTS — skipping duplicate')
-        return
-      }
-    }
-
-    await fetch(`${SUPABASE_URL}/rest/v1/sap_corrections`, {
+    await fetch(`${URL}/rest/v1/sap_corrections`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify([{
-        fact: parsed.fact,
-        topic: parsed.topic,
-        corrected_by: userId || 'anonymous',
-        created_at: new Date().toISOString(),
-      }]),
+      headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: `Bearer ${KEY}`, Prefer: 'return=minimal' },
+      body: JSON.stringify([{ fact: parsed.fact, topic: parsed.topic, corrected_by: userId || 'anonymous', created_at: new Date().toISOString() }]),
     })
-    console.log('GLOBAL CORRECTION SAVED:', parsed.fact)
-  } catch (err) {
-    console.error('saveGlobalCorrection error:', err.message)
-  }
+    console.log('CORRECTION SAVED:', parsed.fact)
+  } catch (err) { console.error('saveCorrection error:', err.message) }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 4. GEMINI RESOURCE SEARCH
-// ──────────────────────────────────────────────────────────────────────────────
-async function geminiSearchResources(question) {
+// ── 4. GEMINI SEARCH ─────────────────────────────────────────────────────────
+async function geminiSearch(question) {
   const key = process.env.GEMINI_API_KEY
   if (!key) return null
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Find SAP official resources about: ${question}\nReturn JSON array of max 3: [{"title":"...","url":"https://...","source":"SAP Help|SAP Community|SAP Blog"}]\nOnly use help.sap.com, community.sap.com, blogs.sap.com. Return [] if unsure.` }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: { maxOutputTokens: 400, temperature: 0.1 },
-        }),
-      }
-    )
-    const data = await res.json()
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-    if (!raw) return null
-    const results = JSON.parse(raw.replace(/```json|```/g, '').trim())
-    const valid = results.filter(r => r.url && r.title && (
-      r.url.includes('help.sap.com') || r.url.includes('community.sap.com') || r.url.includes('blogs.sap.com')
-    ))
-    return valid.length > 0 ? valid : null
+    // Try newer model first, fallback to older
+    const models = ['gemini-2.0-flash', 'gemini-1.5-flash']
+    for (const model of models) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `Find official SAP resources about: ${question}
+Return JSON array of max 3 results from help.sap.com, community.sap.com, or blogs.sap.com only.
+Format: [{"title":"...","url":"https://...","source":"SAP Help|SAP Community|SAP Blog"}]
+Return [] if no confident results found.` }] }],
+              tools: [{ google_search: {} }],
+              generationConfig: { maxOutputTokens: 500, temperature: 0.1 },
+            }),
+          }
+        )
+        if (!res.ok) continue
+        const data = await res.json()
+        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+        if (!raw) continue
+        const results = JSON.parse(raw.replace(/```json|```/g, '').trim())
+        if (!Array.isArray(results)) continue
+        const valid = results.filter(r => r.url && r.title && (
+          r.url.includes('help.sap.com') || r.url.includes('community.sap.com') || r.url.includes('blogs.sap.com')
+        ))
+        if (valid.length > 0) return valid
+      } catch { continue }
+    }
+    return null
   } catch { return null }
 }
 
@@ -197,12 +149,10 @@ function formatResources(resources) {
   if (!resources?.length) return ''
   const icon = { 'SAP Help': '📖', 'SAP Community': '💬', 'SAP Blog': '✍️' }
   const links = resources.map(r => `${icon[r.source] || '🔗'} [${r.title}](${r.url}) — _${r.source}_`).join('\n')
-  return `\n\n---\n**📚 Further Reading**\n${links}`
+  return `\n\n---\n**📚 SAP Resources Found**\n${links}`
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 5. CLAUDE STREAMING
-// ──────────────────────────────────────────────────────────────────────────────
+// ── 5. CLAUDE STREAMING ──────────────────────────────────────────────────────
 async function streamClaude(systemPrompt, messages, onChunk) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -213,7 +163,7 @@ async function streamClaude(systemPrompt, messages, onChunk) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1200,
+      max_tokens: 2048,
       system: systemPrompt,
       messages,
       stream: true,
@@ -223,7 +173,7 @@ async function streamClaude(systemPrompt, messages, onChunk) {
   if (!res.ok) {
     const errText = await res.text()
     console.error('CLAUDE API ERROR:', res.status, errText.slice(0, 300))
-    throw new Error(`Claude API ${res.status}: ${errText.slice(0, 200)}`)
+    throw new Error(`Claude ${res.status}: ${errText.slice(0, 150)}`)
   }
 
   const reader = res.body.getReader()
@@ -252,23 +202,18 @@ async function streamClaude(systemPrompt, messages, onChunk) {
   return fullText
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// MAIN HANDLER
-// ──────────────────────────────────────────────────────────────────────────────
+// ── MAIN HANDLER ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const { messages, tone = 'balanced', userName, userRole, userModules = [], userId } = req.body
-  const lastMsg = messages[messages.length - 1]?.content || ''
-  const prevAssistantMsg = messages.filter(m => m.role === 'assistant').slice(-1)[0]?.content || ''
+  const lastMsg = messages?.[messages.length - 1]?.content || ''
+  const prevAssistantMsg = [...(messages || [])].reverse().find(m => m.role === 'assistant')?.content || ''
 
-  // Detect time of day for natural greeting
   const hour = new Date().getHours()
   const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const firstName = userName?.split(' ')[0] || null
-
-  // Only greet on first message of session (no previous assistant messages)
-  const isFirstMessage = messages.filter(m => m.role === 'assistant').length === 0
+  const isFirstMessage = !messages?.some(m => m.role === 'assistant')
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -278,7 +223,7 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-    // STEP 1 — Classify + load global corrections in parallel
+    // STEP 1 — Classify + load corrections in parallel
     const [classification, globalCorrections] = await Promise.all([
       groqClassify(lastMsg),
       loadGlobalCorrections().catch(() => []),
@@ -286,17 +231,12 @@ export default async function handler(req, res) {
 
     const { intent, needsBlogSearch, isCorrection } = classification
 
-    // Filter to only valid corrections
-    const validCorrections = globalCorrections.filter(c =>
-      c && typeof c === 'string' && c.trim().length > 10 && c.trim().length < 500
-    )
-
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, needsBlogSearch, isCorrection,
-      corrections: validCorrections.length,
+      corrections: globalCorrections.length,
     }))
 
-    // STEP 2 — Save correction globally if detected
+    // STEP 2 — Save correction if detected
     if (isCorrection && prevAssistantMsg) {
       saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
@@ -304,68 +244,63 @@ export default async function handler(req, res) {
     // STEP 3 — Build system prompt
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
 
-    // Critical — never say you can't search
-    systemPrompt += `\n\nCRITICAL: You have access to SAP official documentation and community resources. NEVER say "I can't search online" or "I can't access external documents". If you're uncertain, say "let me check the SAP documentation" — resources will be provided when available.`
-    if (firstName || userRole || userModules?.length > 0) {
-      systemPrompt += `\n\nUSER PROFILE:`
-      if (firstName) systemPrompt += `\n- Name: ${firstName}`
-      if (userRole) systemPrompt += `\n- Role: ${userRole}`
-      if (userModules?.length > 0) systemPrompt += `\n- SAP Focus: ${userModules.join(', ')}`
+    // Never say can't search
+    systemPrompt += `\n\nIMPORTANT: You have access to SAP documentation resources. NEVER say "I can't search online" or "I can't access external documents". When uncertain about S/4HANA specifics, say "let me check" — resources will be appended.`
+
+    // Personalization
+    if (firstName) {
+      systemPrompt += `\n\nUser name: ${firstName}.`
+      if (userRole) systemPrompt += ` Role: ${userRole}.`
+      if (userModules?.length > 0) systemPrompt += ` SAP modules: ${userModules.join(', ')}.`
     }
     if (isFirstMessage && firstName) {
-      systemPrompt += `\n\nThis is the first message of this session. Start with "${timeGreeting}, ${firstName}." then answer directly. Only do this ONCE.`
+      systemPrompt += ` This is the first message — start with "${timeGreeting}, ${firstName}." then answer directly. Only greet once.`
     }
 
-    if (validCorrections.length > 0) {
-      systemPrompt += `\n\n⚠️ VERIFIED SAP CORRECTIONS — Confirmed correct by senior consultants. Use as ground truth:\n${validCorrections.map(c => `- ${c}`).join('\n')}`
+    // Corrections
+    if (globalCorrections.length > 0) {
+      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS (ground truth):\n${globalCorrections.slice(0, 5).map(c => `- ${c}`).join('\n')}`
     }
 
-    // STEP 4 — Start blog search in parallel
-    const blogSearchPromise = needsBlogSearch
-      ? geminiSearchResources(lastMsg)
-      : Promise.resolve(null)
+    // STEP 4 — Start blog search in parallel if needed
+    const blogPromise = needsBlogSearch ? geminiSearch(lastMsg) : Promise.resolve(null)
 
-    // STEP 5 — Stream Claude answer
-    // Send messages directly — tokenize was causing issues
-    const validMessages = messages
-      .filter(m => m.role && m.content && m.content.trim())
-      .map(m => ({ role: m.role, content: String(m.content).trim() }))
-    
-    console.log('SENDING TO CLAUDE:', JSON.stringify({
-      messageCount: validMessages.length,
-      systemPromptLength: systemPrompt.length,
-      firstMsg: validMessages[0]?.content?.slice(0, 50),
-    }))
+    // STEP 5 — Prepare messages — last 8 only, max 2000 chars each
+    const validMessages = (messages || [])
+      .filter(m => m.role && m.content?.trim())
+      .map(m => ({ role: m.role, content: String(m.content).trim().slice(0, 2000) }))
+      .slice(-8)
 
-    let fullAnswer = ''
+    console.log('SENDING TO CLAUDE:', { messageCount: validMessages.length, systemPromptLength: systemPrompt.length })
+
     if (validMessages.length === 0) {
-      send({ type: 'error', error: 'No valid messages to process' })
+      send({ type: 'error', error: 'No messages to process' })
       res.end()
       return
     }
 
+    // STEP 6 — Stream Claude
+    let fullAnswer = ''
     send({ type: 'start' })
 
     try {
-      fullAnswer = await streamClaude(systemPrompt, validMessages, (chunk) => {
-        send({ type: 'chunk', text: chunk })
-      })
-    } catch (claudeErr) {
-      console.error('CLAUDE STREAM ERROR:', claudeErr.message)
-      send({ type: 'error', error: `Claude error: ${claudeErr.message}` })
+      fullAnswer = await streamClaude(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+    } catch (err) {
+      console.error('CLAUDE ERROR:', err.message)
+      send({ type: 'error', error: err.message })
       res.end()
       return
     }
 
-    if (!fullAnswer || fullAnswer.trim().length === 0) {
-      console.error('CLAUDE RETURNED EMPTY RESPONSE')
-      send({ type: 'error', error: 'Empty response from Claude — please try again' })
+    if (!fullAnswer?.trim()) {
+      console.error('CLAUDE EMPTY RESPONSE — messageCount:', validMessages.length, 'systemLen:', systemPrompt.length)
+      send({ type: 'error', error: 'Empty response — please try again' })
       res.end()
       return
     }
 
-    // STEP 6 — Append resources if found
-    const resources = await blogSearchPromise
+    // STEP 7 — Append resources if found
+    const resources = await blogPromise
     const resourceSection = formatResources(resources)
     if (resourceSection) {
       send({ type: 'chunk', text: resourceSection })
