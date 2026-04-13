@@ -205,7 +205,7 @@ async function streamClaude(systemPrompt, messages, onChunk) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 1200,
       system: systemPrompt,
       messages,
@@ -214,8 +214,9 @@ async function streamClaude(systemPrompt, messages, onChunk) {
   })
 
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err?.error?.message || 'Claude error')
+    const errText = await res.text()
+    console.error('CLAUDE API ERROR:', res.status, errText.slice(0, 300))
+    throw new Error(`Claude API ${res.status}: ${errText.slice(0, 200)}`)
   }
 
   const reader = res.body.getReader()
@@ -273,14 +274,19 @@ export default async function handler(req, res) {
     // STEP 1 — Classify + load global corrections in parallel
     const [classification, globalCorrections] = await Promise.all([
       groqClassify(lastMsg),
-      loadGlobalCorrections(),
+      loadGlobalCorrections().catch(() => []),
     ])
 
     const { intent, needsBlogSearch, isCorrection } = classification
 
+    // Filter to only valid corrections
+    const validCorrections = globalCorrections.filter(c =>
+      c && typeof c === 'string' && c.trim().length > 10 && c.trim().length < 500
+    )
+
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, needsBlogSearch, isCorrection,
-      corrections: globalCorrections.length,
+      corrections: validCorrections.length,
     }))
 
     // STEP 2 — Save correction globally if detected
@@ -288,33 +294,20 @@ export default async function handler(req, res) {
       saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
 
-    // STEP 3 — Build system prompt with personalization + global corrections
+    // STEP 3 — Build system prompt
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
-
-    // Add user context
-    if (firstName || userRole || userModules.length > 0) {
+    if (firstName || userRole || userModules?.length > 0) {
       systemPrompt += `\n\nUSER PROFILE:`
       if (firstName) systemPrompt += `\n- Name: ${firstName}`
       if (userRole) systemPrompt += `\n- Role: ${userRole}`
-      if (userModules.length > 0) systemPrompt += `\n- SAP Focus: ${userModules.join(', ')}`
-      systemPrompt += `\n\nPERSONALIZATION RULES:
-- Use their first name naturally but SPARINGLY — maximum once per conversation, only on the very first response
-- Tailor technical depth to their role and module focus
-- If they ask about a module they work in, go deeper and more specific
-- If they ask about a module outside their focus, be clear and add "this may work differently in your specific implementation"
-- DO NOT say "Great question!" or similar filler — just answer naturally`
+      if (userModules?.length > 0) systemPrompt += `\n- SAP Focus: ${userModules.join(', ')}`
     }
-
-    // Add first message greeting instruction
     if (isFirstMessage && firstName) {
-      systemPrompt += `\n\nThis is the FIRST message of this session. Start your response with a brief natural greeting like "${timeGreeting}, ${firstName}." — then answer directly. Only do this ONCE, never again in subsequent messages.`
+      systemPrompt += `\n\nThis is the first message of this session. Start with "${timeGreeting}, ${firstName}." then answer directly. Only do this ONCE.`
     }
 
-    if (globalCorrections.length > 0) {
-      const validCorrections = globalCorrections.filter(c => c && c.length > 5)
-      if (validCorrections.length > 0) {
-        systemPrompt += `\n\n⚠️ VERIFIED SAP CORRECTIONS — Confirmed correct by senior consultants. These override your training data. Treat as absolute ground truth:\n${validCorrections.map(c => `- ${c}`).join('\n')}`
-      }
+    if (validCorrections.length > 0) {
+      systemPrompt += `\n\n⚠️ VERIFIED SAP CORRECTIONS — Confirmed correct by senior consultants. Use as ground truth:\n${validCorrections.map(c => `- ${c}`).join('\n')}`
     }
 
     // STEP 4 — Start blog search in parallel
