@@ -105,49 +105,76 @@ Wrong answer: "${assistantMsg?.slice(0, 300)}"`
   } catch (err) { console.error('saveCorrection error:', err.message) }
 }
 
-// ── 4. GEMINI SEARCH ─────────────────────────────────────────────────────────
+// ── 4. GEMINI SEARCH — extracts real links from grounding metadata ────────────
 async function geminiSearch(question) {
   const key = process.env.GEMINI_API_KEY
   if (!key) return null
-  try {
-    // Try newer model first, fallback to older
-    const models = ['gemini-2.0-flash', 'gemini-1.5-flash']
-    for (const model of models) {
-      try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: `Find official SAP resources about: ${question}
-Return JSON array of max 3 results from help.sap.com, community.sap.com, or blogs.sap.com only.
-Format: [{"title":"...","url":"https://...","source":"SAP Help|SAP Community|SAP Blog"}]
-Return [] if no confident results found.` }] }],
-              tools: [{ google_search: {} }],
-              generationConfig: { maxOutputTokens: 500, temperature: 0.1 },
-            }),
-          }
-        )
-        if (!res.ok) continue
-        const data = await res.json()
-        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-        if (!raw) continue
-        const results = JSON.parse(raw.replace(/```json|```/g, '').trim())
-        if (!Array.isArray(results)) continue
-        const valid = results.filter(r => r.url && r.title && (
-          r.url.includes('help.sap.com') || r.url.includes('community.sap.com') || r.url.includes('blogs.sap.com')
-        ))
-        if (valid.length > 0) return valid
-      } catch { continue }
+  const models = ['gemini-2.0-flash', 'gemini-1.5-flash']
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `SAP documentation search: ${question}` }] }],
+            tools: [{ google_search: {} }],
+            generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
+          }),
+        }
+      )
+      if (!res.ok) continue
+      const data = await res.json()
+
+      // Extract from grounding metadata — this is where real URLs are
+      const groundingChunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+      const groundingSupport = data.candidates?.[0]?.groundingMetadata?.searchEntryPoint
+
+      const links = []
+
+      // Method 1: grounding chunks (most reliable)
+      for (const chunk of groundingChunks) {
+        const web = chunk.web
+        if (!web?.uri || !web?.title) continue
+        const uri = web.uri
+        // Only SAP official domains
+        if (!uri.includes('help.sap.com') && !uri.includes('community.sap.com') && !uri.includes('blogs.sap.com') && !uri.includes('launchpad.support.sap.com')) continue
+        const source = uri.includes('help.sap.com') ? 'SAP Help'
+          : uri.includes('community.sap.com') ? 'SAP Community'
+          : uri.includes('blogs.sap.com') ? 'SAP Blog' : 'SAP Support'
+        links.push({ title: web.title, url: uri, source })
+        if (links.length >= 3) break
+      }
+
+      if (links.length > 0) {
+        console.log('GEMINI LINKS FOUND:', links.length)
+        return links
+      }
+
+      // Method 2: extract URLs from response text as fallback
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const urlMatches = text.match(/https?:\/\/(help|community|blogs)\.sap\.com[^\s\)\"]+/g) || []
+      if (urlMatches.length > 0) {
+        return urlMatches.slice(0, 3).map(url => ({
+          title: url.split('/').pop().replace(/-/g, ' ') || 'SAP Documentation',
+          url,
+          source: url.includes('help.sap.com') ? 'SAP Help' : url.includes('community.sap.com') ? 'SAP Community' : 'SAP Blog'
+        }))
+      }
+
+      console.log('GEMINI: no SAP links found in response')
+    } catch (err) {
+      console.log('GEMINI ERROR:', err.message)
+      continue
     }
-    return null
-  } catch { return null }
+  }
+  return null
 }
 
 function formatResources(resources) {
   if (!resources?.length) return ''
-  const icon = { 'SAP Help': '📖', 'SAP Community': '💬', 'SAP Blog': '✍️' }
+  const icon = { 'SAP Help': '📖', 'SAP Community': '💬', 'SAP Blog': '✍️', 'SAP Support': '🔧' }
   const links = resources.map(r => `${icon[r.source] || '🔗'} [${r.title}](${r.url}) — _${r.source}_`).join('\n')
   return `\n\n---\n**📚 SAP Resources Found**\n${links}`
 }
@@ -223,7 +250,8 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
-    // STEP 1 — Classify + load corrections in parallel
+    // STEP 1 — Classify (for search detection) + load corrections in parallel
+    // Both run simultaneously — don't block Claude on classification
     const [classification, globalCorrections] = await Promise.all([
       groqClassify(lastMsg),
       loadGlobalCorrections().catch(() => []),
@@ -236,36 +264,28 @@ export default async function handler(req, res) {
       corrections: globalCorrections.length,
     }))
 
-    // STEP 2 — Save correction if detected
+    // STEP 2 — Save correction if detected (fire and forget)
     if (isCorrection && prevAssistantMsg) {
       saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
 
     // STEP 3 — Build system prompt
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
-
-    // Never say can't search
-    systemPrompt += `\n\nIMPORTANT: You have access to SAP documentation resources. NEVER say "I can't search online" or "I can't access external documents". When uncertain about S/4HANA specifics, say "let me check" — resources will be appended.`
-
-    // Personalization
+    systemPrompt += `\n\nIMPORTANT: NEVER say "I can't search online". Resources are appended automatically.`
     if (firstName) {
-      systemPrompt += `\n\nUser name: ${firstName}.`
-      if (userRole) systemPrompt += ` Role: ${userRole}.`
-      if (userModules?.length > 0) systemPrompt += ` SAP modules: ${userModules.join(', ')}.`
+      systemPrompt += `\n\nUser: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, focuses on ${userModules.join('/')}` : ''}.`
     }
     if (isFirstMessage && firstName) {
-      systemPrompt += ` This is the first message — start with "${timeGreeting}, ${firstName}." then answer directly. Only greet once.`
+      systemPrompt += ` Greet with "${timeGreeting}, ${firstName}." then answer. Only once.`
     }
-
-    // Corrections
     if (globalCorrections.length > 0) {
-      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS (ground truth):\n${globalCorrections.slice(0, 5).map(c => `- ${c}`).join('\n')}`
+      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS:\n${globalCorrections.slice(0, 5).map(c => `- ${c}`).join('\n')}`
     }
 
-    // STEP 4 — Start blog search in parallel if needed
+    // STEP 4 — Start Gemini search in parallel with Claude (both run at same time)
     const blogPromise = needsBlogSearch ? geminiSearch(lastMsg) : Promise.resolve(null)
 
-    // STEP 5 — Prepare messages — last 8 only, max 2000 chars each
+    // STEP 5 — Prepare messages
     const validMessages = (messages || [])
       .filter(m => m.role && m.content?.trim())
       .map(m => ({ role: m.role, content: String(m.content).trim().slice(0, 2000) }))
