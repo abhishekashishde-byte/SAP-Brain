@@ -146,6 +146,26 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
       }
       if (/^---+$/.test(line.trim())) { els.push(<hr key={i} style={{ border:'none',borderTop:`1px solid ${t.border}`,margin:'10px 0' }}/>); i++; continue }
       if (line.trim() === '')         { els.push(<div key={i} style={{ height:6 }}/>); i++; continue }
+      // SAP Resource links — render as cards
+      if (line.match(/^[💬📖✍️🔗].*\[.+\]\(https?:\/\/.+\)/)) {
+        const match = line.match(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/)
+        if (match) {
+          const icon = line[0]
+          const source = icon === '💬' ? 'SAP Community' : icon === '📖' ? 'SAP Help' : icon === '✍️' ? 'SAP Blog' : 'SAP'
+          const color = icon === '💬' ? '#0070f3' : icon === '📖' ? '#10b981' : '#8b5cf6'
+          els.push(
+            <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 12px',margin:'4px 0',background:`${color}11`,border:`1px solid ${color}33`,borderRadius:8,textDecoration:'none',cursor:'pointer' }}>
+              <span style={{ fontSize:16,flexShrink:0 }}>{icon}</span>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:13,fontWeight:600,color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{match[1]}</div>
+                <div style={{ fontSize:11,color:t.text4 }}>{source}</div>
+              </div>
+              <svg style={{ marginLeft:'auto',flexShrink:0 }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          )
+          i++; continue
+        }
+      }
       // Handle markdown links [title](url)
       if (line.includes('](')) {
         const parts = line.split(/(\[([^\]]+)\]\(([^)]+)\))/g)
@@ -727,6 +747,7 @@ export default function Brain({ session }) {
       const decoder = new TextDecoder()
       let buf = '', fullReply = '', modelUsed = ''
       let accumulated = ''
+      let searchResults = []
 
       while (true) {
         const { done, value } = await reader.read()
@@ -742,7 +763,8 @@ export default function Brain({ session }) {
             if (evt.type === 'chunk') {
               accumulated += evt.text
               setStreamingText(accumulated)
-              // Auto-scroll removed — user scrolls freely
+            } else if (evt.type === 'search_results') {
+              searchResults = evt.results || []
             } else if (evt.type === 'done') {
               fullReply = evt.full || accumulated
               modelUsed = evt.model
@@ -758,10 +780,22 @@ export default function Brain({ session }) {
       setIsStreaming(false)
       setStreamingText('')
 
-      const modelTag = modelUsed==='claude+gemini'
-        ? '\n\n_✦ Claude  📚 Gemini Resources_'
-        : '\n\n_✦ Claude_'
-      const replyWithTag = finalReply + modelTag
+      // Build model tag
+      const modelLabel = modelUsed === 'gpt4o-mini' ? '✦ GPT-4o mini'
+        : modelUsed === 'claude-haiku' ? '✦ Claude Haiku'
+        : modelUsed === 'claude+gemini' ? '✦ Claude  📚 Gemini'
+        : '✦ Claude'
+
+      // Build search links section as markdown
+      let linksSection = ''
+      if (searchResults.length > 0) {
+        const icons = { 'SAP Community': '💬', 'SAP Help': '📖', 'SAP Blog': '✍️', 'SAP': '🔗' }
+        linksSection = '\n\n---\n**📚 SAP Resources**\n' + searchResults.map(r =>
+          `${icons[r.source] || '🔗'} [${r.title}](${r.url})`
+        ).join('\n')
+      }
+
+      const replyWithTag = finalReply + linksSection + `\n\n_${modelLabel}_`
 
       const finalMsgs = [...currentMsgs,{ role:'assistant',content:replyWithTag }]
       await updateConversation(convId,{ messages:finalMsgs })
