@@ -312,36 +312,25 @@ export default async function handler(req, res) {
 
     send({ type: 'start' })
     let fullAnswer = ''
-    let modelUsed = ''
 
-    if (isSimple && (intent === 'TABLE' || intent === 'TCODE')) {
-      // Simple lookup — GPT-4o mini answers directly (already done above for rewrites, stream fresh)
-      modelUsed = 'gpt4o-mini'
-      const gptSystemPrompt = `You are a senior SAP S/4HANA consultant. Answer accurately and concisely.
-NEVER invent table names, T-codes, or field names. If unsure say "verify in your system".
-${globalCorrections.length > 0 ? `\n⚠️ VERIFIED CORRECTIONS — use as ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}` : ''}`
+    // Claude Haiku answers EVERYTHING — GPT-4o mini only rewrote the question
+    let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
+    systemPrompt += `\n\nNEVER say "I can't search online". Resources are shown to the user separately.`
 
-      fullAnswer = await streamGPTAnswer(gptSystemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
-    } else {
-      // Complex question — Claude Haiku
-      modelUsed = 'claude-haiku'
-      let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
-      systemPrompt += `\n\nNEVER say "I can't search online". Resources are shown to the user separately.`
-
-      if (firstName) {
-        systemPrompt += `\n\nUser: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
-      }
-      if (isFirstMessage && firstName) {
-        systemPrompt += ` Greet with "${timeGreeting}, ${firstName}." then answer. Only once.`
-      }
-      if (globalCorrections.length > 0) {
-        systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS — ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
-      }
-
-      console.log('SENDING TO CLAUDE HAIKU:', { messageCount: validMessages.length, systemLen: systemPrompt.length })
-
-      fullAnswer = await streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+    if (firstName) {
+      systemPrompt += `\n\nUser: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
     }
+    if (isFirstMessage && firstName) {
+      systemPrompt += ` Greet with "${timeGreeting}, ${firstName}." then answer. Only once.`
+    }
+    if (globalCorrections.length > 0) {
+      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS — ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
+    }
+
+    console.log('SENDING TO CLAUDE HAIKU:', { messageCount: validMessages.length, systemLen: systemPrompt.length })
+
+    fullAnswer = await streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+    const modelUsed = 'claude-haiku'
 
     if (!fullAnswer?.trim()) {
       send({ type: 'error', error: 'Empty response — please try again' })
