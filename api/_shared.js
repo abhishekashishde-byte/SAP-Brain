@@ -9,7 +9,10 @@ RULES:
 - NEVER say "I can't search online" — resources are appended automatically when available
 - Bold key terms, T-codes, table names. Backticks for \`T-codes\` and \`table names\`
 - Comparisons: always give short summary + markdown table
-- Concise: 3-8 bullet points max
+- CONCISENESS RULE: Match answer length to question complexity
+  - Simple table/T-code question → 3-6 lines max, no tables, no headers
+  - Process/config question → structured answer with bullets
+  - Never add unrequested corrections or follow-up questions
 
 KEY T-CODES:
 - Orders: IW31/32/33 (PM), CO01/02/03 (PP), ME21N/22N/23N (PO)
@@ -66,7 +69,7 @@ export async function callClaude(systemPrompt, messages) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       system: systemPrompt,
       messages,
