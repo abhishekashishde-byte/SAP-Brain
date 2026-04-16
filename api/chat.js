@@ -46,12 +46,13 @@ Question: "${question}"
 async function gptRewriteAndAnswer(question, intent, isSimple) {
   try {
     const systemPrompt = isSimple
-      ? `You are a senior SAP S/4HANA consultant. Answer this SAP question directly and accurately.
-- For table names: give the exact table name and a one-line description
-- For T-codes: give the exact T-code and what it does
-- If you are not 100% certain, say "verify in your system"
-- Never invent table names or T-codes
-- Be concise — 2-5 lines max`
+      ? `You are a senior SAP S/4HANA consultant. Give a complete, accurate answer.
+- For table questions: list ALL relevant tables with their purpose, key fields where useful
+- For T-code questions: give the T-code, full name, and what it does including variants if relevant
+- Use bullet points and bold for table/T-code names
+- If unsure about any specific detail say "verify in your system"
+- Never invent table names, T-codes, or field names
+- Be thorough — a consultant needs the complete picture, not just one line`
       : `You are an SAP question optimizer. Rewrite this SAP question to be clearer and more specific.
 - Fix typos and grammar
 - Make SAP terminology precise (e.g. "MRP4 view" → "MRP 4 view in MM01 material master")
@@ -63,7 +64,7 @@ async function gptRewriteAndAnswer(question, intent, isSimple) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        max_tokens: isSimple ? 300 : 150,
+        max_tokens: isSimple ? 800 : 150,
         temperature: 0.1,
         messages: [
           { role: 'system', content: systemPrompt },
