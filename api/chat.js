@@ -294,8 +294,8 @@ export default async function handler(req, res) {
     // STEP 3 — GPT-4o mini rewrites question (or answers if simple TABLE/TCODE)
     const rewrittenOrAnswer = await gptRewriteAndAnswer(lastMsg, intent, isSimple)
 
-    // STEP 4 — Google search runs in parallel
-    const searchPromise = needsSearch || true // always search for links
+    // STEP 4 — Google search runs in parallel — only when relevant
+    const searchPromise = needsSearch
       ? googleSAPSearch(lastMsg)
       : Promise.resolve([])
 
