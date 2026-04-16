@@ -316,6 +316,7 @@ export default async function handler(req, res) {
     // Claude Haiku answers EVERYTHING — GPT-4o mini only rewrote the question
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
     systemPrompt += `\n\nNEVER say "I can't search online". Resources are shown to the user separately.`
+    systemPrompt += `\nAnswer the user's CURRENT question directly. Do not reference or assume anything from previous messages unless explicitly relevant. Never say "as you mentioned" or "you shared" unless the user actually said it in this conversation.`
 
     if (firstName) {
       systemPrompt += `\n\nUser: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
