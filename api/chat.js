@@ -17,14 +17,15 @@ async function groqClassify(question) {
           role: 'user',
           content: `Classify this SAP question. Return ONLY valid JSON.
 
-intent: TABLE (asking for table name), TCODE (asking for transaction code), PROCESS (how-to, process steps), CONFIG (SPRO/config), DEBUG (error/troubleshooting), GENERAL (other)
+intent: TABLE (asking for table name), TCODE (asking for transaction code), PROCESS (how-to, process steps), CONFIG (SPRO/config), DEBUG (error/troubleshooting), CODE (user pasted ABAP/code for analysis), GENERAL (other)
 isSimple: true if just asking for a table name or T-code, false for anything requiring explanation
 isCorrection: true if user is correcting a previous wrong answer
 needsSearch: true if question is about S/4HANA changes, deprecated fields, "not there", "removed", "can you search", how-to, config steps
+isCode: true if the message contains ABAP code, METHOD, CLASS, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, or any code block
 
 Question: "${question}"
 
-{"intent":"TABLE","isSimple":true,"isCorrection":false,"needsSearch":false}`
+{"intent":"TABLE","isSimple":true,"isCorrection":false,"needsSearch":false,"isCode":false}`
         }]
       })
     })
@@ -36,9 +37,10 @@ Question: "${question}"
       isSimple: result.isSimple === true,
       isCorrection: result.isCorrection === true,
       needsSearch: result.needsSearch === true,
+      isCode: result.isCode === true || /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question),
     }
   } catch {
-    return { intent: 'GENERAL', isSimple: false, isCorrection: false, needsSearch: false }
+    return { intent: 'GENERAL', isSimple: false, isCorrection: false, needsSearch: false, isCode: false }
   }
 }
 
@@ -279,7 +281,7 @@ export default async function handler(req, res) {
       loadGlobalCorrections().catch(() => []),
     ])
 
-    const { intent, isSimple, isCorrection, needsSearch } = classification
+    const { intent, isSimple, isCorrection, needsSearch, isCode } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, isSimple, needsSearch,
@@ -317,6 +319,15 @@ export default async function handler(req, res) {
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
     systemPrompt += `\n\nNEVER say "I can't search online". Resources are shown to the user separately.`
     systemPrompt += `\nAnswer the user's CURRENT question directly. Do not reference or assume anything from previous messages unless explicitly relevant. Never say "as you mentioned" or "you shared" unless the user actually said it in this conversation.`
+
+    // Code analysis boost
+    if (isCode) {
+      systemPrompt += `\n\n🔍 CODE DETECTED: The user has pasted ABAP/code. Follow CODE ANALYSIS RULES strictly:
+- Read the code immediately — do NOT ask for more context
+- Structure: What it does → Logic flow (→ arrows) → Key objects → Watch out
+- End with 📌 Summary (1-2 sentences)
+- Be direct and technical — no pleasantries`
+    }
 
     if (firstName) {
       systemPrompt += `\n\nUser: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
