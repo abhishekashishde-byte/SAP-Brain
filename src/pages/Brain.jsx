@@ -786,9 +786,9 @@ export default function Brain({ session }) {
   const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);window.history.pushState({ view:'topic',mod,topic },'') }
   const goChat=(convId,mod=null,topic=null)=>{ if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) };window.history.pushState({ view:'chat',convId,mod,topic },'');if(isMobileWidth())setSidebarOpen(false) }
 
-  const handleSend = async () => {
-    if (!input.trim()||isLoading||isStreaming) return
-    const msgText = input.trim()
+  const handleSend = async (overrideText) => {
+    const msgText = (overrideText || input).trim()
+    if (!msgText || isLoading || isStreaming) return
     const userMsg = { role:'user', content:msgText }
     setInput('')
     if (inputRef.current) inputRef.current.style.height = '24px'
@@ -897,62 +897,8 @@ export default function Brain({ session }) {
 
   // Send a specific text programmatically — used by code analysis buttons
   const handleSendText = (text) => {
-    setInput(text)
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus()
-        // Trigger send after input is set
-        setTimeout(() => {
-          setInput('')
-          if (inputRef.current) inputRef.current.style.height = '24px'
-          // Manually trigger the send flow
-          const userMsg = { role:'user', content:text }
-          setMessages(prev => [...prev, userMsg])
-          setIsLoading(true)
-          const convId = activeConvId
-          const currentMsgs = [...messages, userMsg]
-          const currentMod = activeConv?.module || browseModule
-          const currentTopic = activeConv?.topic || browseTopic
-          if (convId) {
-            updateConversation(convId, { messages: currentMsgs })
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs } : c))
-          }
-          fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: currentMsgs, module: currentMod, topic: currentTopic, tone, userId: session.user.id, userName: profile?.name || null, userRole: profile?.role || null, userModules: profile?.modules || [] }),
-          }).then(async res => {
-            if (!res.ok) throw new Error('Network error')
-            setIsLoading(false); setIsStreaming(true)
-            const reader = res.body.getReader()
-            const decoder = new TextDecoder()
-            let buf = '', fullReply = '', modelUsed = ''
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              buf += decoder.decode(value, { stream: true })
-              const lines = buf.split('\n'); buf = lines.pop() || ''
-              for (const line of lines) {
-                if (!line.startsWith('data:')) continue
-                try {
-                  const d = JSON.parse(line.slice(5).trim())
-                  if (d.type === 'delta') { fullReply += d.text; setStreamingText(fullReply) }
-                  if (d.type === 'model') modelUsed = d.model
-                } catch {}
-              }
-            }
-            setIsStreaming(false); setStreamingText('')
-            const modelLabel = modelUsed === 'claude-haiku' ? '✦ Claude Haiku' : '✦ Claude'
-            const replyWithTag = fullReply + `\n\n_${modelLabel}_`
-            const finalMsgs = [...currentMsgs, { role: 'assistant', content: replyWithTag }]
-            if (convId) {
-              await updateConversation(convId, { messages: finalMsgs })
-              setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: finalMsgs } : c))
-            }
-          }).catch(() => { setIsLoading(false); setIsStreaming(false) })
-        }, 50)
-      }
-    }, 10)
+    setInput('')
+    handleSend(text)
   }
 
   const autoSummarise = async () => {
