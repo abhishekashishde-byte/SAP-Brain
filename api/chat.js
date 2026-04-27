@@ -83,6 +83,14 @@ async function gptRewriteAndAnswer(question, intent, isSimple) {
 
 // ── 3. CLAUDE HAIKU — complex SAP answers ────────────────────────────────────
 async function streamClaudeHaiku(systemPrompt, messages, onChunk) {
+  return streamClaude('claude-haiku-4-5-20251001', systemPrompt, messages, onChunk)
+}
+
+async function streamClaudeSonnet(systemPrompt, messages, onChunk) {
+  return streamClaude('claude-sonnet-4-5-20251022', systemPrompt, messages, onChunk)
+}
+
+async function streamClaude(model, systemPrompt, messages, onChunk) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -91,8 +99,8 @@ async function streamClaudeHaiku(systemPrompt, messages, onChunk) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      model,
+      max_tokens: model.includes('sonnet') ? 4096 : 2048,
       system: systemPrompt,
       messages,
       stream: true,
@@ -351,10 +359,16 @@ export default async function handler(req, res) {
       systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS — ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
     }
 
-    console.log('SENDING TO CLAUDE HAIKU:', { messageCount: validMessages.length, systemLen: systemPrompt.length })
-
-    fullAnswer = await streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
-    const modelUsed = 'claude-haiku'
+    // Use Sonnet for code analysis — significantly better than Haiku for complex code
+    // Use Haiku for everything else — fast and cheap for normal SAP questions
+    if (isCode || hasCodeInHistory) {
+      console.log('SENDING TO CLAUDE SONNET (code detected):', { messageCount: validMessages.length })
+      fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+    } else {
+      console.log('SENDING TO CLAUDE HAIKU:', { messageCount: validMessages.length })
+      fullAnswer = await streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+    }
+    const modelUsed = (isCode || hasCodeInHistory) ? 'claude-sonnet' : 'claude-haiku'
 
     if (!fullAnswer?.trim()) {
       send({ type: 'error', error: 'Empty response — please try again' })
