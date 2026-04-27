@@ -89,7 +89,7 @@ function TypingDots() {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }) {
+function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const [copied, setCopied] = useState(false)
@@ -297,6 +297,24 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
         </div>
         {!isStreaming && <ActionBar/>}
+        {/* Code Analysis buttons — show when previous user message had code */}
+        {!isStreaming && prevUserMsg && /METHOD |CLASS |LOOP AT |SELECT\s|DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION |REPORT |TYPES:|CONSTANTS:/i.test(prevUserMsg) && (
+          <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
+            <div style={{ width:'100%', fontSize:11, color:t.text4, marginBottom:2, fontWeight:500 }}>🔬 Analyse this code:</div>
+            {[
+              { icon:'📖', label:'Explain', prompt:'Explain what this code does in simple terms. Structure: what it does, logic flow, key objects, watch out.' },
+              { icon:'🔬', label:'Reverse Engineer', prompt:'Extract the business logic and rules from this code. What business problem does it solve? What are the rules, triggers, conditions and outcomes in plain business language — not technical?' },
+              { icon:'📋', label:'Functional Spec', prompt:'Generate a functional specification document from this code. Include: Function name, Module, Purpose, Trigger/When it runs, Inputs, Outputs, Business Rules, Edge Cases, Assumptions.' },
+              { icon:'⚠️', label:'Find Risks', prompt:'Analyse this code for risks, bugs, performance issues, and edge cases. What could go wrong? What scenarios are not handled? Any SAP-specific concerns?' },
+              { icon:'⚡', label:'Optimise', prompt:'How can this code be improved? Suggest performance optimisations, better ABAP patterns, and any S/4HANA-specific improvements.' },
+            ].map(btn => (
+              <button key={btn.label} onClick={() => onAnalyse(btn.prompt)}
+                style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 12px', borderRadius:8, border:`1px solid ${t.border}`, background:t.surface2, color:t.text3, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif", transition:'all 0.15s' }}>
+                {btn.icon} {btn.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -844,6 +862,7 @@ export default function Brain({ session }) {
       // Build model tag
       const modelLabel = modelUsed === 'gpt4o-mini' ? '✦ GPT-4o mini'
         : modelUsed === 'claude-haiku' ? '✦ Claude Haiku'
+        : modelUsed === 'claude-sonnet' ? '✦ Claude Sonnet'
         : modelUsed === 'claude+gemini' ? '✦ Claude  📚 Gemini'
         : '✦ Claude'
 
@@ -874,6 +893,66 @@ export default function Brain({ session }) {
       const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:errMsgs}:c))
     }
+  }
+
+  // Send a specific text programmatically — used by code analysis buttons
+  const handleSendText = (text) => {
+    setInput(text)
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus()
+        // Trigger send after input is set
+        setTimeout(() => {
+          setInput('')
+          if (inputRef.current) inputRef.current.style.height = '24px'
+          // Manually trigger the send flow
+          const userMsg = { role:'user', content:text }
+          setMessages(prev => [...prev, userMsg])
+          setIsLoading(true)
+          const convId = activeConvId
+          const currentMsgs = [...messages, userMsg]
+          const currentMod = activeConv?.module || browseModule
+          const currentTopic = activeConv?.topic || browseTopic
+          if (convId) {
+            updateConversation(convId, { messages: currentMsgs })
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: currentMsgs } : c))
+          }
+          fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: currentMsgs, module: currentMod, topic: currentTopic, tone, userId: session.user.id, userName: profile?.name || null, userRole: profile?.role || null, userModules: profile?.modules || [] }),
+          }).then(async res => {
+            if (!res.ok) throw new Error('Network error')
+            setIsLoading(false); setIsStreaming(true)
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let buf = '', fullReply = '', modelUsed = ''
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              buf += decoder.decode(value, { stream: true })
+              const lines = buf.split('\n'); buf = lines.pop() || ''
+              for (const line of lines) {
+                if (!line.startsWith('data:')) continue
+                try {
+                  const d = JSON.parse(line.slice(5).trim())
+                  if (d.type === 'delta') { fullReply += d.text; setStreamingText(fullReply) }
+                  if (d.type === 'model') modelUsed = d.model
+                } catch {}
+              }
+            }
+            setIsStreaming(false); setStreamingText('')
+            const modelLabel = modelUsed === 'claude-haiku' ? '✦ Claude Haiku' : '✦ Claude'
+            const replyWithTag = fullReply + `\n\n_${modelLabel}_`
+            const finalMsgs = [...currentMsgs, { role: 'assistant', content: replyWithTag }]
+            if (convId) {
+              await updateConversation(convId, { messages: finalMsgs })
+              setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: finalMsgs } : c))
+            }
+          }).catch(() => { setIsLoading(false); setIsStreaming(false) })
+        }, 50)
+      }
+    }, 10)
   }
 
   const autoSummarise = async () => {
@@ -1087,7 +1166,19 @@ export default function Brain({ session }) {
                   </div>
                 ):(
                   <>
-                    {messages.map((msg,i)=><MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>)}
+                    {messages.map((msg,i)=>{
+                      const prevUser = msg.role === 'assistant'
+                        ? messages.slice(0,i).filter(m=>m.role==='user').slice(-1)[0]?.content || ''
+                        : ''
+                      return <MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark}
+                        userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}
+                        prevUserMsg={prevUser}
+                        onAnalyse={(prompt) => {
+                          const combined = `${prompt}\n\nCode:\n${prevUser}`
+                          handleSendText(combined)
+                        }}
+                      />
+                    })}
                     {isLoading&&!isStreaming&&(
                       <div style={{ display:'flex',gap:10,alignItems:'flex-start',marginBottom:20 }}>
                         <div style={{ width:32,height:32,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center' }}><WaniLogo size={28} dark={dark}/></div>
