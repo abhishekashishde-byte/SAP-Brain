@@ -117,18 +117,20 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
         const headers = tl[0].split('|').filter(c=>c.trim())
         const rows = tl.slice(2).map(r=>r.split('|').filter(c=>c.trim()))
         const copyTableAsCSV = () => {
-          const csv = [headers.map(h=>h.trim()).join(','), ...rows.map(r=>r.map(c=>c.trim()).join(','))].join('\n')
-          navigator.clipboard?.writeText(csv)
+          // Tab-separated — pastes directly into Excel with correct columns
+          const tsv = [headers.map(h=>h.trim()).join('\t'), ...rows.map(r=>r.map(c=>c.trim().replace(/<[^>]+>/g,'')).join('\t'))].join('\n')
+          navigator.clipboard?.writeText(tsv)
         }
         const downloadCSV = () => {
-          const csv = [headers.map(h=>h.trim()).join(','), ...rows.map(r=>r.map(c=>c.trim()).join(','))].join('\n')
-          const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv)
+          // Download as proper CSV file — Excel opens with correct columns automatically
+          const csv = [headers.map(h=>`"${h.trim()}"`).join(','), ...rows.map(r=>r.map(c=>`"${c.trim().replace(/<[^>]+>/g,'').replace(/"/g,'""')}"`).join(','))].join('\n')
+          const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv)
           a.download = 'wani-table.csv'; a.click()
         }
         els.push(<div key={`t${i}`} style={{ margin:'10px 0' }}>
           <div style={{ display:'flex',gap:6,marginBottom:6,justifyContent:'flex-end' }}>
-            <button onClick={copyTableAsCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>Copy CSV</button>
-            <button onClick={downloadCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>↓ Download CSV</button>
+            <button onClick={copyTableAsCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>📋 Copy for Excel</button>
+            <button onClick={downloadCSV} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>↓ Download .csv</button>
           </div>
           <div style={{ overflowX:'auto' }}>
           <table style={{ borderCollapse:'collapse',width:'100%',fontSize:15 }}>
