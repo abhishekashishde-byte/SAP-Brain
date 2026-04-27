@@ -304,17 +304,23 @@ export default async function handler(req, res) {
       : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
-    const validMessages = (messages || [])
+    // Check if any recent message contains code
+    const recentMessages = (messages || []).slice(-12)
+    const hasCodeInHistory = recentMessages.some(m =>
+      /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(m.content || '')
+    )
+
+    const validMessages = recentMessages
       .filter(m => m.role && m.content?.trim())
       .map(m => ({
         role: m.role,
-        // Code messages get more space — don't truncate
-        content: String(m.content).trim().slice(0, isCode ? 8000 : 2000)
+        // Code messages and history with code get more space
+        content: String(m.content).trim().slice(0, hasCodeInHistory ? 6000 : 2000)
       }))
-      .slice(-8)
+      .slice(hasCodeInHistory ? -12 : -8) // keep more history when code is present
 
-    // Replace last user message with rewritten version
-    if (validMessages.length > 0 && validMessages[validMessages.length - 1].role === 'user') {
+    // Replace last user message with rewritten version ONLY if no code present
+    if (!isCode && !hasCodeInHistory && validMessages.length > 0 && validMessages[validMessages.length - 1].role === 'user') {
       validMessages[validMessages.length - 1].content = rewrittenOrAnswer
     }
 
