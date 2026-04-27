@@ -1120,8 +1120,11 @@ export default function Brain({ session }) {
                         userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}
                         prevUserMsg={prevUser}
                         onAnalyse={(prompt) => {
-                          const combined = `${prompt}\n\nCode:\n${prevUser}`
-                          handleSendText(combined)
+                          // Extract original code — strip any previously prepended prompt
+                          // Original code starts from the ABAP keywords
+                          const codeMatch = prevUser.match(/((?:METHOD|CLASS|REPORT|FORM|FUNCTION|DATA:|SELECT|LOOP AT)[\s\S]+)/i)
+                          const cleanCode = codeMatch ? codeMatch[0] : prevUser
+                          handleSendText(`${prompt}\n\nCode:\n${cleanCode}`)
                         }}
                       />
                     })}
