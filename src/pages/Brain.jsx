@@ -139,7 +139,66 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial }
           </table></div></div>)
         continue
       }
-      if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700,fontSize:18,color:t.text,margin:'14px 0 6px',fontFamily:"'Inter',sans-serif" }}>{line.slice(3)}</div>); i++; continue }
+      // ── CODE BLOCKS (triple backtick) ────────────────────────────────────
+      if (line.startsWith('```')) {
+        const lang = line.slice(3).trim().toLowerCase()
+        const codeLines = []
+        i++
+        while (i < lines.length && !lines[i].startsWith('```')) {
+          codeLines.push(lines[i]); i++
+        }
+        i++ // skip closing ```
+        const codeText = codeLines.join('\n')
+
+        // Detect if it's CSV/TSV data
+        const looksLikeCSV = codeLines.length >= 2 && (
+          lang === 'csv' || lang === 'tsv' ||
+          codeLines[0].includes(',') || codeLines[0].includes('\t')
+        )
+
+        if (looksLikeCSV) {
+          // Parse and render as proper table with copy button
+          const sep = codeLines[0].includes('\t') ? '\t' : ','
+          const parseRow = r => r.split(sep).map(c => c.trim().replace(/^"|"$/g, '').replace(/<[^>]+>/g, ''))
+          const headerRow = parseRow(codeLines[0])
+          const dataRows = codeLines.slice(1).map(parseRow).filter(r => r.some(c => c))
+
+          const copyForExcel = () => {
+            const tsv = [headerRow.join('\t'), ...dataRows.map(r => r.join('\t'))].join('\n')
+            navigator.clipboard?.writeText(tsv)
+          }
+          const downloadFile = () => {
+            const csv = [headerRow.map(h => `"${h}"`).join(','), ...dataRows.map(r => r.map(c => `"${c.replace(/"/g,'""')}"`).join(','))].join('\n')
+            const a = document.createElement('a')
+            a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv)
+            a.download = 'wani-export.csv'; a.click()
+          }
+
+          els.push(<div key={`csv${i}`} style={{ margin:'10px 0' }}>
+            <div style={{ display:'flex', gap:6, marginBottom:6, justifyContent:'flex-end' }}>
+              <button onClick={copyForExcel} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>📋 Copy for Excel</button>
+              <button onClick={downloadFile} style={{ fontSize:11,padding:'3px 10px',borderRadius:6,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}>↓ Download .csv</button>
+            </div>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ borderCollapse:'collapse', width:'100%', fontSize:15 }}>
+                <thead><tr>{headerRow.map((h,j)=><th key={j} style={{ padding:'8px 12px',background:'rgba(79,70,229,0.08)',borderBottom:'2px solid rgba(79,70,229,0.2)',textAlign:'left',fontWeight:600,color:t.text,whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
+                <tbody>{dataRows.map((row,j)=><tr key={j} style={{ borderBottom:`1px solid ${t.border}`,background:j%2===0?t.surface:t.surface2 }}>{row.map((cell,k)=><td key={k} style={{ padding:'7px 12px',color:t.text2,lineHeight:1.5 }}>{cell}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          </div>)
+        } else {
+          // Regular code block
+          const copyCode = () => navigator.clipboard?.writeText(codeText)
+          els.push(<div key={`code${i}`} style={{ margin:'10px 0', position:'relative' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 12px', background:'rgba(79,70,229,0.08)', borderRadius:'8px 8px 0 0', borderBottom:`1px solid ${t.border}` }}>
+              <span style={{ fontSize:11, color:t.text4, fontFamily:"'IBM Plex Mono',monospace" }}>{lang || 'code'}</span>
+              <button onClick={copyCode} style={{ fontSize:11,padding:'2px 8px',borderRadius:5,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter',sans-serif" }}>Copy</button>
+            </div>
+            <pre style={{ margin:0, padding:'12px', background:t.codeBg, borderRadius:'0 0 8px 8px', overflowX:'auto', fontFamily:"'IBM Plex Mono',monospace", fontSize:13, color:t.codeTxt, lineHeight:1.6, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{codeText}</pre>
+          </div>)
+        }
+        continue
+      }
       if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600,fontSize:16,color:t.text,margin:'10px 0 4px' }}>{line.slice(4)}</div>); i++; continue }
       if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex',gap:8,margin:'4px 0',paddingLeft:4 }}><span style={{ color:'#4F46E5',marginTop:1,flexShrink:0,fontSize:14 }}>•</span><span style={{ lineHeight:1.7,color:t.text2,fontSize:16 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
       if (/^\s+[\+\-\*] /.test(line)) {
