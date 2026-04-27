@@ -87,7 +87,7 @@ async function streamClaudeHaiku(systemPrompt, messages, onChunk) {
 }
 
 async function streamClaudeSonnet(systemPrompt, messages, onChunk) {
-  return streamClaude('claude-sonnet-4-5-20251022', systemPrompt, messages, onChunk)
+  return streamClaude('claude-sonnet-4-5', systemPrompt, messages, onChunk)
 }
 
 async function streamClaude(model, systemPrompt, messages, onChunk) {
