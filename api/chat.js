@@ -293,8 +293,10 @@ export default async function handler(req, res) {
       saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
 
-    // STEP 3 — GPT-4o mini rewrites question (or answers if simple TABLE/TCODE)
-    const rewrittenOrAnswer = await gptRewriteAndAnswer(lastMsg, intent, isSimple)
+    // STEP 3 — GPT-4o mini rewrites question (skip rewrite if code is present)
+    const rewrittenOrAnswer = isCode
+      ? lastMsg // Keep code messages exactly as-is — never rewrite
+      : await gptRewriteAndAnswer(lastMsg, intent, isSimple)
 
     // STEP 4 — Google search runs in parallel — only when relevant
     const searchPromise = needsSearch
@@ -304,7 +306,11 @@ export default async function handler(req, res) {
     // STEP 5 — Prepare messages with rewritten question
     const validMessages = (messages || [])
       .filter(m => m.role && m.content?.trim())
-      .map(m => ({ role: m.role, content: String(m.content).trim().slice(0, 2000) }))
+      .map(m => ({
+        role: m.role,
+        // Code messages get more space — don't truncate
+        content: String(m.content).trim().slice(0, isCode ? 8000 : 2000)
+      }))
       .slice(-8)
 
     // Replace last user message with rewritten version
