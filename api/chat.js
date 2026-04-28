@@ -17,11 +17,12 @@ async function groqClassify(question) {
           role: 'user',
           content: `Classify this SAP question. Return ONLY valid JSON.
 
-intent: TABLE (asking for table name), TCODE (asking for transaction code), PROCESS (how-to, process steps), CONFIG (SPRO/config), DEBUG (error/troubleshooting), CODE (user pasted ABAP/code for analysis), GENERAL (other)
+intent: TABLE (asking for table name), TCODE (asking for transaction code), PROCESS (how-to, process steps), CONFIG (SPRO/config), DEBUG (error/troubleshooting), CODE (user pasted ABAP/code for analysis), ERROR (user pasted SAP error message, short dump, SM21 log, runtime error, ABAP exception), GENERAL (other)
 isSimple: true if just asking for a table name or T-code, false for anything requiring explanation
 isCorrection: true if user is correcting a previous wrong answer
 needsSearch: true if question is about S/4HANA changes, deprecated fields, "not there", "removed", "can you search", how-to, config steps
 isCode: true if the message contains ABAP code, METHOD, CLASS, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, or any code block
+isError: true if message contains SAP error text, short dump, runtime error, SM21/ST22 content, message class numbers like "M7 001"
 
 Question: "${question}"
 
@@ -38,9 +39,10 @@ Question: "${question}"
       isCorrection: result.isCorrection === true,
       needsSearch: result.needsSearch === true,
       isCode: result.isCode === true || /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question),
+      isError: result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question),
     }
   } catch {
-    return { intent: 'GENERAL', isSimple: false, isCorrection: false, needsSearch: false, isCode: false }
+    return { intent: 'GENERAL', isSimple: false, isCorrection: false, needsSearch: false, isCode: false, isError: false }
   }
 }
 
@@ -277,11 +279,222 @@ Wrong answer: "${assistantMsg?.slice(0, 300)}"`
   } catch (err) { console.error('saveCorrection error:', err.message) }
 }
 
+// ── 7. EMBEDDINGS — OpenAI text-embedding-3-small ────────────────────────────
+async function embed(text) {
+  const res = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({ model: 'text-embedding-3-small', input: text.slice(0, 8000) })
+  })
+  const data = await res.json()
+  return data.data?.[0]?.embedding || null
+}
+
+// ── 8. SUPABASE CLIENT (reusable) ─────────────────────────────────────────────
+function getSupabase() {
+  const { createClient } = require('@supabase/supabase-js')
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
+
+// ── 9. SEMANTIC KNOWLEDGE SEARCH ─────────────────────────────────────────────
+async function fetchRelevantKnowledge(question, userId) {
+  try {
+    const supabase = getSupabase()
+    if (!supabase || !userId) return []
+    const queryEmbedding = await embed(question)
+    if (!queryEmbedding) return []
+    const { data, error } = await supabase.rpc('match_wani_knowledge', {
+      query_embedding: queryEmbedding,
+      match_user_id: userId,
+      match_threshold: 0.75,
+      match_count: 3
+    })
+    if (error) { console.error('knowledge search error:', error.message); return [] }
+    return data || []
+  } catch (err) {
+    console.error('fetchRelevantKnowledge error:', err.message)
+    return []
+  }
+}
+
+// ── 10. SUGGEST FINDING — propose to user for confirmation ───────────────────
+async function suggestFinding(messages, module) {
+  try {
+    const conversation = messages.slice(-10)
+      .filter(m => m.role && m.content)
+      .map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}: ${m.content.slice(0, 400)}`)
+      .join('\n')
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 300,
+        temperature: 0,
+        messages: [{
+          role: 'user',
+          content: `Scan this SAP conversation for ONE finding worth saving to a consultant knowledge base.
+
+Save ONLY if it meets at least ONE:
+- Corrects wrong info in standard SAP docs
+- Real project finding (migration, upload, specific field behaviour)
+- Error root cause confirmed from experience  
+- Specific gotcha that would save another consultant time
+
+Return JSON: {"found":true,"module":"PP","topic":"Migration","object":"MKAL","finding":"VERID must be populated before ADATU in LSMW upload","confidence":"verified"}
+Or if nothing qualifies: {"found":false}
+Most conversations return {"found":false}.
+
+Conversation:
+${conversation}`
+        }]
+      })
+    })
+    const data = await res.json()
+    const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
+    return JSON.parse(raw.replace(/```json|```/g, '').trim())
+  } catch { return { found: false } }
+}
+
 // ── MAIN HANDLER ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { messages, tone = 'balanced', userName, userRole, userModules = [], userId } = req.body
+  const body = req.body
+
+  // ── EARLY-EXIT ACTIONS (JSON responses, no streaming) ───────────────────────
+
+  // Classify document type
+  if (body.action === 'classify_doc') {
+    try {
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile', max_tokens: 15, temperature: 0,
+          messages: [{ role: 'user', content: `Classify this SAP document. Return ONLY one word:\nFUNCTIONAL_SPEC, TEST_SCRIPT, MEETING_NOTES, PROJECT_PLAN, TECHNICAL_SPEC, OTHER\n\nDocument: ${(body.content || '').slice(0, 1000)}` }]
+        })
+      })
+      const groqData = await groqRes.json()
+      const docType = groqData.choices?.[0]?.message?.content?.trim().toUpperCase() || 'OTHER'
+      const valid = ['FUNCTIONAL_SPEC', 'TEST_SCRIPT', 'MEETING_NOTES', 'PROJECT_PLAN', 'TECHNICAL_SPEC', 'OTHER']
+      return res.status(200).json({ docType: valid.includes(docType) ? docType : 'OTHER' })
+    } catch { return res.status(200).json({ docType: 'OTHER' }) }
+  }
+
+  // Store document chunks with embeddings
+  if (body.action === 'store_chunks') {
+    try {
+      const { content, docName, docType, userId } = body
+      if (!content || !userId) return res.status(400).json({ error: 'Missing content or userId' })
+      const supabase = getSupabase()
+      if (!supabase) return res.status(500).json({ error: 'Supabase not configured' })
+
+      // Delete existing chunks for this document
+      await supabase.from('wani_doc_chunks').delete().eq('user_id', userId).eq('doc_name', docName)
+
+      // Chunk document — 500 chars with 50 char overlap
+      const chunks = []
+      const chunkSize = 500, overlap = 50
+      for (let i = 0; i < content.length; i += chunkSize - overlap) {
+        chunks.push(content.slice(i, i + chunkSize))
+        if (i + chunkSize >= content.length) break
+      }
+
+      // Embed and store each chunk
+      let stored = 0
+      for (let i = 0; i < Math.min(chunks.length, 50); i++) {
+        const embedding = await embed(chunks[i])
+        if (!embedding) continue
+        await supabase.from('wani_doc_chunks').insert({
+          user_id: userId, doc_name: docName, doc_type: docType,
+          chunk_index: i, chunk_text: chunks[i], embedding
+        })
+        stored++
+      }
+      return res.status(200).json({ stored, total: chunks.length })
+    } catch (err) { return res.status(500).json({ error: err.message }) }
+  }
+
+  // Retrieve relevant document chunks for a question
+  if (body.action === 'retrieve_chunks') {
+    try {
+      const { question, userId } = body
+      if (!question || !userId) return res.status(400).json({ chunks: [] })
+      const supabase = getSupabase()
+      if (!supabase) return res.status(200).json({ chunks: [] })
+      const queryEmbedding = await embed(question)
+      if (!queryEmbedding) return res.status(200).json({ chunks: [] })
+      const { data } = await supabase.rpc('match_wani_chunks', {
+        query_embedding: queryEmbedding,
+        match_user_id: userId,
+        match_threshold: 0.70,
+        match_count: 4
+      })
+      return res.status(200).json({ chunks: (data || []).map(d => d.chunk_text) })
+    } catch (err) { return res.status(200).json({ chunks: [] }) }
+  }
+
+  // Suggest finding from conversation (user confirms separately)
+  if (body.action === 'suggest_finding') {
+    try {
+      const { messages, module } = body
+      const finding = await suggestFinding(messages || [], module)
+      return res.status(200).json(finding)
+    } catch { return res.status(200).json({ found: false }) }
+  }
+
+  // Save confirmed finding with embedding
+  if (body.action === 'save_finding') {
+    try {
+      const { userId, module, topic, object, finding, confidence } = body
+      if (!userId || !finding) return res.status(400).json({ error: 'Missing fields' })
+      const supabase = getSupabase()
+      if (!supabase) return res.status(500).json({ error: 'Supabase not configured' })
+      const embeddingText = `${module} ${topic} ${object} ${finding}`
+      const embedding = await embed(embeddingText)
+      const { error } = await supabase.from('wani_knowledge').insert({
+        user_id: userId, module, topic, object, finding,
+        confidence: confidence || 'verified', embedding
+      })
+      if (error) throw error
+      return res.status(200).json({ saved: true })
+    } catch (err) { return res.status(500).json({ error: err.message }) }
+  }
+
+  // Load all knowledge for panel
+  if (body.action === 'load_knowledge') {
+    try {
+      const { userId } = body
+      if (!userId) return res.status(400).json({ entries: [] })
+      const supabase = getSupabase()
+      if (!supabase) return res.status(200).json({ entries: [] })
+      const { data } = await supabase.from('wani_knowledge')
+        .select('id, module, topic, object, finding, confidence, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      return res.status(200).json({ entries: data || [] })
+    } catch { return res.status(200).json({ entries: [] }) }
+  }
+
+  // Delete knowledge entry
+  if (body.action === 'delete_finding') {
+    try {
+      const { userId, id } = body
+      if (!userId || !id) return res.status(400).json({ error: 'Missing fields' })
+      const supabase = getSupabase()
+      if (!supabase) return res.status(500).json({ error: 'Supabase not configured' })
+      await supabase.from('wani_knowledge').delete().eq('id', id).eq('user_id', userId)
+      return res.status(200).json({ deleted: true })
+    } catch (err) { return res.status(500).json({ error: err.message }) }
+  }
+
+  // ── STREAMING HANDLER (existing code unchanged below) ────────────────────────
+  const { messages, tone = 'balanced', userName, userRole, userModules = [], userId } = body
   const lastMsg = messages?.[messages.length - 1]?.content || ''
   const prevAssistantMsg = [...(messages || [])].reverse().find(m => m.role === 'assistant')?.content || ''
 
@@ -304,7 +517,7 @@ export default async function handler(req, res) {
       loadGlobalCorrections().catch(() => []),
     ])
 
-    const { intent, isSimple, isCorrection, needsSearch, isCode } = classification
+    const { intent, isSimple, isCorrection, needsSearch, isCode, isError } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, isSimple, needsSearch,
@@ -323,6 +536,9 @@ export default async function handler(req, res) {
 
     // STEP 4 — Google search runs for ALL questions — always show SAP sources
     const searchPromise = !isCode ? googleSAPSearch(lastMsg) : Promise.resolve([])
+
+    // STEP 5.5 — Semantic knowledge fetch (parallel with search, no impact on existing flow)
+    const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId).catch(() => []) : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
     // Check if any recent message contains code
@@ -348,7 +564,9 @@ export default async function handler(req, res) {
     send({ type: 'start' })
     let fullAnswer = ''
 
-    // Claude Haiku answers EVERYTHING — GPT-4o mini only rewrote the question
+    // Resolve knowledge (was fetching in parallel)
+    const relevantKnowledge = await knowledgePromise
+
     let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
     systemPrompt += `\n\nNEVER say "I can't search online". Resources are shown to the user separately.`
     systemPrompt += `\nAnswer the user's CURRENT question directly. Do not reference or assume anything from previous messages unless explicitly relevant. Never say "as you mentioned" or "you shared" unless the user actually said it in this conversation.`
@@ -360,6 +578,38 @@ export default async function handler(req, res) {
 - Structure: What it does → Logic flow (→ arrows) → Key objects → Watch out
 - End with 📌 Summary (1-2 sentences)
 - Be direct and technical — no pleasantries`
+    }
+
+    // Error analysis mode
+    if (isError && !isCode) {
+      systemPrompt += `\n\n🔴 ERROR DETECTED: User has pasted a SAP error/dump. Follow ERROR ANALYSIS RULES:
+Always output a markdown table with these exact rows:
+| Aspect | Detail |
+|--------|--------|
+| Error Type | What kind of error |
+| Root Cause | Why this happens technically |
+| Most Likely Cause | In context of SAP PP/PM/MM |
+| Fix Steps | 1. First step 2. Second step 3. Third step |
+| T-codes to Check | e.g. SM21; ST22; SU53 |
+| Prevention | How to avoid in future |
+| SAP Note Hint | Search SAP Note for [specific term] |
+After table: 📌 Summary — one sentence bottom line`
+    }
+
+    // Document context injection — only relevant chunks not full document
+    const { documentChunks, documentName, documentType } = body
+    if (documentChunks?.length > 0) {
+      systemPrompt += `\n\n📄 DOCUMENT CONTEXT: User has uploaded "${documentName}" (${documentType})
+Relevant sections for this question:
+${documentChunks.map((c, i) => `[${i+1}] ${c}`).join('\n\n')}
+Answer questions using this document as primary source. Reference specific sections when possible.`
+    }
+
+    // Consultant knowledge injection — verified project experience
+    if (relevantKnowledge.length > 0) {
+      systemPrompt += `\n\n📌 VERIFIED CONSULTANT KNOWLEDGE (from real project experience — prioritise over generic docs):
+${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object}, ${k.confidence})`).join('\n')}
+Reference this knowledge explicitly when answering.`
     }
 
     if (firstName) {
