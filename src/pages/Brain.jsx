@@ -861,10 +861,11 @@ export default function Brain({ session }) {
 
       // Build model tag
       const modelLabel = modelUsed === 'gpt4o-mini' ? '✦ GPT-4o mini'
+        : modelUsed === 'gpt4o' ? '✦ GPT-4o'
         : modelUsed === 'claude-haiku' ? '✦ Claude Haiku'
         : modelUsed === 'claude-sonnet' ? '✦ Claude Sonnet'
         : modelUsed === 'claude+gemini' ? '✦ Claude  📚 Gemini'
-        : '✦ Claude'
+        : '✦ GPT-4o'
 
       // Build search links section as markdown
       let linksSection = ''
