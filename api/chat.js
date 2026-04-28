@@ -321,10 +321,8 @@ export default async function handler(req, res) {
       ? lastMsg // Keep code messages exactly as-is — never rewrite
       : await gptRewriteAndAnswer(lastMsg, intent, isSimple, messages || [])
 
-    // STEP 4 — Google search runs in parallel — only when relevant
-    const searchPromise = needsSearch
-      ? googleSAPSearch(lastMsg)
-      : Promise.resolve([])
+    // STEP 4 — Google search runs for ALL questions — always show SAP sources
+    const searchPromise = !isCode ? googleSAPSearch(lastMsg) : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
     // Check if any recent message contains code
