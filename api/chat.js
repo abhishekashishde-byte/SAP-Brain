@@ -140,13 +140,13 @@ async function streamClaude(model, systemPrompt, messages, onChunk) {
 }
 
 // ── 4. GPT-4o mini streaming — for simple answers ────────────────────────────
-async function streamGPTAnswer(systemPrompt, messages, onChunk) {
+async function streamGPT(systemPrompt, messages, onChunk) {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      max_tokens: 1024,
+      model: 'gpt-4o',
+      max_tokens: 4096,
       temperature: 0.1,
       stream: true,
       messages: [
@@ -359,16 +359,16 @@ export default async function handler(req, res) {
       systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS — ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
     }
 
-    // Use Sonnet for code analysis — significantly better than Haiku for complex code
-    // Use Haiku for everything else — fast and cheap for normal SAP questions
+    // GPT-4o answers SAP questions — better T-code/table accuracy than Haiku
+    // Claude Sonnet for code analysis — keeps its superior code understanding
     if (isCode || hasCodeInHistory) {
-      console.log('SENDING TO CLAUDE SONNET (code detected):', { messageCount: validMessages.length })
+      console.log('SENDING TO CLAUDE SONNET (code detected)')
       fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
     } else {
-      console.log('SENDING TO CLAUDE HAIKU:', { messageCount: validMessages.length })
-      fullAnswer = await streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      console.log('SENDING TO GPT-4o (SAP question)')
+      fullAnswer = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
     }
-    const modelUsed = (isCode || hasCodeInHistory) ? 'claude-sonnet' : 'claude-haiku'
+    const modelUsed = (isCode || hasCodeInHistory) ? 'claude-sonnet' : 'gpt4o'
 
     if (!fullAnswer?.trim()) {
       send({ type: 'error', error: 'Empty response — please try again' })
