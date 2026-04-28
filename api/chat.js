@@ -44,9 +44,15 @@ Question: "${question}"
   }
 }
 
-// ── 2. GPT-4o mini — rewrite question + answer simple TABLE/TCODE ────────────
-async function gptRewriteAndAnswer(question, intent, isSimple) {
+// ── 2. GPT-4o mini — rewrite question with full context awareness ─────────────
+async function gptRewriteAndAnswer(question, intent, isSimple, conversationHistory = []) {
   try {
+    // Build recent context summary for the rewriter
+    const recentContext = conversationHistory.slice(-6)
+      .filter(m => m.role && m.content)
+      .map(m => `${m.role === 'user' ? 'User' : 'Wani'}: ${m.content.slice(0, 300)}`)
+      .join('\n')
+
     const systemPrompt = isSimple
       ? `You are a senior SAP S/4HANA consultant. Give a complete, accurate answer.
 - For table questions: list ALL relevant tables with their purpose, key fields where useful
@@ -56,17 +62,26 @@ async function gptRewriteAndAnswer(question, intent, isSimple) {
 - Never invent table names, T-codes, or field names
 - Be thorough — a consultant needs the complete picture, not just one line`
       : `You are an SAP question optimizer. Rewrite this SAP question to be clearer and more specific.
+
+IMPORTANT — use the conversation context below to:
+- Connect follow-up questions to the topic being discussed
+- If someone asks a general term after discussing a specific SAP topic, link them
+- Example: if discussing "Construction Type" then user asks "what is material BOM?" 
+  → rewrite as "What is a Material BOM in the context of the Construction Type field in IE01 equipment master?"
 - Fix typos and grammar
-- Make SAP terminology precise (e.g. "MRP4 view" → "MRP 4 view in MM01 material master")
-- Keep the same meaning
-- Return ONLY the rewritten question, nothing else`
+- Make SAP terminology precise
+- Keep the same meaning but add context linkage
+- Return ONLY the rewritten question, nothing else
+
+Recent conversation:
+${recentContext || 'No previous context'}`
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        max_tokens: isSimple ? 800 : 150,
+        max_tokens: isSimple ? 800 : 200,
         temperature: 0.1,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -304,7 +319,7 @@ export default async function handler(req, res) {
     // STEP 3 — GPT-4o mini rewrites question (skip rewrite if code is present)
     const rewrittenOrAnswer = isCode
       ? lastMsg // Keep code messages exactly as-is — never rewrite
-      : await gptRewriteAndAnswer(lastMsg, intent, isSimple)
+      : await gptRewriteAndAnswer(lastMsg, intent, isSimple, messages || [])
 
     // STEP 4 — Google search runs in parallel — only when relevant
     const searchPromise = needsSearch
