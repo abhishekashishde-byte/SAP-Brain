@@ -24,7 +24,7 @@ The user has pasted an SAP error. Analyse using this exact table:
 | Root Cause | Technical reason |
 | Most Likely Cause | In PP/PM/MM context |
 | Fix Steps | 1. Step 2. Step 3. Step |
-| T-codes to Check | SM21; ST22; SU53 as relevant |
+| T-codes to Check | Only list T-codes genuinely useful for this specific error. Do not add SM21/ST22/SU53 unless they are actually relevant here. |
 | Prevention | How to avoid in future |
 | SAP Note Hint | Search term for relevant Notes |
 End with 📌 Summary (1 sentence).`,
