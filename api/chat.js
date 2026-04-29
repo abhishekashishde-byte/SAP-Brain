@@ -8,7 +8,7 @@ import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
-// ── 1. GROQ — classify intent ─────────────────────────────────────────────────
+// ── 1. GROQ — classify intent with confidence + multi-intent detection ────────
 async function groqClassify(question) {
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -16,13 +16,13 @@ async function groqClassify(question) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 120,
+        max_tokens: 180,
         temperature: 0,
         messages: [{
           role: 'user',
           content: `Classify this SAP consultant request. Return ONLY valid JSON.
 
-intent options:
+intent options (pick the SINGLE best match):
 SAP_QA         = general SAP question, T-code, table, process, config
 CODE_ANALYSIS  = user pasted ABAP/code for analysis
 ERROR_ANALYSIS = user pasted SAP error, dump, SM21/ST22 log
@@ -37,6 +37,10 @@ FIORI_REC      = recommend Fiori apps for a process or role
 SLIDE_CONTENT  = create presentation content, slide structure, storyline
 GENERAL        = anything else
 
+Also detect secondary intents if the question clearly asks for multiple things.
+Example: "explain this error and create test cases" → intent: ERROR_ANALYSIS, secondaryIntent: TEST_CASES
+
+confidence: 0.0-1.0 — how certain you are about the primary intent
 flags:
 isCode: true if message contains ABAP keywords (METHOD, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, ENDLOOP, FORM, FUNCTION)
 isError: true if message contains error text, dump, ST22, SM21, runtime error, message class number
@@ -45,7 +49,7 @@ needsSearch: true if question is about latest S/4HANA changes, deprecated object
 
 Question: "${question.slice(0, 400)}"
 
-{"intent":"SAP_QA","isCode":false,"isError":false,"isCorrection":false,"needsSearch":false}`
+{"intent":"SAP_QA","confidence":0.9,"secondaryIntent":null,"isCode":false,"isError":false,"isCorrection":false,"needsSearch":false}`
         }]
       })
     })
@@ -53,28 +57,46 @@ Question: "${question.slice(0, 400)}"
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
     const result = JSON.parse(raw.replace(/```json|```/g, '').trim())
 
-    // Regex fallbacks for reliable detection
+    // ── Hard regex overrides — always win over Groq classification ────────────
     const isCode  = result.isCode  === true || /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question)
     const isError = result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question)
+    const isFsKeyword    = /\b(functional spec|FS|create.*spec|write.*spec|generate.*spec|specification for)\b/i.test(question)
+    const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
+    const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
 
-    // Override intent from regex when highly certain
     let intent = result.intent || 'SAP_QA'
-    if (isCode && intent === 'SAP_QA') intent = 'CODE_ANALYSIS'
-    if (isError && intent === 'SAP_QA') intent = 'ERROR_ANALYSIS'
+    let confidence = typeof result.confidence === 'number' ? result.confidence : 0.7
+    let secondaryIntent = result.secondaryIntent || null
 
-    // FIORI_REC must always search — Fiori app IDs hallucinate without live data
-    const needsSearch = result.needsSearch === true || intent === 'FIORI_REC'
+    // Hard overrides — regex is more reliable than LLM for these
+    if (isCode)        { intent = 'CODE_ANALYSIS';  confidence = 1.0 }
+    if (isError)       { intent = 'ERROR_ANALYSIS'; confidence = 1.0 }
+    if (isFsKeyword && !isCode && !isError)   { intent = 'FS_SPEC';    confidence = 0.95 }
+    if (isTestKeyword && !isCode && !isError) { intent = 'TEST_CASES'; confidence = 0.95 }
+    if (isFioriKeyword && !isCode && !isError){ intent = 'FIORI_REC';  confidence = 0.95 }
+
+    // ── Low confidence fallback — use SAP_QA rather than force wrong template ──
+    // Deliverable intents need high confidence — wrong template produces useless output
+    const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
+    if (DELIVERABLE_INTENTS_SET.has(intent) && confidence < 0.75) {
+      intent = 'SAP_QA'
+      secondaryIntent = null
+    }
+
+    // FIORI_REC must always search — app IDs hallucinate without live data
+    const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
 
     return {
       intent,
+      confidence,       // internal only — never shown to user
+      secondaryIntent,  // for multi-intent questions
       isCode,
       isError,
       isCorrection: result.isCorrection === true,
       needsSearch,
-      isSimple: false,
     }
   } catch {
-    return { intent: 'SAP_QA', isCode: false, isError: false, isCorrection: false, needsSearch: false, isSimple: false }
+    return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false }
   }
 }
 
@@ -575,10 +597,10 @@ export default async function handler(req, res) {
       loadGlobalCorrections().catch(() => []),
     ])
 
-    const { intent, isSimple, isCorrection, needsSearch, isCode, isError } = classification
+    const { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
-      q: lastMsg.slice(0, 60), intent, isSimple, needsSearch,
+      q: lastMsg.slice(0, 60), intent, confidence, secondaryIntent, needsSearch,
       corrections: globalCorrections.length,
     }))
 
@@ -627,11 +649,27 @@ export default async function handler(req, res) {
     const relevantKnowledge = await knowledgePromise
 
     // ── BUILD SYSTEM PROMPT — intent-specific, not one generic prompt ────────
-    // Each intent gets its own specialized prompt template
     const intentPrompt = INTENT_PROMPTS[intent] || INTENT_PROMPTS['SAP_QA']
     const toneAddition = TONE_ADDITIONS[tone] || ''
 
     let systemPrompt = intentPrompt + toneAddition
+
+    // ── MULTI-INTENT: append secondary template if detected ──────────────────
+    if (secondaryIntent && secondaryIntent !== intent && INTENT_PROMPTS[secondaryIntent]) {
+      systemPrompt += `\n\n---\nThe user also wants: ${secondaryIntent.replace('_', ' ')}\nAfter completing the primary task above, also provide:\n${INTENT_PROMPTS[secondaryIntent]}`
+    }
+
+    // ── OUTPUT LENGTH CONTROL — per intent ───────────────────────────────────
+    const LONG_INTENTS = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
+    const SHORT_INTENTS = new Set(['SAP_QA','ERROR_ANALYSIS','FIORI_REC'])
+    if (SHORT_INTENTS.has(intent)) {
+      systemPrompt += `\n\nOUTPUT LENGTH: Keep answers concise and direct. Do not pad with unnecessary sections. If the answer is short, that is correct.`
+    } else if (LONG_INTENTS.has(intent)) {
+      systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable document. Be thorough and complete. Cover all sections fully. Length is appropriate here.`
+    }
+
+    // ── GLOBAL ANTI-HALLUCINATION RULE — applies to every intent ─────────────
+    systemPrompt += `\n\nCRITICAL: Never invent SAP T-codes, table names, BAdI names, function modules, or Fiori app IDs. If uncertain about any SAP object, write "verify in your system" instead.`
 
     // Document context injection — only relevant chunks, not full document
     const { documentChunks, documentName, documentType } = body
