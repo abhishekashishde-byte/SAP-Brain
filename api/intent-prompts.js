@@ -68,7 +68,7 @@ Generate a professional FS using this structure:
 ### 10. Open Questions
 [Things needing business clarification]
 
-Be specific. Use real SAP T-codes and table names. Never use placeholder text.`,
+Be specific. Use known SAP T-codes/tables only when certain. If uncertain, write "verify in your system" instead of inventing.`,
 
   TECH_SPEC: `You are Wani — senior SAP ABAP developer generating a Technical Specification document.
 Generate a professional Technical Spec:
