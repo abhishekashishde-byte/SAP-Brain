@@ -290,16 +290,20 @@ function getSupabase() {
   return createClient(url, key)
 }
 
-// ── 9. SEMANTIC KNOWLEDGE SEARCH ─────────────────────────────────────────────
-async function fetchRelevantKnowledge(question, userId) {
+// ── SEMANTIC KNOWLEDGE SEARCH ─────────────────────────────────────────────────
+async function fetchRelevantKnowledge(question, userId, userToken) {
   try {
-    const supabase = getSupabase()
-    if (!supabase || !userId) return []
+    // Use user's JWT token for RPC — auth.uid() in function will return correct user
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+    if (!url || !anonKey || !userToken) return []
+    const userClient = createClient(url, anonKey, {
+      global: { headers: { Authorization: `Bearer ${userToken}` } }
+    })
     const queryEmbedding = await embed(question)
     if (!queryEmbedding) return []
-    const { data, error } = await supabase.rpc('match_wani_knowledge', {
+    const { data, error } = await userClient.rpc('match_wani_knowledge', {
       query_embedding: queryEmbedding,
-      match_user_id: userId,
       match_threshold: 0.75,
       match_count: 3
     })
@@ -416,15 +420,18 @@ export default async function handler(req, res) {
   // Retrieve relevant document chunks for a question
   if (body.action === 'retrieve_chunks') {
     try {
-      const { question, userId } = body
-      if (!question || !userId) return res.status(400).json({ chunks: [] })
-      const supabase = getSupabase()
-      if (!supabase) return res.status(200).json({ chunks: [] })
+      const { question } = body
+      if (!question) return res.status(400).json({ chunks: [] })
+      // Use user JWT so auth.uid() works correctly in RPC function
+      const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+      const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+      const userClient = createClient(url, anonKey, {
+        global: { headers: { Authorization: req.headers.authorization } }
+      })
       const queryEmbedding = await embed(question)
       if (!queryEmbedding) return res.status(200).json({ chunks: [] })
-      const { data } = await supabase.rpc('match_wani_chunks', {
+      const { data } = await userClient.rpc('match_wani_chunks', {
         query_embedding: queryEmbedding,
-        match_user_id: userId,
         match_threshold: 0.70,
         match_count: 6
       })
@@ -531,7 +538,8 @@ export default async function handler(req, res) {
     const searchPromise = (!isCode && needsSearch) ? googleSAPSearch(lastMsg) : Promise.resolve([])
 
     // STEP 5.5 — Semantic knowledge fetch (parallel with search, no impact on existing flow)
-    const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId).catch(() => []) : Promise.resolve([])
+    const userToken = req.headers.authorization?.replace('Bearer ', '')
+    const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
     // Check if any recent message contains code
