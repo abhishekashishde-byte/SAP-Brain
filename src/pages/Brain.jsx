@@ -731,6 +731,19 @@ export default function Brain({ session }) {
   const [knowledgeToast, setKnowledgeToast]   = useState(null)
   const docInputRef = useRef(null)
 
+  // ── AUTHENTICATED FETCH — always sends JWT, backend derives userId from token ──
+  const chatFetch = async (body) => {
+    const token = session?.access_token
+    return fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(body)
+    })
+  }
+
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
 
@@ -800,20 +813,10 @@ export default function Brain({ session }) {
       const content = await extractDocText(file)
       if (!content.trim()) { alert('Could not extract text from this file'); setDocUploading(false); return }
       // Classify document type
-      const classRes = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'classify_doc', content: content.slice(0, 2000) })
-      })
+      const classRes = await chatFetch({ action: 'classify_doc', content: content.slice(0, 2000) })
       const { docType } = await classRes.json()
       // Store chunks with embeddings in background
-      if (session?.user?.id) {
-        fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'store_chunks', content, docName: file.name, docType, userId: session.user.id })
-        }).catch(() => {})
-      }
+      chatFetch({ action: 'store_chunks', content, docName: file.name, docType }).catch(() => {})
       setUploadedDoc({ name: file.name, content, type: file.type, docType })
     } catch (err) { alert('Upload failed: ' + err.message) }
     setDocUploading(false)
@@ -821,61 +824,38 @@ export default function Brain({ session }) {
   }
 
   const getDocChunks = async (question) => {
-    if (!uploadedDoc || !session?.user?.id) return []
+    if (!uploadedDoc) return []
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'retrieve_chunks', question, userId: session.user.id })
-      })
+      const res = await chatFetch({ action: 'retrieve_chunks', question })
       const { chunks } = await res.json()
       return chunks || []
     } catch { return [] }
   }
 
   const loadKnowledge = async () => {
-    if (!session?.user?.id) return
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'load_knowledge', userId: session.user.id })
-      })
+      const res = await chatFetch({ action: 'load_knowledge' })
       const { entries } = await res.json()
       setKnowledgeEntries(entries || [])
     } catch {}
   }
 
   const deleteKnowledge = async (id) => {
-    if (!session?.user?.id) return
-    await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete_finding', userId: session.user.id, id })
-    })
+    await chatFetch({ action: 'delete_finding', id })
     setKnowledgeEntries(prev => prev.filter(k => k.id !== id))
   }
 
   const saveFinding = async (finding) => {
-    if (!session?.user?.id) return
-    await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save_finding', userId: session.user.id, ...finding })
-    })
+    await chatFetch({ action: 'save_finding', ...finding })
     setPendingFinding(null)
     setKnowledgeToast('💡 Finding saved to knowledge base')
     setTimeout(() => setKnowledgeToast(null), 3000)
   }
 
   const checkForFindings = async (msgs) => {
-    if (!session?.user?.id || msgs.length < 4) return
+    if (msgs.length < 4) return
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'suggest_finding', messages: msgs.slice(-10), module: activeConv?.module || browseModule })
-      })
+      const res = await chatFetch({ action: 'suggest_finding', messages: msgs.slice(-10), module: activeConv?.module || browseModule })
       const data = await res.json()
       if (data.found) setPendingFinding(data)
     } catch {}
@@ -992,10 +972,14 @@ export default function Brain({ session }) {
 
     try {
       const docChunks = uploadedDoc ? await getDocChunks(msgText) : []
-      const res = await fetch('/api/chat',{
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userId:session.user.id, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null }),
+      const token = session?.access_token
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null }),
       })
 
       if (!res.ok) throw new Error('Network error')
