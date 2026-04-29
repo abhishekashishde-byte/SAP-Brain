@@ -62,13 +62,16 @@ Question: "${question.slice(0, 400)}"
     if (isCode && intent === 'SAP_QA') intent = 'CODE_ANALYSIS'
     if (isError && intent === 'SAP_QA') intent = 'ERROR_ANALYSIS'
 
+    // FIORI_REC must always search — Fiori app IDs hallucinate without live data
+    const needsSearch = result.needsSearch === true || intent === 'FIORI_REC'
+
     return {
       intent,
       isCode,
       isError,
       isCorrection: result.isCorrection === true,
-      needsSearch:  result.needsSearch  === true,
-      isSimple:     false, // removed — GPT-4o handles all answers now
+      needsSearch,
+      isSimple: false,
     }
   } catch {
     return { intent: 'SAP_QA', isCode: false, isError: false, isCorrection: false, needsSearch: false, isSimple: false }
@@ -219,13 +222,17 @@ async function streamGPT(systemPrompt, messages, onChunk) {
 }
 
 // ── 5. GOOGLE CUSTOM SEARCH — real SAP links ─────────────────────────────────
-async function googleSAPSearch(question) {
+async function googleSAPSearch(question, intent = 'SAP_QA') {
   const key = process.env.GOOGLE_CSE_KEY
   const cx = process.env.GOOGLE_CSE_ID
   if (!key || !cx) return []
 
   try {
-    const query = encodeURIComponent(`SAP ${question}`)
+    // For Fiori recommendations — search Fiori Apps Library specifically
+    const rawQuery = intent === 'FIORI_REC'
+      ? `SAP Fiori app ${question} site:fioriappslibrary.hana.ondemand.com OR site:help.sap.com`
+      : `SAP ${question}`
+    const query = encodeURIComponent(rawQuery)
     const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${query}&num=3`
     const res = await fetch(url)
     if (!res.ok) return []
@@ -235,7 +242,8 @@ async function googleSAPSearch(question) {
       title: item.title,
       url: item.link,
       snippet: item.snippet?.slice(0, 120),
-      source: item.displayLink?.includes('community.sap.com') ? 'SAP Community'
+      source: item.displayLink?.includes('fioriappslibrary') ? 'SAP Fiori Library'
+        : item.displayLink?.includes('community.sap.com') ? 'SAP Community'
         : item.displayLink?.includes('help.sap.com') ? 'SAP Help'
         : item.displayLink?.includes('blogs.sap.com') ? 'SAP Blog' : 'SAP',
     }))
@@ -574,7 +582,7 @@ export default async function handler(req, res) {
       : await rewriteQuestion(lastMsg, messages || [])
 
     // STEP 4 — Google search — only when question needs current/external info
-    const searchPromise = (!isCode && needsSearch) ? googleSAPSearch(lastMsg) : Promise.resolve([])
+    const searchPromise = (!isCode && needsSearch) ? googleSAPSearch(lastMsg, intent) : Promise.resolve([])
 
     // STEP 5.5 — Semantic knowledge fetch (parallel with search, no impact on existing flow)
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
