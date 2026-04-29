@@ -648,28 +648,34 @@ export default async function handler(req, res) {
     // Resolve knowledge (was fetching in parallel)
     const relevantKnowledge = await knowledgePromise
 
-    // ── BUILD SYSTEM PROMPT — intent-specific, not one generic prompt ────────
+    // ── FIX 2: Normalise GENERAL to SAP_QA ───────────────────────────────────
+    if (intent === 'GENERAL') intent = 'SAP_QA'
+
+    // ── BUILD SYSTEM PROMPT — BASE rules + intent-specific template ──────────
+    // Fix 1: BASE_SYSTEM_PROMPT provides global SAP rules always applied
     const intentPrompt = INTENT_PROMPTS[intent] || INTENT_PROMPTS['SAP_QA']
     const toneAddition = TONE_ADDITIONS[tone] || ''
+    let systemPrompt = BASE_SYSTEM_PROMPT + '\n\n' + intentPrompt + toneAddition
 
-    let systemPrompt = intentPrompt + toneAddition
-
-    // ── MULTI-INTENT: append secondary template if detected ──────────────────
+    // ── FIX 3: Multi-intent — light secondary section, not full second template
     if (secondaryIntent && secondaryIntent !== intent && INTENT_PROMPTS[secondaryIntent]) {
-      systemPrompt += `\n\n---\nThe user also wants: ${secondaryIntent.replace('_', ' ')}\nAfter completing the primary task above, also provide:\n${INTENT_PROMPTS[secondaryIntent]}`
+      const secondaryLabel = secondaryIntent.replace(/_/g, ' ')
+      systemPrompt += `\n\nADDITIONAL REQUEST: After completing the primary task above, also provide a ${secondaryLabel} section. Keep it focused and clearly separated with a "---" divider and heading.`
     }
 
     // ── OUTPUT LENGTH CONTROL — per intent ───────────────────────────────────
-    const LONG_INTENTS = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
+    const LONG_INTENTS  = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
     const SHORT_INTENTS = new Set(['SAP_QA','ERROR_ANALYSIS','FIORI_REC'])
     if (SHORT_INTENTS.has(intent)) {
-      systemPrompt += `\n\nOUTPUT LENGTH: Keep answers concise and direct. Do not pad with unnecessary sections. If the answer is short, that is correct.`
+      systemPrompt += `\n\nOUTPUT LENGTH: Keep answers concise and direct. Do not pad with unnecessary sections.`
     } else if (LONG_INTENTS.has(intent)) {
-      systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable document. Be thorough and complete. Cover all sections fully. Length is appropriate here.`
+      systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable document. Be thorough and complete all sections.`
     }
 
-    // ── GLOBAL ANTI-HALLUCINATION RULE — applies to every intent ─────────────
-    systemPrompt += `\n\nCRITICAL: Never invent SAP T-codes, table names, BAdI names, function modules, or Fiori app IDs. If uncertain about any SAP object, write "verify in your system" instead.`
+    // ── GLOBAL ANTI-HALLUCINATION — already in BASE but reinforced for deliverables
+    if (LONG_INTENTS.has(intent)) {
+      systemPrompt += `\n\nNever invent SAP T-codes, table names, BAdI names, function modules, or Fiori app IDs. Write "verify in your system" when uncertain.`
+    }
 
     // Document context injection — only relevant chunks, not full document
     const { documentChunks, documentName, documentType } = body
@@ -715,6 +721,10 @@ Cite these sources when they support your answer. Do not invent information not 
     }
     const modelUsed = usesSonnet ? 'claude-sonnet' : 'gpt4o'
 
+    // Deliverable type — stored on conversation for UI filtering
+    const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC'])
+    const deliverableType = DELIVERABLE_TYPES.has(intent) ? intent : 'NONE'
+
     if (!fullAnswer?.trim()) {
       send({ type: 'error', error: 'Empty response — please try again' })
       res.end()
@@ -726,7 +736,7 @@ Cite these sources when they support your answer. Do not invent information not 
       send({ type: 'search_results', results: searchResults })
     }
 
-    send({ type: 'done', model: modelUsed, full: fullAnswer })
+    send({ type: 'done', model: modelUsed, full: fullAnswer, deliverableType })
 
   } catch (err) {
     console.error('HANDLER ERROR:', err.message)
