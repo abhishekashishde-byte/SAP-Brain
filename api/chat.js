@@ -2,6 +2,7 @@
 // Groq classifies → GPT-4o mini rewrites + answers simple → Claude Haiku answers complex → Google CSE for real links
 
 import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS } from './_shared.js'
+import { createClient } from '@supabase/supabase-js'
 
 // ── 1. GROQ — classify only, never answers SAP ───────────────────────────────
 async function groqClassify(question) {
@@ -104,7 +105,8 @@ async function streamClaudeHaiku(systemPrompt, messages, onChunk) {
 }
 
 async function streamClaudeSonnet(systemPrompt, messages, onChunk) {
-  return streamClaude('claude-sonnet-4-5', systemPrompt, messages, onChunk)
+  // claude-sonnet-4-5 is the current stable Sonnet model
+  return streamClaude('claude-sonnet-4-5-20251022', systemPrompt, messages, onChunk)
 }
 
 async function streamClaude(model, systemPrompt, messages, onChunk) {
@@ -290,11 +292,11 @@ async function embed(text) {
   return data.data?.[0]?.embedding || null
 }
 
-// ── 8. SUPABASE CLIENT (reusable) ─────────────────────────────────────────────
+// ── SUPABASE — service role key for server-side writes ────────────────────────
 function getSupabase() {
-  const { createClient } = require('@supabase/supabase-js')
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+  // Use service role key server-side — never expose to frontend
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
   if (!url || !key) return null
   return createClient(url, key)
 }
@@ -397,11 +399,13 @@ export default async function handler(req, res) {
       // Delete existing chunks for this document
       await supabase.from('wani_doc_chunks').delete().eq('user_id', userId).eq('doc_name', docName)
 
-      // Chunk document — 500 chars with 50 char overlap
+      // Chunk document — 1200 chars with 150 char overlap
+      // Larger chunks preserve SAP process context better
       const chunks = []
-      const chunkSize = 500, overlap = 50
+      const chunkSize = 1200, overlap = 150
       for (let i = 0; i < content.length; i += chunkSize - overlap) {
-        chunks.push(content.slice(i, i + chunkSize))
+        const chunk = content.slice(i, i + chunkSize).trim()
+        if (chunk.length > 100) chunks.push(chunk) // skip tiny trailing chunks
         if (i + chunkSize >= content.length) break
       }
 
@@ -433,7 +437,7 @@ export default async function handler(req, res) {
         query_embedding: queryEmbedding,
         match_user_id: userId,
         match_threshold: 0.70,
-        match_count: 4
+        match_count: 6
       })
       return res.status(200).json({ chunks: (data || []).map(d => d.chunk_text) })
     } catch (err) { return res.status(200).json({ chunks: [] }) }
@@ -534,8 +538,8 @@ export default async function handler(req, res) {
       ? lastMsg // Keep code messages exactly as-is — never rewrite
       : await gptRewriteAndAnswer(lastMsg, intent, isSimple, messages || [])
 
-    // STEP 4 — Google search runs for ALL questions — always show SAP sources
-    const searchPromise = !isCode ? googleSAPSearch(lastMsg) : Promise.resolve([])
+    // STEP 4 — Google search — only when question needs current/external info
+    const searchPromise = (!isCode && needsSearch) ? googleSAPSearch(lastMsg) : Promise.resolve([])
 
     // STEP 5.5 — Semantic knowledge fetch (parallel with search, no impact on existing flow)
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId).catch(() => []) : Promise.resolve([])
