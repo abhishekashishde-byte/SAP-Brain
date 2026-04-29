@@ -735,35 +735,58 @@ export default function Brain({ session }) {
 
   // ── DOCUMENT FUNCTIONS ────────────────────────────────────────────────────
   const extractDocText = async (file) => {
+    // TXT — native, no library needed
     if (file.type === 'text/plain') return await file.text()
-    if (file.name.endsWith('.docx')) {
-      try {
-        const mammoth = await import('mammoth')
-        const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
-        return result.value
-      } catch {
-        // mammoth not available — ask user to upload as PDF or TXT instead
-        alert('DOCX extraction not available. Please save the document as PDF or TXT and upload again.')
-        return ''
-      }
-    }
+
+    // PDF — load pdfjs from CDN at runtime (not bundled, Vite won't resolve)
     if (file.type === 'application/pdf') {
       try {
-        const pdfjsLib = await import('pdfjs-dist')
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '//cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
-        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
+        if (!window.pdfjsLib) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+            script.onload = resolve
+            script.onerror = reject
+            document.head.appendChild(script)
+          })
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        }
+        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
         let text = ''
         for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
           const page = await pdf.getPage(i)
           const content = await page.getTextContent()
           text += content.items.map(s => s.str).join(' ') + '\n'
         }
-        return text
-      } catch {
-        alert('PDF extraction not available. Please upload a TXT file instead.')
+        return text.trim()
+      } catch (e) {
+        alert('Could not extract PDF text. Please save as TXT and upload again.')
         return ''
       }
     }
+
+    // DOCX — load mammoth from CDN at runtime
+    if (file.name.endsWith('.docx')) {
+      try {
+        if (!window.mammoth) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'
+            script.onload = resolve
+            script.onerror = reject
+            document.head.appendChild(script)
+          })
+        }
+        const result = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+        return result.value.trim()
+      } catch (e) {
+        alert('Could not extract DOCX text. Please save as TXT or PDF and upload again.')
+        return ''
+      }
+    }
+
+    alert('Unsupported format. Please upload PDF, DOCX, or TXT.')
     return ''
   }
 
