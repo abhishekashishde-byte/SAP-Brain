@@ -737,21 +737,32 @@ export default function Brain({ session }) {
   const extractDocText = async (file) => {
     if (file.type === 'text/plain') return await file.text()
     if (file.name.endsWith('.docx')) {
-      const mammoth = await import('mammoth')
-      const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
-      return result.value
+      try {
+        const mammoth = await import('mammoth')
+        const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+        return result.value
+      } catch {
+        // mammoth not available — ask user to upload as PDF or TXT instead
+        alert('DOCX extraction not available. Please save the document as PDF or TXT and upload again.')
+        return ''
+      }
     }
     if (file.type === 'application/pdf') {
-      const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = '//cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
-      const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
-      let text = ''
-      for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
-        const page = await pdf.getPage(i)
-        const content = await page.getTextContent()
-        text += content.items.map(s => s.str).join(' ') + '\n'
+      try {
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '//cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
+        let text = ''
+        for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+          const page = await pdf.getPage(i)
+          const content = await page.getTextContent()
+          text += content.items.map(s => s.str).join(' ') + '\n'
+        }
+        return text
+      } catch {
+        alert('PDF extraction not available. Please upload a TXT file instead.')
+        return ''
       }
-      return text
     }
     return ''
   }
@@ -1334,7 +1345,7 @@ export default function Brain({ session }) {
                     style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:uploadedDoc?'#6366f1':t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
                     {docUploading ? '⏳' : '📎'}
                   </button>
-                  <input ref={docInputRef} type="file" accept=".pdf,.docx,.txt" style={{ display:'none' }} onChange={handleDocUpload} />
+                  <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
 
                   <textarea ref={inputRef} value={input}
                     onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px'}}
