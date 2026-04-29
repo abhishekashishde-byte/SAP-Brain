@@ -355,6 +355,20 @@ ${conversation}`
   } catch { return { found: false } }
 }
 
+// ── AUTH HELPER — always derive userId from JWT, never trust body ─────────────
+async function getAuthenticatedUser(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '')
+  if (!token) throw new Error('Missing auth token')
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+  const client = createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } }
+  })
+  const { data, error } = await client.auth.getUser()
+  if (error || !data?.user?.id) throw new Error('Invalid auth token')
+  return { userId: data.user.id, token }
+}
+
 // ── MAIN HANDLER ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -363,7 +377,7 @@ export default async function handler(req, res) {
 
   // ── EARLY-EXIT ACTIONS (JSON responses, no streaming) ───────────────────────
 
-  // Classify document type
+  // Classify document type — no auth needed, no user data involved
   if (body.action === 'classify_doc') {
     try {
       const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -381,28 +395,34 @@ export default async function handler(req, res) {
     } catch { return res.status(200).json({ docType: 'OTHER' }) }
   }
 
+  // All actions below require authentication — derive userId from JWT
+  let authUser
+  try {
+    authUser = await getAuthenticatedUser(req)
+  } catch (e) {
+    return res.status(401).json({ error: e.message })
+  }
+  const { userId, token: userToken } = authUser
+
   // Store document chunks with embeddings
   if (body.action === 'store_chunks') {
     try {
-      const { content, docName, docType, userId } = body
-      if (!content || !userId) return res.status(400).json({ error: 'Missing content or userId' })
+      const { content, docName, docType } = body
+      if (!content) return res.status(400).json({ error: 'Missing content' })
       const supabase = getSupabase()
-      if (!supabase) return res.status(500).json({ error: 'Supabase not configured' })
 
       // Delete existing chunks for this document
       await supabase.from('wani_doc_chunks').delete().eq('user_id', userId).eq('doc_name', docName)
 
       // Chunk document — 1200 chars with 150 char overlap
-      // Larger chunks preserve SAP process context better
       const chunks = []
       const chunkSize = 1200, overlap = 150
       for (let i = 0; i < content.length; i += chunkSize - overlap) {
         const chunk = content.slice(i, i + chunkSize).trim()
-        if (chunk.length > 100) chunks.push(chunk) // skip tiny trailing chunks
+        if (chunk.length > 100) chunks.push(chunk)
         if (i + chunkSize >= content.length) break
       }
 
-      // Embed and store each chunk
       let stored = 0
       for (let i = 0; i < Math.min(chunks.length, 50); i++) {
         const embedding = await embed(chunks[i])
@@ -422,11 +442,10 @@ export default async function handler(req, res) {
     try {
       const { question } = body
       if (!question) return res.status(400).json({ chunks: [] })
-      // Use user JWT so auth.uid() works correctly in RPC function
       const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
       const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
       const userClient = createClient(url, anonKey, {
-        global: { headers: { Authorization: req.headers.authorization } }
+        global: { headers: { Authorization: `Bearer ${userToken}` } }
       })
       const queryEmbedding = await embed(question)
       if (!queryEmbedding) return res.status(200).json({ chunks: [] })
@@ -451,10 +470,9 @@ export default async function handler(req, res) {
   // Save confirmed finding with embedding
   if (body.action === 'save_finding') {
     try {
-      const { userId, module, topic, object, finding, confidence } = body
-      if (!userId || !finding) return res.status(400).json({ error: 'Missing fields' })
+      const { module, topic, object, finding, confidence } = body
+      if (!finding) return res.status(400).json({ error: 'Missing finding' })
       const supabase = getSupabase()
-      if (!supabase) return res.status(500).json({ error: 'Supabase not configured' })
       const embeddingText = `${module} ${topic} ${object} ${finding}`
       const embedding = await embed(embeddingText)
       const { error } = await supabase.from('wani_knowledge').insert({
@@ -469,10 +487,7 @@ export default async function handler(req, res) {
   // Load all knowledge for panel
   if (body.action === 'load_knowledge') {
     try {
-      const { userId } = body
-      if (!userId) return res.status(400).json({ entries: [] })
       const supabase = getSupabase()
-      if (!supabase) return res.status(200).json({ entries: [] })
       const { data } = await supabase.from('wani_knowledge')
         .select('id, module, topic, object, finding, confidence, created_at')
         .eq('user_id', userId)
@@ -484,17 +499,16 @@ export default async function handler(req, res) {
   // Delete knowledge entry
   if (body.action === 'delete_finding') {
     try {
-      const { userId, id } = body
-      if (!userId || !id) return res.status(400).json({ error: 'Missing fields' })
+      const { id } = body
+      if (!id) return res.status(400).json({ error: 'Missing id' })
       const supabase = getSupabase()
-      if (!supabase) return res.status(500).json({ error: 'Supabase not configured' })
       await supabase.from('wani_knowledge').delete().eq('id', id).eq('user_id', userId)
       return res.status(200).json({ deleted: true })
     } catch (err) { return res.status(500).json({ error: err.message }) }
   }
 
-  // ── STREAMING HANDLER (existing code unchanged below) ────────────────────────
-  const { messages, tone = 'balanced', userName, userRole, userModules = [], userId } = body
+  // ── STREAMING HANDLER ────────────────────────────────────────────────────────
+  const { messages, tone = 'balanced', userName, userRole, userModules = [] } = body
   const lastMsg = messages?.[messages.length - 1]?.content || ''
   const prevAssistantMsg = [...(messages || [])].reverse().find(m => m.role === 'assistant')?.content || ''
 
@@ -538,7 +552,6 @@ export default async function handler(req, res) {
     const searchPromise = (!isCode && needsSearch) ? googleSAPSearch(lastMsg) : Promise.resolve([])
 
     // STEP 5.5 — Semantic knowledge fetch (parallel with search, no impact on existing flow)
-    const userToken = req.headers.authorization?.replace('Bearer ', '')
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
