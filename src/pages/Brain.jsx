@@ -888,10 +888,30 @@ export default function Brain({ session }) {
     ],
   }
 
+  const [deliverableFilter, setDeliverableFilter] = useState('ALL')
+
+  const DELIVERABLE_FILTERS = [
+    { key: 'ALL',           label: 'All' },
+    { key: 'SAP_QA',        label: '💬 Q&A' },
+    { key: 'FS_SPEC',       label: '📋 Func. Specs' },
+    { key: 'TECH_SPEC',     label: '⚙️ Tech Specs' },
+    { key: 'TEST_CASES',    label: '🧪 Test Cases' },
+    { key: 'GAP_ANALYSIS',  label: '⚠️ Gap Analysis' },
+    { key: 'FORMS_SPEC',    label: '📄 Forms' },
+    { key: 'WORKSHOP_PLAN', label: '🗓️ Workshops' },
+    { key: 'SLIDE_CONTENT', label: '📊 Slides' },
+    { key: 'FIORI_REC',     label: '📱 Fiori' },
+  ]
+
   const filteredConvs = conversations.filter(c => {
-    if (!searchQuery.trim()) return true
-    const q = searchQuery.toLowerCase()
-    return c.title?.toLowerCase().includes(q)||c.module?.toLowerCase().includes(q)||c.topic?.toLowerCase().includes(q)||c.messages?.some(m=>m.content?.toLowerCase().includes(q))
+    const matchesSearch = !searchQuery.trim() || (() => {
+      const q = searchQuery.toLowerCase()
+      return c.title?.toLowerCase().includes(q)||c.module?.toLowerCase().includes(q)||c.topic?.toLowerCase().includes(q)||c.messages?.some(m=>m.content?.toLowerCase().includes(q))
+    })()
+    const matchesFilter = deliverableFilter === 'ALL'
+      || (deliverableFilter === 'SAP_QA' && (!c.deliverable_type || c.deliverable_type === 'NONE'))
+      || c.deliverable_type === deliverableFilter
+    return matchesSearch && matchesFilter
   })
 
   useEffect(()=>{
@@ -989,7 +1009,7 @@ export default function Brain({ session }) {
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let buf = '', fullReply = '', modelUsed = ''
+      let buf = '', fullReply = '', modelUsed = '', deliverableType = 'NONE'
       let accumulated = ''
       let searchResults = []
 
@@ -1012,6 +1032,7 @@ export default function Brain({ session }) {
             } else if (evt.type === 'done') {
               fullReply = evt.full || accumulated
               modelUsed = evt.model
+              deliverableType = evt.deliverableType || 'NONE'
             } else if (evt.type === 'error') {
               throw new Error(evt.error)
             }
@@ -1044,8 +1065,10 @@ export default function Brain({ session }) {
       const replyWithTag = finalReply + linksSection + `\n\n_${modelLabel}_`
 
       const finalMsgs = [...currentMsgs,{ role:'assistant',content:replyWithTag }]
-      await updateConversation(convId,{ messages:finalMsgs })
-      setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:finalMsgs,updated_at:new Date().toISOString()}:c))
+      const convUpdate = { messages:finalMsgs }
+      if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
+      await updateConversation(convId, convUpdate)
+      setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,updated_at:new Date().toISOString()}:c))
 
       if (currentMsgs.length===1) {
         fetch('/api/categorise',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:msgText }) })
@@ -1181,6 +1204,16 @@ export default function Brain({ session }) {
               onFocus={e=>e.target.style.borderColor='#4F46E5'}
               onBlur={e=>e.target.style.borderColor=t.border}
             />
+          </div>
+          {/* Deliverable filter tabs */}
+          <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:8 }}>
+            {DELIVERABLE_FILTERS.map(f => (
+              <button key={f.key}
+                onClick={() => setDeliverableFilter(f.key)}
+                style={{ padding:'3px 8px', borderRadius:8, border:`1px solid ${deliverableFilter===f.key?'#4F46E5':t.border}`, background:deliverableFilter===f.key?'rgba(79,70,229,0.12)':'transparent', color:deliverableFilter===f.key?'#4F46E5':t.text4, fontSize:10, fontWeight:deliverableFilter===f.key?700:400, cursor:'pointer', fontFamily:"'Inter',sans-serif", transition:'all 0.15s', whiteSpace:'nowrap' }}>
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
         <div style={{ flex:1,overflowY:'auto',padding:'4px 8px 8px' }}>
