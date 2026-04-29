@@ -1,13 +1,14 @@
-// api/chat.js — v7 Hybrid Architecture
-// Groq classifies intent → GPT-4o mini rewrites question for context
-// GPT-4o (full) answers all SAP questions
-// Claude Sonnet answers code analysis (ABAP)
-// Google CSE for SAP source links (when needsSearch=true only)
+// api/chat.js — v8 Hybrid Architecture
+// Groq classifies intent → routes to specialized prompt per intent
+// GPT-4o answers SAP questions + generates deliverables
+// Claude Sonnet for code analysis only
+// Google CSE for SAP source links (needsSearch=true only)
 
 import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS } from './_shared.js'
+import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
-// ── 1. GROQ — classify only, never answers SAP ───────────────────────────────
+// ── 1. GROQ — classify intent ─────────────────────────────────────────────────
 async function groqClassify(question) {
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -15,38 +16,62 @@ async function groqClassify(question) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 80,
+        max_tokens: 120,
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `Classify this SAP question. Return ONLY valid JSON.
+          content: `Classify this SAP consultant request. Return ONLY valid JSON.
 
-intent: TABLE (asking for table name), TCODE (asking for transaction code), PROCESS (how-to, process steps), CONFIG (SPRO/config), DEBUG (error/troubleshooting), CODE (user pasted ABAP/code for analysis), ERROR (user pasted SAP error message, short dump, SM21 log, runtime error, ABAP exception), GENERAL (other)
-isSimple: true if just asking for a table name or T-code, false for anything requiring explanation
+intent options:
+SAP_QA         = general SAP question, T-code, table, process, config
+CODE_ANALYSIS  = user pasted ABAP/code for analysis
+ERROR_ANALYSIS = user pasted SAP error, dump, SM21/ST22 log
+FS_SPEC        = generate functional specification document
+TECH_SPEC      = generate technical/developer specification
+TEST_CASES     = generate test cases or test script
+GAP_ANALYSIS   = find gaps, missing items, what is incomplete
+WORKSHOP_PLAN  = create workshop plan, agenda, questions for business
+WORKSHOP_TOPICS= what topics to cover for a module/phase/object
+FORMS_SPEC     = SAP output forms: Adobe, SmartForms, NACE, Output Mgmt
+FIORI_REC      = recommend Fiori apps for a process or role
+SLIDE_CONTENT  = create presentation content, slide structure, storyline
+GENERAL        = anything else
+
+flags:
+isCode: true if message contains ABAP keywords (METHOD, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, ENDLOOP, FORM, FUNCTION)
+isError: true if message contains error text, dump, ST22, SM21, runtime error, message class number
 isCorrection: true if user is correcting a previous wrong answer
-needsSearch: true if question is about S/4HANA changes, deprecated fields, "not there", "removed", "can you search", how-to, config steps
-isCode: true if the message contains ABAP code, METHOD, CLASS, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, or any code block
-isError: true if message contains SAP error text, short dump, runtime error, SM21/ST22 content, message class numbers like "M7 001"
+needsSearch: true if question is about latest S/4HANA changes, deprecated objects, or explicitly asks to search
 
-Question: "${question}"
+Question: "${question.slice(0, 400)}"
 
-{"intent":"TABLE","isSimple":true,"isCorrection":false,"needsSearch":false,"isCode":false}`
+{"intent":"SAP_QA","isCode":false,"isError":false,"isCorrection":false,"needsSearch":false}`
         }]
       })
     })
     const data = await res.json()
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
     const result = JSON.parse(raw.replace(/```json|```/g, '').trim())
+
+    // Regex fallbacks for reliable detection
+    const isCode  = result.isCode  === true || /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question)
+    const isError = result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question)
+
+    // Override intent from regex when highly certain
+    let intent = result.intent || 'SAP_QA'
+    if (isCode && intent === 'SAP_QA') intent = 'CODE_ANALYSIS'
+    if (isError && intent === 'SAP_QA') intent = 'ERROR_ANALYSIS'
+
     return {
-      intent: result.intent || 'GENERAL',
-      isSimple: result.isSimple === true,
+      intent,
+      isCode,
+      isError,
       isCorrection: result.isCorrection === true,
-      needsSearch: result.needsSearch === true,
-      isCode: result.isCode === true || /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question),
-      isError: result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question),
+      needsSearch:  result.needsSearch  === true,
+      isSimple:     false, // removed — GPT-4o handles all answers now
     }
   } catch {
-    return { intent: 'GENERAL', isSimple: false, isCorrection: false, needsSearch: false, isCode: false, isError: false }
+    return { intent: 'SAP_QA', isCode: false, isError: false, isCorrection: false, needsSearch: false, isSimple: false }
   }
 }
 
@@ -581,71 +606,49 @@ export default async function handler(req, res) {
     // Resolve knowledge (was fetching in parallel)
     const relevantKnowledge = await knowledgePromise
 
-    let systemPrompt = BASE_SYSTEM_PROMPT + (TONE_ADDITIONS[tone] || '')
-    systemPrompt += `\n\nNEVER say "I can't search online". Resources are shown to the user separately.`
-    systemPrompt += `\nAnswer the user's CURRENT question directly. Do not reference or assume anything from previous messages unless explicitly relevant. Never say "as you mentioned" or "you shared" unless the user actually said it in this conversation.`
+    // ── BUILD SYSTEM PROMPT — intent-specific, not one generic prompt ────────
+    // Each intent gets its own specialized prompt template
+    const intentPrompt = INTENT_PROMPTS[intent] || INTENT_PROMPTS['SAP_QA']
+    const toneAddition = TONE_ADDITIONS[tone] || ''
 
-    // Code analysis boost
-    if (isCode) {
-      systemPrompt += `\n\n🔍 CODE DETECTED: The user has pasted ABAP/code. Follow CODE ANALYSIS RULES strictly:
-- Read the code immediately — do NOT ask for more context
-- Structure: What it does → Logic flow (→ arrows) → Key objects → Watch out
-- End with 📌 Summary (1-2 sentences)
-- Be direct and technical — no pleasantries`
-    }
+    let systemPrompt = intentPrompt + toneAddition
 
-    // Error analysis mode
-    if (isError && !isCode) {
-      systemPrompt += `\n\n🔴 ERROR DETECTED: User has pasted a SAP error/dump. Follow ERROR ANALYSIS RULES:
-Always output a markdown table with these exact rows:
-| Aspect | Detail |
-|--------|--------|
-| Error Type | What kind of error |
-| Root Cause | Why this happens technically |
-| Most Likely Cause | In context of SAP PP/PM/MM |
-| Fix Steps | 1. First step 2. Second step 3. Third step |
-| T-codes to Check | e.g. SM21; ST22; SU53 |
-| Prevention | How to avoid in future |
-| SAP Note Hint | Search SAP Note for [specific term] |
-After table: 📌 Summary — one sentence bottom line`
-    }
-
-    // Document context injection — only relevant chunks not full document
+    // Document context injection — only relevant chunks, not full document
     const { documentChunks, documentName, documentType } = body
     if (documentChunks?.length > 0) {
       systemPrompt += `\n\n📄 DOCUMENT CONTEXT: User has uploaded "${documentName}" (${documentType})
-Relevant sections for this question:
+Relevant sections:
 ${documentChunks.map((c, i) => `[${i+1}] ${c}`).join('\n\n')}
-Answer questions using this document as primary source. Reference specific sections when possible.`
+Base your output on this document. Reference specific sections.`
     }
 
-    // Consultant knowledge injection — verified project experience
+    // Verified consultant knowledge from knowledge base
     if (relevantKnowledge.length > 0) {
-      systemPrompt += `\n\n📌 VERIFIED CONSULTANT KNOWLEDGE (from real project experience — prioritise over generic docs):
-${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object}, ${k.confidence})`).join('\n')}
-Reference this knowledge explicitly when answering.`
+      systemPrompt += `\n\n📌 VERIFIED FROM REAL PROJECTS (prioritise over generic docs):
+${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}`
     }
 
+    // User context
     if (firstName) {
-      systemPrompt += `\n\nUser: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
+      systemPrompt += `\n\nConsultant: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
     }
     if (isFirstMessage && firstName) {
-      systemPrompt += ` Greet with "${timeGreeting}, ${firstName}." then answer. Only once.`
+      systemPrompt += ` Greet with "${timeGreeting}, ${firstName}." then proceed. Only once.`
     }
     if (globalCorrections.length > 0) {
-      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS — ground truth:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
+      systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
     }
 
-    // GPT-4o answers SAP questions — better T-code/table accuracy than Haiku
-    // Claude Sonnet for code analysis — keeps its superior code understanding
-    if (isCode || hasCodeInHistory) {
-      console.log('SENDING TO CLAUDE SONNET (code detected)')
+    // ── ROUTE TO CORRECT MODEL based on intent ────────────────────────────────
+    // CODE_ANALYSIS → Claude Sonnet (superior code understanding)
+    // Everything else (SAP_QA, FS_SPEC, TEST_CASES, etc.) → GPT-4o
+    const usesSonnet = CODE_INTENTS.has(intent) || isCode || hasCodeInHistory
+    if (usesSonnet) {
       fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
     } else {
-      console.log('SENDING TO GPT-4o (SAP question)')
       fullAnswer = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
     }
-    const modelUsed = (isCode || hasCodeInHistory) ? 'claude-sonnet' : 'gpt4o'
+    const modelUsed = usesSonnet ? 'claude-sonnet' : 'gpt4o'
 
     if (!fullAnswer?.trim()) {
       send({ type: 'error', error: 'Empty response — please try again' })
