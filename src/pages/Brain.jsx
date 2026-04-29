@@ -721,12 +721,157 @@ export default function Brain({ session }) {
   const [isMobile, setIsMobile]           = useState(isMobileWidth())
   const [showExport, setShowExport]       = useState(false)
 
-  const bottomRef      = useRef(null)
-  const inputRef       = useRef(null)
-  const chatScrollRef  = useRef(null)
+  // Document upload state
+  const [uploadedDoc, setUploadedDoc]         = useState(null) // { name, content, type, docType }
+  const [docUploading, setDocUploading]       = useState(false)
+  const [showKnowledge, setShowKnowledge]     = useState(false)
+  const [knowledgeEntries, setKnowledgeEntries] = useState([])
+  const [pendingFinding, setPendingFinding]   = useState(null) // finding waiting for user confirmation
+  const [knowledgeToast, setKnowledgeToast]   = useState(null)
+  const docInputRef = useRef(null)
 
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
+
+  // ── DOCUMENT FUNCTIONS ────────────────────────────────────────────────────
+  const extractDocText = async (file) => {
+    if (file.type === 'text/plain') return await file.text()
+    if (file.name.endsWith('.docx')) {
+      const mammoth = await import('mammoth')
+      const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+      return result.value
+    }
+    if (file.type === 'application/pdf') {
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '//cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+      const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
+      let text = ''
+      for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+        const page = await pdf.getPage(i)
+        const content = await page.getTextContent()
+        text += content.items.map(s => s.str).join(' ') + '\n'
+      }
+      return text
+    }
+    return ''
+  }
+
+  const handleDocUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) { alert('Max file size is 10MB'); return }
+    setDocUploading(true)
+    try {
+      const content = await extractDocText(file)
+      if (!content.trim()) { alert('Could not extract text from this file'); setDocUploading(false); return }
+      // Classify document type
+      const classRes = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'classify_doc', content: content.slice(0, 2000) })
+      })
+      const { docType } = await classRes.json()
+      // Store chunks with embeddings in background
+      if (session?.user?.id) {
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'store_chunks', content, docName: file.name, docType, userId: session.user.id })
+        }).catch(() => {})
+      }
+      setUploadedDoc({ name: file.name, content, type: file.type, docType })
+    } catch (err) { alert('Upload failed: ' + err.message) }
+    setDocUploading(false)
+    e.target.value = ''
+  }
+
+  const getDocChunks = async (question) => {
+    if (!uploadedDoc || !session?.user?.id) return []
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retrieve_chunks', question, userId: session.user.id })
+      })
+      const { chunks } = await res.json()
+      return chunks || []
+    } catch { return [] }
+  }
+
+  const loadKnowledge = async () => {
+    if (!session?.user?.id) return
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'load_knowledge', userId: session.user.id })
+      })
+      const { entries } = await res.json()
+      setKnowledgeEntries(entries || [])
+    } catch {}
+  }
+
+  const deleteKnowledge = async (id) => {
+    if (!session?.user?.id) return
+    await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_finding', userId: session.user.id, id })
+    })
+    setKnowledgeEntries(prev => prev.filter(k => k.id !== id))
+  }
+
+  const saveFinding = async (finding) => {
+    if (!session?.user?.id) return
+    await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save_finding', userId: session.user.id, ...finding })
+    })
+    setPendingFinding(null)
+    setKnowledgeToast('💡 Finding saved to knowledge base')
+    setTimeout(() => setKnowledgeToast(null), 3000)
+  }
+
+  const checkForFindings = async (msgs) => {
+    if (!session?.user?.id || msgs.length < 4) return
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'suggest_finding', messages: msgs.slice(-10), module: activeConv?.module || browseModule })
+      })
+      const data = await res.json()
+      if (data.found) setPendingFinding(data)
+    } catch {}
+  }
+
+  // Document action buttons by type
+  const DOC_ACTIONS = {
+    FUNCTIONAL_SPEC: [
+      { icon: '🧪', label: 'Test Cases', prompt: 'Generate test cases for all T-codes and processes in this functional spec. Format as a table: Test Case | Steps | Expected Result | T-code.' },
+      { icon: '⚠️', label: 'Find Gaps', prompt: 'What is missing from this functional spec? What scenarios are not covered? What SAP best practices are missing?' },
+      { icon: '📋', label: 'Impl. Checklist', prompt: 'Create an implementation checklist. Include: master data required, SPRO customising, integration points, testing steps.' },
+      { icon: '🔗', label: 'Integration Points', prompt: 'What are all the SAP module integration points in this spec? Which modules are involved?' },
+      { icon: '📊', label: 'Master Data', prompt: 'What master data must exist before this can be implemented? List all required SAP master data objects.' },
+    ],
+    TEST_SCRIPT: [
+      { icon: '🔍', label: 'Missing Scenarios', prompt: 'What test scenarios are missing? What edge cases are not covered?' },
+      { icon: '🔀', label: 'Edge Cases', prompt: 'Generate edge case test scenarios for this test script.' },
+      { icon: '🔐', label: 'Auth Objects', prompt: 'What authorization objects need to be tested? List all relevant auth objects per T-code.' },
+    ],
+    MEETING_NOTES: [
+      { icon: '✅', label: 'Action Items', prompt: 'Extract all action items. Format as table: Action | Owner | Due Date.' },
+      { icon: '📋', label: 'Decisions', prompt: 'What decisions were confirmed in this meeting?' },
+      { icon: '❓', label: 'Open Points', prompt: 'What open questions were raised but not resolved?' },
+      { icon: '🔧', label: 'SAP Objects', prompt: 'What SAP T-codes, tables, objects, or processes were mentioned?' },
+    ],
+    PROJECT_PLAN: [
+      { icon: '📋', label: 'Missing Activities', prompt: 'What SAP implementation activities are missing from this plan?' },
+      { icon: '🔗', label: 'Dependencies', prompt: 'What activity dependencies are missing or incorrect?' },
+      { icon: '⚠️', label: 'Risks', prompt: 'What are the risks from an SAP implementation perspective?' },
+    ],
+  }
 
   const filteredConvs = conversations.filter(c => {
     if (!searchQuery.trim()) return true
@@ -811,10 +956,11 @@ export default function Brain({ session }) {
     }
 
     try {
+      const docChunks = uploadedDoc ? await getDocChunks(msgText) : []
       const res = await fetch('/api/chat',{
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userId:session.user.id, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[] }),
+        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userId:session.user.id, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null }),
       })
 
       if (!res.ok) throw new Error('Network error')
@@ -888,6 +1034,9 @@ export default function Brain({ session }) {
       }
 
       fetch('/api/extract',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ userId:session.user.id,convId,module:currentMod||null,topic:currentTopic||null,userMsg:msgText,assistantMsg:finalReply }) }).catch(()=>{})
+
+      // Check for consultant findings worth saving (fire and forget)
+      checkForFindings(finalMsgs).catch(() => {})
 
     } catch(err) {
       setIsLoading(false);setIsStreaming(false);setStreamingText('')
@@ -1056,6 +1205,7 @@ export default function Brain({ session }) {
           {view==='topic'&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><span style={{ color:t.text4,fontSize:16 }}>›</span><div style={{ fontSize:isMobile?15:13,fontWeight:500,color:t.text2 }}>{browseTopic||browseModule?.split('–')[0].trim()}</div></div>)}
           {!(view==='chat'||view==='topic')&&<div style={{ flex:1 }}/>}
           {view==='chat'&&messages.some(m=>m.role==='user')&&(
+            <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'📚':'📚 Knowledge'}{knowledgeEntries.length > 0 && <span style={{ background:'#6366f1', color:'white', borderRadius:'50%', width:16, height:16, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', marginLeft:2 }}>{knowledgeEntries.length}</span>}</button>
             <button onClick={()=>setShowExport(true)} title="Export" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'↓':'↓ Export'}</button>
           )}
           <button onClick={toggle} style={{ width:isMobile?46:44,height:isMobile?28:24,borderRadius:14,border:'none',cursor:'pointer',position:'relative',background:dark?'linear-gradient(135deg,#4F46E5,#6366F1)':'#E2E2EA',transition:'background 0.3s',flexShrink:0 }}>
@@ -1145,14 +1295,46 @@ export default function Brain({ session }) {
             {/* Input */}
             <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2 }}>
               <div style={{ maxWidth:720,margin:'0 auto' }}>
+
+                {/* Document chip */}
+                {uploadedDoc && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'rgba(79,70,229,0.1)', border:'1px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:12 }}>
+                    <span style={{ fontSize:14 }}>📄</span>
+                    <span style={{ flex:1, color:t.text, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uploadedDoc.name}</span>
+                    <span style={{ color:'#6366f1', fontSize:11, fontWeight:600, background:'rgba(99,102,241,0.15)', padding:'2px 7px', borderRadius:6 }}>{uploadedDoc.docType?.replace('_',' ')}</span>
+                    <button onClick={()=>setUploadedDoc(null)} style={{ background:'none', border:'none', color:t.text4, cursor:'pointer', fontSize:16, lineHeight:1, padding:0 }}>✕</button>
+                  </div>
+                )}
+
+                {/* Document action buttons */}
+                {uploadedDoc && DOC_ACTIONS[uploadedDoc.docType] && (
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                    {DOC_ACTIONS[uploadedDoc.docType].map(btn => (
+                      <button key={btn.label}
+                        onClick={() => handleSendText(btn.prompt)}
+                        style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:8, border:`1px solid ${t.border}`, background:t.surface2, color:t.text3, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif" }}>
+                        {btn.icon} {btn.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{ display:'flex',gap:10,alignItems:'flex-end',background:t.inputBg,border:`1.5px solid ${t.border2}`,borderRadius:14,padding:'10px 12px',transition:'border-color 0.2s, box-shadow 0.2s' }}
                   onFocusCapture={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)'}}
                   onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow='none'}}
                 >
+                  {/* Upload button */}
+                  <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
+                    title="Upload document (PDF, DOCX, TXT)"
+                    style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:uploadedDoc?'#6366f1':t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    {docUploading ? '⏳' : '📎'}
+                  </button>
+                  <input ref={docInputRef} type="file" accept=".pdf,.docx,.txt" style={{ display:'none' }} onChange={handleDocUpload} />
+
                   <textarea ref={inputRef} value={input}
                     onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px'}}
                     onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
-                    placeholder="Ask your SAP question…" rows={1}
+                    placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
                     style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
                   <button onClick={handleSend} disabled={!input.trim()||isLoading||isStreaming}
@@ -1162,12 +1344,75 @@ export default function Brain({ session }) {
                 <div style={{ fontSize:11,color:t.text4,textAlign:'right',marginTop:4 }}>{activeConv?.module||browseModule||'Free mode'} · verify system-specific behaviour</div>
               </div>
             </div>
+
+            {/* Knowledge toast notification */}
+            {knowledgeToast && (
+              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:'rgba(79,70,229,0.95)', color:'white', padding:'8px 18px', borderRadius:10, fontSize:13, fontWeight:600, zIndex:100, boxShadow:'0 4px 20px rgba(79,70,229,0.4)' }}>
+                {knowledgeToast}
+              </div>
+            )}
+
+            {/* Pending finding confirmation */}
+            {pendingFinding && (
+              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:`1px solid rgba(79,70,229,0.3)`, borderRadius:14, padding:'14px 18px', fontSize:13, zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:420, width:'90vw' }}>
+                <div style={{ fontWeight:700, color:t.text, marginBottom:6 }}>💡 Save this finding?</div>
+                <div style={{ color:t.text2, marginBottom:4, fontSize:12 }}><span style={{ color:'#6366f1', fontWeight:600 }}>{pendingFinding.module} › {pendingFinding.topic} › {pendingFinding.object}</span></div>
+                <div style={{ color:t.text, marginBottom:12, lineHeight:1.5 }}>"{pendingFinding.finding}"</div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={()=>setPendingFinding(null)} style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13 }}>Dismiss</button>
+                  <button onClick={()=>saveFinding(pendingFinding)} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background:'#4F46E5', color:'white', cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13, fontWeight:600 }}>✓ Save to Knowledge Base</button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
 
       {showProfile&&<ProfileModal session={session} profile={profile} t={t} onClose={()=>setShowProfile(false)} onSave={async(u)=>{await upsertProfile(session.user.id,u);setProfile(p=>({...p,...u}))}} onSignOut={signOut}/>}
       {showExport&&<ExportModal conversation={activeConv} messages={messages} t={t} dark={dark} onClose={()=>setShowExport(false)}/>}
+
+      {/* Knowledge Base Panel */}
+      {showKnowledge && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'flex-end' }}
+          onClick={()=>setShowKnowledge(false)}>
+          <div style={{ width:'min(420px,95vw)', height:'100vh', background:t.surface, borderLeft:`1px solid ${t.border}`, overflowY:'auto', padding:20 }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+              <div style={{ fontSize:16, fontWeight:700, color:t.text }}>📚 Knowledge Base</div>
+              <button onClick={()=>setShowKnowledge(false)} style={{ background:'none', border:'none', color:t.text4, cursor:'pointer', fontSize:20 }}>✕</button>
+            </div>
+            <div style={{ fontSize:12, color:t.text4, marginBottom:16 }}>Verified consultant findings from real projects. Used automatically when relevant topics come up.</div>
+            {knowledgeEntries.length === 0 ? (
+              <div style={{ textAlign:'center', color:t.text4, fontSize:13, padding:'40px 20px' }}>
+                No findings yet.{'\n'}Findings are suggested automatically after conversations containing real project discoveries.
+              </div>
+            ) : (
+              Object.entries(knowledgeEntries.reduce((acc, k) => {
+                if (!acc[k.module]) acc[k.module] = []
+                acc[k.module].push(k)
+                return acc
+              }, {})).map(([module, entries]) => (
+                <div key={module} style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:'#6366f1', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>{module}</div>
+                  {entries.map(entry => (
+                    <div key={entry.id} style={{ background:t.inputBg, border:`1px solid ${t.border}`, borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
+                      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:11, color:'#6366f1', fontWeight:600, marginBottom:4 }}>{entry.topic} › {entry.object}</div>
+                          <div style={{ fontSize:13, color:t.text, lineHeight:1.5 }}>{entry.finding}</div>
+                          <div style={{ fontSize:11, color:t.text4, marginTop:4 }}>{new Date(entry.created_at).toLocaleDateString()} · {entry.confidence}</div>
+                        </div>
+                        <button onClick={()=>deleteKnowledge(entry.id)}
+                          style={{ background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:14, flexShrink:0, padding:4 }}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
