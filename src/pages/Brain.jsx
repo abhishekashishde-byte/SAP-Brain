@@ -726,6 +726,7 @@ export default function Brain({ session }) {
   const [docUploading, setDocUploading]       = useState(false)
   const [showKnowledge, setShowKnowledge]     = useState(false)
   const [knowledgeEntries, setKnowledgeEntries] = useState([])
+  const [showCapabilities, setShowCapabilities] = useState(false)
   const [pendingFinding, setPendingFinding]   = useState(null) // finding waiting for user confirmation
   const [knowledgeToast, setKnowledgeToast]   = useState(null)
   const docInputRef = useRef(null)
@@ -1240,6 +1241,7 @@ export default function Brain({ session }) {
           {!(view==='chat'||view==='topic')&&<div style={{ flex:1 }}/>}
           {view==='chat'&&messages.some(m=>m.role==='user')&&(
             <>
+              <button onClick={()=>setShowCapabilities(c=>!c)} title="What can Wani do?" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:showCapabilities?'#4F46E5':t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0,borderColor:showCapabilities?'#4F46E5':t.border }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{if(!showCapabilities){e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}}>{isMobile?'✨':'✨ What can I do?'}</button>
               <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
                 {isMobile?'📚':'📚 Knowledge'}
                 {knowledgeEntries.length > 0 && <span style={{ background:'#6366f1',color:'white',borderRadius:'50%',width:16,height:16,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2 }}>{knowledgeEntries.length}</span>}
@@ -1409,6 +1411,43 @@ export default function Brain({ session }) {
 
       {showProfile&&<ProfileModal session={session} profile={profile} t={t} onClose={()=>setShowProfile(false)} onSave={async(u)=>{await upsertProfile(session.user.id,u);setProfile(p=>({...p,...u}))}} onSignOut={signOut}/>}
       {showExport&&<ExportModal conversation={activeConv} messages={messages} t={t} dark={dark} onClose={()=>setShowExport(false)}/>}
+
+      {/* Capability Discovery Panel */}
+      {showCapabilities && (
+        <div style={{ position:'fixed', top:64, right:16, width:'min(320px,90vw)', background:t.surface, border:`1px solid ${t.border}`, borderRadius:16, padding:20, zIndex:150, boxShadow:'0 8px 32px rgba(0,0,0,0.25)' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:t.text }}>✨ What Wani can create</div>
+            <button onClick={()=>setShowCapabilities(false)} style={{ background:'none', border:'none', color:t.text4, cursor:'pointer', fontSize:18 }}>✕</button>
+          </div>
+          <div style={{ fontSize:12, color:t.text4, marginBottom:12 }}>Just describe what you need — Wani understands and delivers.</div>
+          {[
+            { icon:'📋', label:'Functional Spec', hint:'Generate a functional specification for any SAP process' },
+            { icon:'⚙️', label:'Technical Spec', hint:'Generate a developer technical specification from a process or FS' },
+            { icon:'🧪', label:'Test Cases', hint:'Generate SAP test cases and test scripts' },
+            { icon:'⚠️', label:'Gap Analysis', hint:'Find what is missing from a spec, process, or implementation' },
+            { icon:'🗓️', label:'Workshop Plan', hint:'Create a workshop agenda, questions, and decision points' },
+            { icon:'📄', label:'SAP Form Spec', hint:'Specify Adobe/SmartForms with NACE trigger and field mapping' },
+            { icon:'📱', label:'Fiori App Suggestions', hint:'Get Fiori app recommendations for a process or role' },
+            { icon:'🔴', label:'Error Analysis', hint:'Paste any SAP error or dump — get root cause and fix steps' },
+            { icon:'🔬', label:'Code Analysis', hint:'Paste ABAP code — get 7-dimension analysis and action buttons' },
+          ].map(item => (
+            <div key={item.label}
+              onClick={() => { setInput(`${item.hint}`); setShowCapabilities(false); setTimeout(()=>inputRef.current?.focus(),100) }}
+              style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'8px 10px', borderRadius:10, cursor:'pointer', marginBottom:4, transition:'background 0.15s' }}
+              onMouseEnter={e=>e.currentTarget.style.background='rgba(99,102,241,0.08)'}
+              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>{item.icon}</span>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:t.text, marginBottom:2 }}>{item.label}</div>
+                <div style={{ fontSize:11, color:t.text4, lineHeight:1.4 }}>{item.hint}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${t.border}`, fontSize:11, color:t.text4, textAlign:'center' }}>
+            Or just type naturally — Wani understands intent automatically
+          </div>
+        </div>
+      )}
 
       {/* Knowledge Base Panel */}
       {showKnowledge && (
