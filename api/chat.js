@@ -228,16 +228,27 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
   if (!key || !cx) return []
 
   try {
-    // For Fiori recommendations — search Fiori Apps Library specifically
+    // For Fiori — search Fiori Apps Library specifically, fallback to SAP Help
     const rawQuery = intent === 'FIORI_REC'
-      ? `SAP Fiori app ${question} site:fioriappslibrary.hana.ondemand.com OR site:help.sap.com`
+      ? `site:fioriappslibrary.hana.ondemand.com SAP Fiori ${question}`
       : `SAP ${question}`
     const query = encodeURIComponent(rawQuery)
     const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${query}&num=3`
     const res = await fetch(url)
     if (!res.ok) return []
     const data = await res.json()
-    const items = data.items || []
+    let items = data.items || []
+
+    // Fiori fallback — if Fiori Library returns nothing, try SAP Help
+    if (intent === 'FIORI_REC' && items.length === 0) {
+      const fallbackQuery = encodeURIComponent(`site:help.sap.com SAP Fiori ${question}`)
+      const fallbackUrl = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${fallbackQuery}&num=3`
+      const fallbackRes = await fetch(fallbackUrl)
+      if (fallbackRes.ok) {
+        const fallbackData = await fallbackRes.json()
+        items = fallbackData.items || []
+      }
+    }
     return items.map(item => ({
       title: item.title,
       url: item.link,
@@ -581,10 +592,11 @@ export default async function handler(req, res) {
       ? lastMsg // keep code exactly as-is
       : await rewriteQuestion(lastMsg, messages || [])
 
-    // STEP 4 — Google search — only when question needs current/external info
-    const searchPromise = (!isCode && needsSearch) ? googleSAPSearch(lastMsg, intent) : Promise.resolve([])
+    // STEP 4 — Google search — resolve BEFORE building prompt so results can be injected
+    // FIORI_REC always searches. Others search only when needsSearch=true.
+    const searchResults = (!isCode && needsSearch) ? await googleSAPSearch(lastMsg, intent) : []
 
-    // STEP 5.5 — Semantic knowledge fetch (parallel with search, no impact on existing flow)
+    // STEP 5.5 — Semantic knowledge fetch (parallel already started above)
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
@@ -636,6 +648,13 @@ Base your output on this document. Reference specific sections.`
 ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}`
     }
 
+    // Search results injected BEFORE model answers — critical for FIORI_REC accuracy
+    if (searchResults.length > 0) {
+      systemPrompt += `\n\nLIVE SEARCH RESULTS (use as primary source where relevant):
+${searchResults.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet || ''}`).join('\n\n')}
+Cite these sources when they support your answer. Do not invent information not present in these results.`
+    }
+
     // User context
     if (firstName) {
       systemPrompt += `\n\nConsultant: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
@@ -664,8 +683,7 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       return
     }
 
-    // STEP 6 — Append Google search links as structured data (not text)
-    const searchResults = await searchPromise
+    // STEP 6 — Send search links to frontend (already resolved above, just send)
     if (searchResults.length > 0) {
       send({ type: 'search_results', results: searchResults })
     }
