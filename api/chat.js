@@ -1,5 +1,8 @@
-// api/chat.js — v6 Hybrid Architecture
-// Groq classifies → GPT-4o mini rewrites + answers simple → Claude Haiku answers complex → Google CSE for real links
+// api/chat.js — v7 Hybrid Architecture
+// Groq classifies intent → GPT-4o mini rewrites question for context
+// GPT-4o (full) answers all SAP questions
+// Claude Sonnet answers code analysis (ABAP)
+// Google CSE for SAP source links (when needsSearch=true only)
 
 import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS } from './_shared.js'
 import { createClient } from '@supabase/supabase-js'
@@ -48,23 +51,24 @@ Question: "${question}"
 }
 
 // ── 2. GPT-4o mini — rewrite question with full context awareness ─────────────
-async function gptRewriteAndAnswer(question, intent, isSimple, conversationHistory = []) {
+// ── 2a. REWRITE QUESTION — context-aware enrichment via GPT-4o mini ──────────
+async function rewriteQuestion(question, conversationHistory = []) {
   try {
-    // Build recent context summary for the rewriter
     const recentContext = conversationHistory.slice(-6)
       .filter(m => m.role && m.content)
       .map(m => `${m.role === 'user' ? 'User' : 'Wani'}: ${m.content.slice(0, 300)}`)
       .join('\n')
 
-    const systemPrompt = isSimple
-      ? `You are a senior SAP S/4HANA consultant. Give a complete, accurate answer.
-- For table questions: list ALL relevant tables with their purpose, key fields where useful
-- For T-code questions: give the T-code, full name, and what it does including variants if relevant
-- Use bullet points and bold for table/T-code names
-- If unsure about any specific detail say "verify in your system"
-- Never invent table names, T-codes, or field names
-- Be thorough — a consultant needs the complete picture, not just one line`
-      : `You are an SAP question optimizer. Rewrite this SAP question to be clearer and more specific.
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 200,
+        temperature: 0.1,
+        messages: [{
+          role: 'system',
+          content: `You are an SAP question optimizer. Rewrite this SAP question to be clearer and more specific.
 
 IMPORTANT — use the conversation context below to:
 - Connect follow-up questions to the topic being discussed
@@ -78,31 +82,16 @@ IMPORTANT — use the conversation context below to:
 
 Recent conversation:
 ${recentContext || 'No previous context'}`
-
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: isSimple ? 800 : 200,
-        temperature: 0.1,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: question }
-        ]
+        }, { role: 'user', content: question }]
       })
     })
     const data = await res.json()
     return data.choices?.[0]?.message?.content?.trim() || question
-  } catch {
-    return question
-  }
+  } catch { return question }
 }
 
-// ── 3. CLAUDE HAIKU — complex SAP answers ────────────────────────────────────
-async function streamClaudeHaiku(systemPrompt, messages, onChunk) {
-  return streamClaude('claude-haiku-4-5-20251001', systemPrompt, messages, onChunk)
-}
+// ── 3. CLAUDE SONNET — code analysis only ────────────────────────────────────
+// Note: streamClaudeHaiku removed — all non-code SAP questions go to GPT-4o
 
 async function streamClaudeSonnet(systemPrompt, messages, onChunk) {
   // claude-sonnet-4-5 is the current stable Sonnet model
@@ -295,9 +284,9 @@ async function embed(text) {
 // ── SUPABASE — service role key for server-side writes ────────────────────────
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-  // Use service role key server-side — never expose to frontend
-  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
-  if (!url || !key) return null
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+  if (!url) throw new Error('SUPABASE_URL not configured')
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured — do not fall back to anon key for server writes')
   return createClient(url, key)
 }
 
@@ -533,10 +522,10 @@ export default async function handler(req, res) {
       saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
 
-    // STEP 3 — GPT-4o mini rewrites question (skip rewrite if code is present)
-    const rewrittenOrAnswer = isCode
-      ? lastMsg // Keep code messages exactly as-is — never rewrite
-      : await gptRewriteAndAnswer(lastMsg, intent, isSimple, messages || [])
+    // STEP 3 — GPT-4o mini rewrites question for context (skip if code present)
+    const rewrittenQuestion = isCode
+      ? lastMsg // keep code exactly as-is
+      : await rewriteQuestion(lastMsg, messages || [])
 
     // STEP 4 — Google search — only when question needs current/external info
     const searchPromise = (!isCode && needsSearch) ? googleSAPSearch(lastMsg) : Promise.resolve([])
@@ -562,7 +551,7 @@ export default async function handler(req, res) {
 
     // Replace last user message with rewritten version ONLY if no code present
     if (!isCode && !hasCodeInHistory && validMessages.length > 0 && validMessages[validMessages.length - 1].role === 'user') {
-      validMessages[validMessages.length - 1].content = rewrittenOrAnswer
+      validMessages[validMessages.length - 1].content = rewrittenQuestion
     }
 
     send({ type: 'start' })
