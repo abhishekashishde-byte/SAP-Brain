@@ -144,8 +144,8 @@ ${recentContext || 'No previous context'}`
 // Note: streamClaudeHaiku removed — all non-code SAP questions go to GPT-4o
 
 async function streamClaudeSonnet(systemPrompt, messages, onChunk) {
-  // claude-sonnet-4-5 is the current stable Sonnet model
-  return streamClaude('claude-sonnet-4-5-20251022', systemPrompt, messages, onChunk)
+  // claude-sonnet-4-6: 1M context GA, better performance than 4.5
+  return streamClaude('claude-sonnet-4-6-20251022', systemPrompt, messages, onChunk)
 }
 
 async function streamClaude(model, systemPrompt, messages, onChunk) {
