@@ -732,6 +732,9 @@ export default function Brain({ session }) {
   const [pendingFinding, setPendingFinding]   = useState(null) // finding waiting for user confirmation
   const [knowledgeToast, setKnowledgeToast]   = useState(null)
   const docInputRef = useRef(null)
+  const chatScrollRef = useRef(null)
+  const bottomRef = useRef(null)
+  const inputRef = useRef(null)
 
   // ── AUTHENTICATED FETCH — always sends JWT, backend derives userId from token ──
   const chatFetch = async (body) => {
@@ -943,16 +946,25 @@ export default function Brain({ session }) {
   },[filterDropdownOpen])
 
   useEffect(()=>{
-    Promise.all([
-      loadConversations(session.user.id).catch(()=>[]),
-      getProfile(session.user.id).catch(()=>null),
-      loadProjects(session.user.id).catch(()=>[]),
-    ]).then(([convs,prof,projs])=>{
-      setConversations(convs||[])
-      setProfile(prof)
-      setProjects(projs||[])
-      setDbLoading(false)
-    })
+    const loadAll = async () => {
+      try {
+        const [convs, prof, projs] = await Promise.all([
+          loadConversations(session.user.id).catch(()=>[]),
+          getProfile(session.user.id).catch(()=>null),
+          loadProjects(session.user.id).catch(()=>[]),
+        ])
+        setConversations(convs||[])
+        setProfile(prof)
+        setProjects(projs||[])
+      } catch(e) {
+        console.error('Startup load error:', e)
+        setConversations([])
+        setProjects([])
+      } finally {
+        setDbLoading(false)
+      }
+    }
+    loadAll()
   },[session])
 
   // No auto-scroll — user scrolls freely
@@ -990,14 +1002,14 @@ export default function Brain({ session }) {
     }
   },[messages.filter(m=>m.role==='user').length, activeConvId])
 
-  const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);window.history.replaceState({ view:'home' },'') }
-  const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);window.history.pushState({ view:'topic',mod,topic },'') }
+  const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);try{window.history.replaceState({ view:'home' },'',window.location.pathname)}catch(e){} }
+  const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);try{window.history.pushState({ view:'topic',mod,topic },'',window.location.pathname)}catch(e){} }
   const goChat=(convId,mod=null,topic=null)=>{ 
     setFilterDropdownOpen(false)
     setInput('')
     if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } 
     else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) }
-    window.history.pushState({ view:'chat',convId,mod,topic },'')
+    try { window.history.pushState({ view:'chat',convId,mod,topic },'',window.location.pathname) } catch(e){}
     if(isMobileWidth())setSidebarOpen(false) 
   }
 
