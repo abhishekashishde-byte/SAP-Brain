@@ -10,7 +10,7 @@ export const signOut = () => supabase.auth.signOut()
 // Conversations
 export const loadConversations = async (userId) => {
   const { data, error } = await supabase
-    .from('conversations')
+    .from('sap_conversations')
     .select('*')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
@@ -20,7 +20,7 @@ export const loadConversations = async (userId) => {
 
 export const createConversation = async (userId, { title, module, topic, messages }) => {
   const { data, error } = await supabase
-    .from('conversations')
+    .from('sap_conversations')
     .insert({ user_id: userId, title, module, topic, messages })
     .select()
     .single()
@@ -30,7 +30,7 @@ export const createConversation = async (userId, { title, module, topic, message
 
 export const updateConversation = async (id, updates) => {
   const { error } = await supabase
-    .from('conversations')
+    .from('sap_conversations')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw error
@@ -38,7 +38,7 @@ export const updateConversation = async (id, updates) => {
 
 export const deleteConversation = async (id) => {
   const { error } = await supabase
-    .from('conversations')
+    .from('sap_conversations')
     .delete()
     .eq('id', id)
   if (error) throw error
@@ -50,7 +50,7 @@ export const deleteConversation = async (id) => {
 
 export const markAsProject = async (convId, fsTitle) => {
   const { error } = await supabase
-    .from('conversations')
+    .from('sap_conversations')
     .update({
       is_project: true,
       project_name: fsTitle,
@@ -64,7 +64,7 @@ export const markAsProject = async (convId, fsTitle) => {
 
 export const loadProjects = async (userId) => {
   const { data, error } = await supabase
-    .from('conversations')
+    .from('sap_conversations')
     .select('*')
     .eq('user_id', userId)
     .eq('is_project', true)
