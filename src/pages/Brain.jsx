@@ -889,18 +889,25 @@ export default function Brain({ session }) {
   }
 
   const [deliverableFilter, setDeliverableFilter] = useState('ALL')
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false)
 
   const DELIVERABLE_FILTERS = [
-    { key: 'ALL',           label: 'All' },
-    { key: 'SAP_QA',        label: '💬 Q&A' },
-    { key: 'FS_SPEC',       label: '📋 Func. Specs' },
-    { key: 'TECH_SPEC',     label: '⚙️ Tech Specs' },
-    { key: 'TEST_CASES',    label: '🧪 Test Cases' },
-    { key: 'GAP_ANALYSIS',  label: '⚠️ Gap Analysis' },
-    { key: 'FORMS_SPEC',    label: '📄 Forms' },
-    { key: 'WORKSHOP_PLAN', label: '🗓️ Workshops' },
-    { key: 'SLIDE_CONTENT', label: '📊 Slides' },
-    { key: 'FIORI_REC',     label: '📱 Fiori' },
+    // ── View all ────────────────────────────────────────────────────────────
+    { key: 'ALL',           label: 'All Conversations',  group: null },
+    // ── Knowledge & Q&A ─────────────────────────────────────────────────────
+    { key: 'SAP_QA',        label: 'Questions & Answers', group: 'Knowledge' },
+    { key: 'BAPI_SEARCH',   label: 'BAPI / Function Modules', group: 'Knowledge' },
+    { key: 'EXIT_SEARCH',   label: 'User Exits & BAdIs',  group: 'Knowledge' },
+    { key: 'FIORI_REC',     label: 'Fiori Apps',          group: 'Knowledge' },
+    // ── Deliverable Documents ────────────────────────────────────────────────
+    { key: 'FS_SPEC',       label: 'Functional Spec',     group: 'Deliverables' },
+    { key: 'TECH_SPEC',     label: 'Technical Spec',      group: 'Deliverables' },
+    { key: 'TEST_CASES',    label: 'Test Cases',          group: 'Deliverables' },
+    { key: 'GAP_ANALYSIS',  label: 'Gap Analysis',        group: 'Deliverables' },
+    { key: 'FORMS_SPEC',    label: 'Forms',               group: 'Deliverables' },
+    // ── Planning ─────────────────────────────────────────────────────────────
+    { key: 'WORKSHOP_PLAN', label: 'Workshop Plan',       group: 'Planning' },
+    { key: 'SLIDE_CONTENT', label: 'Slide Content',       group: 'Planning' },
   ]
 
   const filteredConvs = conversations.filter(c => {
@@ -910,6 +917,8 @@ export default function Brain({ session }) {
     })()
     const matchesFilter = deliverableFilter === 'ALL'
       || (deliverableFilter === 'SAP_QA' && (!c.deliverable_type || c.deliverable_type === 'NONE'))
+      || (deliverableFilter === 'BAPI_SEARCH' && c.deliverable_type === 'BAPI_SEARCH')
+      || (deliverableFilter === 'EXIT_SEARCH' && c.deliverable_type === 'EXIT_SEARCH')
       || c.deliverable_type === deliverableFilter
     return matchesSearch && matchesFilter
   })
@@ -919,6 +928,16 @@ export default function Brain({ session }) {
     window.addEventListener('resize',handleResize)
     return()=>window.removeEventListener('resize',handleResize)
   },[])
+
+  // Close filter dropdown when clicking outside
+  useEffect(()=>{
+    if(!filterDropdownOpen) return
+    const handleClick = (e) => {
+      if(!e.target.closest('[data-filter-dropdown]')) setFilterDropdownOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  },[filterDropdownOpen])
 
   useEffect(()=>{
     Promise.all([
@@ -1205,15 +1224,86 @@ export default function Brain({ session }) {
               onBlur={e=>e.target.style.borderColor=t.border}
             />
           </div>
-          {/* Deliverable filter tabs */}
-          <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:8 }}>
-            {DELIVERABLE_FILTERS.map(f => (
-              <button key={f.key}
-                onClick={() => setDeliverableFilter(f.key)}
-                style={{ padding:'3px 8px', borderRadius:8, border:`1px solid ${deliverableFilter===f.key?'#4F46E5':t.border}`, background:deliverableFilter===f.key?'rgba(79,70,229,0.12)':'transparent', color:deliverableFilter===f.key?'#4F46E5':t.text4, fontSize:10, fontWeight:deliverableFilter===f.key?700:400, cursor:'pointer', fontFamily:"'Inter',sans-serif", transition:'all 0.15s', whiteSpace:'nowrap' }}>
-                {f.label}
-              </button>
-            ))}
+          {/* Deliverable filter — grouped dropdown */}
+          <div style={{ position:'relative', marginTop:8 }} data-filter-dropdown>
+            <div
+              onClick={() => setFilterDropdownOpen(prev => !prev)}
+              style={{
+                display:'flex', alignItems:'center', justifyContent:'space-between',
+                padding:'8px 12px', borderRadius:10, border:`1.5px solid ${t.border}`,
+                background:t.inputBg, cursor:'pointer', transition:'border-color 0.2s',
+                fontFamily:"'Inter','DM Sans',sans-serif",
+              }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=filterDropdownOpen?'#4F46E5':t.border}
+            >
+              <span style={{ fontSize:13, color: deliverableFilter==='ALL' ? t.text3 : '#4F46E5', fontWeight: deliverableFilter==='ALL'?400:600 }}>
+                {DELIVERABLE_FILTERS.find(f=>f.key===deliverableFilter)?.label || 'All Conversations'}
+              </span>
+              <span style={{ fontSize:11, color:t.text4, transform: filterDropdownOpen?'rotate(180deg)':'rotate(0deg)', transition:'transform 0.2s' }}>▾</span>
+            </div>
+
+            {filterDropdownOpen && (
+              <div style={{
+                position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:100,
+                background:t.surface, border:`1.5px solid ${t.border}`, borderRadius:12,
+                boxShadow:'0 8px 24px rgba(0,0,0,0.12)', overflow:'hidden',
+                fontFamily:"'Inter','DM Sans',sans-serif",
+              }}>
+                {/* All Conversations — always first, no group header */}
+                <div
+                  onClick={() => { setDeliverableFilter('ALL'); setFilterDropdownOpen(false) }}
+                  style={{
+                    padding:'9px 14px', fontSize:13, cursor:'pointer',
+                    color: deliverableFilter==='ALL' ? '#4F46E5' : t.text,
+                    background: deliverableFilter==='ALL' ? 'rgba(79,70,229,0.07)' : 'transparent',
+                    fontWeight: deliverableFilter==='ALL' ? 600 : 400,
+                    display:'flex', alignItems:'center', justifyContent:'space-between',
+                    transition:'background 0.12s',
+                  }}
+                  onMouseEnter={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                  onMouseLeave={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='transparent' }}
+                >
+                  All Conversations
+                  {deliverableFilter==='ALL' && <span style={{ fontSize:12 }}>✓</span>}
+                </div>
+
+                {/* Grouped items */}
+                {['Knowledge','Deliverables','Planning'].map(group => {
+                  const groupItems = DELIVERABLE_FILTERS.filter(f => f.group === group)
+                  return (
+                    <div key={group}>
+                      <div style={{
+                        padding:'6px 14px 4px', fontSize:10, fontWeight:700,
+                        color:t.text4, letterSpacing:0.8, textTransform:'uppercase',
+                        borderTop:`1px solid ${t.border}`, marginTop:2,
+                      }}>
+                        {group}
+                      </div>
+                      {groupItems.map(f => (
+                        <div
+                          key={f.key}
+                          onClick={() => { setDeliverableFilter(f.key); setFilterDropdownOpen(false) }}
+                          style={{
+                            padding:'8px 14px 8px 20px', fontSize:13, cursor:'pointer',
+                            color: deliverableFilter===f.key ? '#4F46E5' : t.text2,
+                            background: deliverableFilter===f.key ? 'rgba(79,70,229,0.07)' : 'transparent',
+                            fontWeight: deliverableFilter===f.key ? 600 : 400,
+                            display:'flex', alignItems:'center', justifyContent:'space-between',
+                            transition:'background 0.12s',
+                          }}
+                          onMouseEnter={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                          onMouseLeave={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='transparent' }}
+                        >
+                          {f.label}
+                          {deliverableFilter===f.key && <span style={{ fontSize:12 }}>✓</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
         <div style={{ flex:1,overflowY:'auto',padding:'4px 8px 8px' }}>
