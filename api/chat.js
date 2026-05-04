@@ -815,6 +815,9 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     if (isNoteSearch || intent === 'ERROR_ANALYSIS') {
       systemPrompt += `\n\n⚠️ SAP NOTE RULE: NEVER invent or guess SAP Note numbers. Do NOT make up note numbers like 1234567. If you do not have verified note numbers from search results, tell the user to search SAP Support Portal at support.sap.com/notes using these exact search terms: "${lastMsg.slice(0, 80)}". Never present invented note numbers as real.`
     }
+
+    // SAP Note references — extracted from search results, direct login links
+    if (noteRefs.length > 0) {
       systemPrompt += `\n\n📋 SAP NOTES FOUND IN SEARCH RESULTS:\nPresent these to the user clearly. Tell them to log in with their S-user at me.sap.com to read the full note content:\n${noteRefs.map(n => `- SAP Note ${n.number}: ${n.url}`).join('\n')}`
     }
 
