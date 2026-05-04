@@ -147,46 +147,52 @@ export async function callGroq(systemPrompt, messages) {
 export async function callGeminiSearch(question) {
   try {
     const key = process.env.GEMINI_API_KEY
-    if (!key) return []
+    if (!key) { console.error('Gemini search: no API key'); return [] }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`
+    // Try models in order — 2.0-flash supports grounding, fallback to 1.5-flash
+    const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+    
+    for (const modelName of models) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`
+      const body = {
+        contents: [{ parts: [{ text: `Find relevant SAP documentation, SAP Community discussions, SAP Help pages, and SAP Notes for this question. Return a brief summary with source URLs:\n\n${question}` }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.3 },
+      }
 
-    const body = {
-      contents: [{ parts: [{ text: `Find relevant SAP documentation, SAP Community discussions, SAP Help pages, and SAP Notes for this question. Return a brief summary with source URLs:\n\n${question}` }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.3 },
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      const data = await res.json()
+      
+      if (!res.ok) {
+        console.error(`Gemini search error with ${modelName}:`, res.status, JSON.stringify(data).slice(0, 200))
+        continue
+      }
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const groundingChunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+      const sources = groundingChunks
+        .filter(c => c.web?.uri)
+        .map(c => ({
+          title: c.web.title || c.web.uri,
+          url: c.web.uri,
+          snippet: '',
+          source: c.web.uri.includes('sap.com') ? 'SAP' : 'Web',
+        }))
+        .slice(0, 5)
+
+      console.log(`Gemini search OK with ${modelName} — sources: ${sources.length}, text: ${text.length}`)
+      return { text, sources }
     }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-
-    if (!res.ok) {
-      console.error('Gemini search error:', res.status)
-      return []
-    }
-
-    const data = await res.json()
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-
-    // Extract grounding sources if available
-    const groundingChunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || []
-    const sources = groundingChunks
-      .filter(c => c.web?.uri)
-      .map(c => ({
-        title: c.web.title || c.web.uri,
-        url: c.web.uri,
-        snippet: '',
-        source: c.web.uri.includes('sap.com') ? 'SAP' : 'Web',
-      }))
-      .slice(0, 5)
-
-    console.log('Gemini search results:', sources.length, 'sources, text length:', text.length)
-    return { text, sources }
+    
+    console.error('Gemini search: all models failed')
+    return []
   } catch (err) {
-    console.error('Gemini search failed:', err.message)
+    console.error('Gemini search exception:', err.message)
     return []
   }
 }
