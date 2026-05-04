@@ -46,10 +46,6 @@ export const deleteConversation = async (id) => {
   if (error) throw error
 }
 
-// ── Projects ──────────────────────────────────────────────────────────────────
-// A project is a conversation where an FS was generated.
-// Automatically flagged — no manual action from the consultant.
-
 export const markAsProject = async (convId, fsTitle) => {
   const { error } = await supabase
     .from('conversations')
@@ -77,7 +73,6 @@ export const loadProjects = async (userId) => {
   } catch { return [] }
 }
 
-// Profile
 export const getProfile = async (userId) => {
   const { data } = await supabase
     .from('profiles')
@@ -93,4 +88,3 @@ export const upsertProfile = async (userId, updates) => {
     .upsert({ id: userId, ...updates })
   if (error) throw error
 }
-
