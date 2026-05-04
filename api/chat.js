@@ -823,7 +823,12 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       send({ type: 'search_results', results: searchResults })
     }
 
-    send({ type: 'done', model: modelUsed, full: fullAnswer, deliverableType })
+    // Detect FS completion signal — triggers Word doc download on frontend
+    const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE')
+    const cleanAnswer = fsComplete ? fullAnswer.replace(/WANI_FS_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
+
+    send({ type: 'done', model: modelUsed, full: cleanAnswer, deliverableType,
+      ...(fsComplete ? { fsComplete: true, fsText: cleanAnswer } : {}) })
 
   } catch (err) {
     console.error('HANDLER ERROR:', err.message)
