@@ -12,7 +12,6 @@
     "api/summarise.js":        { "maxDuration": 30 },
     "api/reference-search.js": { "maxDuration": 15 },
     "api/generate-fs-doc.js":  { "maxDuration": 30 },
-    "api/generate-ppt.js":     { "maxDuration": 30 },
-    "api/bapi-search.js":      { "maxDuration": 15 }
+    "api/generate-ppt.js":     { "maxDuration": 30 }
   }
 }
