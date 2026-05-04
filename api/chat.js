@@ -285,7 +285,10 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
           : item.displayLink?.includes('launchpad.support.sap.com') ? 'SAP Support'
           : 'SAP',
       }))
-    } catch { return [] }
+    } catch (e) {
+      console.error('runCSE error:', e.message)
+      return []
+    }
   }
 
   try {
@@ -302,11 +305,8 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
 
     // ── ERROR: search SAP Community for solved threads + SAP Help ───────────
     if (intent === 'ERROR_ANALYSIS') {
-      const [communityResults, helpResults] = await Promise.all([
-        runCSE(`site:community.sap.com ${question} solved answer`, 3),
-        runCSE(`site:help.sap.com SAP ${question}`, 2),
-      ])
-      results = [...communityResults, ...helpResults]
+      results = await runCSE(`SAP ${question}`, 5)
+      console.log('Google CSE ERROR_ANALYSIS results:', results.length)
       return results
     }
 
