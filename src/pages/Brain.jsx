@@ -1052,6 +1052,31 @@ export default function Brain({ session }) {
               fullReply = evt.full || accumulated
               modelUsed = evt.model
               deliverableType = evt.deliverableType || 'NONE'
+
+              // FS Complete — auto-trigger Word document download
+              if (evt.fsComplete && evt.fsText) {
+                try {
+                  const fsRes = await fetch('/api/generate-fs-doc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      fsText: evt.fsText,
+                      fileName: `Wani_FS_${new Date().toISOString().slice(0,10)}`
+                    })
+                  })
+                  if (fsRes.ok) {
+                    const blob = await fsRes.blob()
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `Wani_FS_${new Date().toISOString().slice(0,10)}.docx`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                  }
+                } catch (e) { console.error('FS doc generation failed:', e) }
+              }
             } else if (evt.type === 'error') {
               throw new Error(evt.error)
             }
