@@ -143,57 +143,69 @@ export async function callGroq(systemPrompt, messages) {
   return data.choices?.[0]?.message?.content || 'No response.'
 }
 
-// Gemini with Google Search grounding — replaces Google CSE for web search
-export async function callGeminiSearch(question) {
+// OpenAI web search — replaces Gemini search
+// Uses GPT-4o-mini with web_search_preview tool for cost efficiency
+export async function callOpenAISearch(question) {
   try {
-    const key = process.env.GEMINI_API_KEY
-    if (!key) { console.error('Gemini search: no API key'); return [] }
+    const key = process.env.OPENAI_API_KEY
+    if (!key) { console.error('OpenAI search: no API key'); return [] }
 
-    // Try models in order — 2.0-flash supports grounding, fallback to 1.5-flash
-    const models = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.0-flash-001']
-    
-    for (const modelName of models) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`
-      const body = {
-        contents: [{ parts: [{ text: `Find relevant SAP documentation, SAP Community discussions, SAP Help pages, and SAP Notes for this question. Return a brief summary with source URLs:\n\n${question}` }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.3 },
-      }
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        tools: [{ type: 'web_search_preview' }],
+        input: `Search for SAP Notes, SAP Community discussions, and SAP Help documentation for this question. For each SAP Note found provide the full note number, complete title, and description of what it fixes:\n\n${question}`,
+      }),
+    })
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-
-      const data = await res.json()
-      
-      if (!res.ok) {
-        console.error(`Gemini search error with ${modelName}:`, res.status, JSON.stringify(data).slice(0, 200))
-        continue
-      }
-
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-      const groundingChunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || []
-      const sources = groundingChunks
-        .filter(c => c.web?.uri)
-        .map(c => ({
-          title: c.web.title || c.web.uri,
-          url: c.web.uri,
-          snippet: '',
-          source: c.web.uri.includes('sap.com') ? 'SAP' : 'Web',
-        }))
-        .slice(0, 5)
-
-      console.log(`Gemini search OK with ${modelName} — sources: ${sources.length}, text: ${text.length}`)
-      console.log('Gemini search text:', text.slice(0, 500))
-      return { text, sources }
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('OpenAI search error:', res.status, err.slice(0, 200))
+      return []
     }
-    
-    console.error('Gemini search: all models failed')
-    return []
+
+    const data = await res.json()
+
+    // Extract text and sources from response
+    const text = data.output
+      ?.filter(o => o.type === 'message')
+      ?.map(o => o.content?.filter(c => c.type === 'output_text')?.map(c => c.text).join(''))
+      ?.join('') || ''
+
+    // Extract source URLs from annotations
+    const sources = []
+    for (const output of data.output || []) {
+      for (const content of output.content || []) {
+        for (const annotation of content.annotations || []) {
+          if (annotation.type === 'url_citation' && annotation.url) {
+            sources.push({
+              title: annotation.title || annotation.url,
+              url: annotation.url,
+              snippet: '',
+              source: annotation.url.includes('sap.com') ? 'SAP' : 'Web',
+            })
+          }
+        }
+      }
+    }
+
+    console.log(`OpenAI search OK — sources: ${sources.length}, text: ${text.length}`)
+    console.log('OpenAI search text:', text.slice(0, 300))
+
+    if (text.length === 0) {
+      console.log('OpenAI search: empty response')
+      return []
+    }
+
+    return { text, sources: sources.slice(0, 5) }
+
   } catch (err) {
-    console.error('Gemini search exception:', err.message)
+    console.error('OpenAI search exception:', err.message)
     return []
   }
 }
