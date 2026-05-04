@@ -186,6 +186,7 @@ export async function callGeminiSearch(question) {
         .slice(0, 5)
 
       console.log(`Gemini search OK with ${modelName} — sources: ${sources.length}, text: ${text.length}`)
+      console.log('Gemini search text:', text.slice(0, 500))
       return { text, sources }
     }
     
