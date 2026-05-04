@@ -907,6 +907,7 @@ export default function Brain({ session }) {
     { key: 'FORMS_SPEC',    label: 'Forms',               group: 'Deliverables' },
     // ── Planning ─────────────────────────────────────────────────────────────
     { key: 'WORKSHOP_PLAN', label: 'Workshop Plan',       group: 'Planning' },
+    { key: 'WORKSHOP_PPT',  label: 'Workshop PPT',        group: 'Planning' },
     { key: 'SLIDE_CONTENT', label: 'Slide Content',       group: 'Planning' },
   ]
 
@@ -1076,6 +1077,31 @@ export default function Brain({ session }) {
                     URL.revokeObjectURL(url)
                   }
                 } catch (e) { console.error('FS doc generation failed:', e) }
+              }
+
+              // PPT Complete — auto-trigger PowerPoint download
+              if (evt.pptComplete && evt.pptText) {
+                try {
+                  const pptRes = await fetch('/api/generate-ppt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      pptText: evt.pptText,
+                      fileName: `Wani_Workshop_${new Date().toISOString().slice(0,10)}`
+                    })
+                  })
+                  if (pptRes.ok) {
+                    const blob = await pptRes.blob()
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `Wani_Workshop_${new Date().toISOString().slice(0,10)}.pptx`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                  }
+                } catch (e) { console.error('PPT generation failed:', e) }
               }
             } else if (evt.type === 'error') {
               throw new Error(evt.error)
