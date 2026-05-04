@@ -44,6 +44,35 @@ export const deleteConversation = async (id) => {
   if (error) throw error
 }
 
+// ── Projects ──────────────────────────────────────────────────────────────────
+// A project is a conversation where an FS was generated.
+// Automatically flagged — no manual action from the consultant.
+
+export const markAsProject = async (convId, fsTitle) => {
+  const { error } = await supabase
+    .from('sap_conversations')
+    .update({
+      is_project: true,
+      project_name: fsTitle,
+      fs_title: fsTitle,
+      fs_generated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', convId)
+  if (error) throw error
+}
+
+export const loadProjects = async (userId) => {
+  const { data, error } = await supabase
+    .from('sap_conversations')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_project', true)
+    .order('fs_generated_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
 // Profile
 export const getProfile = async (userId) => {
   const { data } = await supabase
@@ -60,3 +89,4 @@ export const upsertProfile = async (userId, updates) => {
     .upsert({ id: userId, ...updates })
   if (error) throw error
 }
+
