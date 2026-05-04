@@ -5,6 +5,7 @@ import { useTheme } from '../App.jsx'
 import {
   supabase, signOut,
   loadConversations, createConversation, updateConversation, deleteConversation,
+  markAsProject, loadProjects,
   getProfile, upsertProfile,
 } from '../supabaseClient'
 
@@ -702,6 +703,7 @@ export default function Brain({ session }) {
   const [browseModule, setBrowseModule]   = useState(null)
   const [browseTopic, setBrowseTopic]     = useState(null)
   const [conversations, setConversations] = useState([])
+  const [projects, setProjects]           = useState([])
   const [activeConvId, setActiveConvId]   = useState(null)
   const [input, setInput]                 = useState('')
   const [isLoading, setIsLoading]         = useState(false)
@@ -944,7 +946,13 @@ export default function Brain({ session }) {
     Promise.all([
       loadConversations(session.user.id).catch(()=>[]),
       getProfile(session.user.id).catch(()=>null),
-    ]).then(([convs,prof])=>{ setConversations(convs||[]); setProfile(prof); setDbLoading(false) })
+      loadProjects(session.user.id).catch(()=>[]),
+    ]).then(([convs,prof,projs])=>{
+      setConversations(convs||[])
+      setProfile(prof)
+      setProjects(projs||[])
+      setDbLoading(false)
+    })
   },[session])
 
   // No auto-scroll — user scrolls freely
@@ -1082,6 +1090,17 @@ export default function Brain({ session }) {
                     a.click()
                     document.body.removeChild(a)
                     URL.revokeObjectURL(url)
+
+                    // Auto-mark this conversation as a project
+                    // Extract FS title from the text — look for FS_TITLE: line
+                    const fsTitleMatch = evt.fsText.match(/FS_TITLE:\s*(.+)/i)
+                    const fsTitle = fsTitleMatch?.[1]?.trim() || activeConv?.title || 'Functional Specification'
+                    markAsProject(convId, fsTitle).then(() => {
+                      // Update local state — conversation becomes a project
+                      const projectConv = { ...conversations.find(c=>c.id===convId), is_project: true, project_name: fsTitle, fs_title: fsTitle, fs_generated_at: new Date().toISOString() }
+                      setProjects(prev => [projectConv, ...prev.filter(p=>p.id!==convId)])
+                      setConversations(prev => prev.map(c => c.id===convId ? {...c, is_project:true, project_name:fsTitle} : c))
+                    }).catch(()=>{})
                   }
                 } catch (e) { console.error('FS doc generation failed:', e) }
               }
@@ -1367,15 +1386,55 @@ export default function Brain({ session }) {
         <div style={{ flex:1,overflowY:'auto',padding:'4px 8px 8px' }}>
           {dbLoading?(
             <div style={{ padding:20,textAlign:'center' }}><div style={{ width:20,height:20,border:`2px solid ${t.border}`,borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',margin:'0 auto 8px' }}/><span style={{ fontSize:12,color:t.text4 }}>Loading...</span></div>
-          ):filteredConvs.length===0?(
-            <div style={{ padding:'24px 16px',textAlign:'center' }}><div style={{ fontSize:28,marginBottom:8 }}>💬</div><p style={{ fontSize:12,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
           ):(
-            Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
-              <div key={group}>
-                <div style={{ fontSize:10,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 4px' }}>{group}</div>
-                {convs.map(conv=>(<ConversationItem key={conv.id} conv={conv} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false);if(isMobile)setSidebarOpen(false) }} onDelete={handleDelete}/>))}
-              </div>
-            ))
+            <>
+              {/* ── PROJECTS SECTION — auto-created when FS is generated ── */}
+              {projects.length > 0 && (
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:10,fontWeight:700,color:'#4F46E5',letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 6px',display:'flex',alignItems:'center',gap:6 }}>
+                    <span>📁</span> Projects
+                    <span style={{ background:'rgba(79,70,229,0.12)',color:'#4F46E5',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
+                  </div>
+                  {projects.map(proj => (
+                    <div key={proj.id}
+                      onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false);if(isMobile)setSidebarOpen(false) }}
+                      style={{
+                        padding:'9px 12px', borderRadius:10, cursor:'pointer', marginBottom:3,
+                        background: activeConvId===proj.id ? 'rgba(79,70,229,0.12)' : 'rgba(79,70,229,0.04)',
+                        border: `1.5px solid ${activeConvId===proj.id ? '#4F46E5' : 'rgba(79,70,229,0.2)'}`,
+                        transition:'all 0.15s',
+                      }}
+                      onMouseEnter={e=>{ if(activeConvId!==proj.id){ e.currentTarget.style.background='rgba(79,70,229,0.08)';e.currentTarget.style.borderColor='rgba(79,70,229,0.35)' }}}
+                      onMouseLeave={e=>{ if(activeConvId!==proj.id){ e.currentTarget.style.background='rgba(79,70,229,0.04)';e.currentTarget.style.borderColor='rgba(79,70,229,0.2)' }}}
+                    >
+                      <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:2 }}>
+                        {proj.module && <ModuleBadge module={proj.module} small/>}
+                        <span style={{ fontSize:9,fontWeight:700,color:'#4F46E5',background:'rgba(79,70,229,0.12)',padding:'1px 6px',borderRadius:8,letterSpacing:0.5 }}>FS</span>
+                      </div>
+                      <div style={{ fontSize:13,fontWeight:500,color:activeConvId===proj.id?'#4F46E5':t.text,lineHeight:1.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
+                        {proj.project_name || proj.fs_title || proj.title}
+                      </div>
+                      <div style={{ fontSize:11,color:t.text4,marginTop:2 }}>
+                        {proj.fs_generated_at ? new Date(proj.fs_generated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : new Date(proj.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ height:1,background:t.border,margin:'8px 4px 4px' }}/>
+                </div>
+              )}
+
+              {/* ── CONVERSATIONS SECTION ── */}
+              {filteredConvs.length===0?(
+                <div style={{ padding:'24px 16px',textAlign:'center' }}><div style={{ fontSize:28,marginBottom:8 }}>💬</div><p style={{ fontSize:12,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
+              ):(
+                Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
+                  <div key={group}>
+                    <div style={{ fontSize:10,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 4px' }}>{group}</div>
+                    {convs.map(conv=>(<ConversationItem key={conv.id} conv={conv} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false);if(isMobile)setSidebarOpen(false) }} onDelete={handleDelete}/>))}
+                  </div>
+                ))
+              )}
+            </>
           )}
         </div>
         <div style={{ padding:'10px 14px',borderTop:`1px solid ${t.border}` }}>
@@ -1412,6 +1471,18 @@ export default function Brain({ session }) {
                 {knowledgeEntries.length > 0 && <span style={{ background:'#6366f1',color:'white',borderRadius:'50%',width:16,height:16,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2 }}>{knowledgeEntries.length}</span>}
               </button>
               <button onClick={()=>setShowExport(true)} title="Export" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'↓':'↓ Export'}</button>
+              {/* Generate Test Cases — only shown for project conversations */}
+              {activeConv?.is_project && (
+                <button
+                  onClick={()=>{ setInput('Generate SIT and UAT test cases from the functional specification discussed in this conversation. Cover all logic steps, edge cases, and error scenarios.'); setTimeout(()=>document.querySelector('textarea')?.focus(),100) }}
+                  title="Generate Test Cases from this FS"
+                  style={{ background:'linear-gradient(135deg,rgba(79,70,229,0.12),rgba(99,102,241,0.08))',border:'1.5px solid rgba(79,70,229,0.4)',borderRadius:10,padding:isMobile?'0 12px':'5px 12px',cursor:'pointer',fontSize:12,color:'#4F46E5',fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:5,transition:'all 0.15s',flexShrink:0,height:isMobile?48:undefined,whiteSpace:'nowrap' }}
+                  onMouseEnter={e=>{e.currentTarget.style.background='rgba(79,70,229,0.18)';e.currentTarget.style.borderColor='#4F46E5'}}
+                  onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(79,70,229,0.12),rgba(99,102,241,0.08))';e.currentTarget.style.borderColor='rgba(79,70,229,0.4)'}}
+                >
+                  🧪 {isMobile?'Test Cases':'Generate Test Cases'}
+                </button>
+              )}
             </>
           )}
           <button onClick={toggle} style={{ width:isMobile?46:44,height:isMobile?28:24,borderRadius:14,border:'none',cursor:'pointer',position:'relative',background:dark?'linear-gradient(135deg,#4F46E5,#6366F1)':'#E2E2EA',transition:'background 0.3s',flexShrink:0 }}>
