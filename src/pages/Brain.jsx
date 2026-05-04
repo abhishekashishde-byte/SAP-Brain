@@ -984,7 +984,14 @@ export default function Brain({ session }) {
 
   const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);window.history.replaceState({ view:'home' },'') }
   const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);window.history.pushState({ view:'topic',mod,topic },'') }
-  const goChat=(convId,mod=null,topic=null)=>{ if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) };window.history.pushState({ view:'chat',convId,mod,topic },'');if(isMobileWidth())setSidebarOpen(false) }
+  const goChat=(convId,mod=null,topic=null)=>{ 
+    setFilterDropdownOpen(false)
+    setInput('')
+    if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } 
+    else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) }
+    window.history.pushState({ view:'chat',convId,mod,topic },'')
+    if(isMobileWidth())setSidebarOpen(false) 
+  }
 
   const handleSend = async (overrideText) => {
     const msgText = (overrideText || input).trim()
@@ -1449,7 +1456,7 @@ export default function Brain({ session }) {
             <div ref={chatScrollRef} className="chat-messages" style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
               <div style={{ maxWidth:720,margin:'0 auto' }}>
                 {messages.length===0?(
-                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'calc(100vh - 280px)',textAlign:'center',animation:'fadeIn 0.4s ease' }}>
+                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'40px 20px' }}>
                     <WaniLogo size={window.innerWidth<768?48:80} dark={dark}/>
                     <div style={{ marginTop:16,marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:40} dark={dark}/></div>
                     {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:t.text,marginTop:12,marginBottom:4 }}>Hello, {profile.name.split(' ')[0]} 👋</div>)}
