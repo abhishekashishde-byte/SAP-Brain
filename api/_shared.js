@@ -150,7 +150,7 @@ export async function callGeminiSearch(question) {
     if (!key) { console.error('Gemini search: no API key'); return [] }
 
     // Try models in order — 2.0-flash supports grounding, fallback to 1.5-flash
-    const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+    const models = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.0-flash-001']
     
     for (const modelName of models) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`
