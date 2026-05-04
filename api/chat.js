@@ -4,7 +4,7 @@
 // Claude Sonnet for code analysis only
 // Google CSE for SAP source links (needsSearch=true only)
 
-import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callGeminiSearch } from './_shared.js'
+import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
@@ -705,16 +705,16 @@ export default async function handler(req, res) {
       ? lastMsg // keep code exactly as-is
       : await rewriteQuestion(lastMsg, messages || [])
 
-    // STEP 4 — Web search via Gemini (full web access, no site restrictions)
+    // STEP 4 — Web search via OpenAI (full web access, consistent results)
     let searchResults = []
     let geminiSearchText = ''
     if (!isCode && needsSearch) {
-      const geminiResult = await callGeminiSearch(lastMsg)
-      if (geminiResult && typeof geminiResult === 'object') {
-        searchResults = geminiResult.sources || []
-        geminiSearchText = geminiResult.text || ''
+      const searchResult = await callOpenAISearch(lastMsg)
+      if (searchResult && typeof searchResult === 'object') {
+        searchResults = searchResult.sources || []
+        geminiSearchText = searchResult.text || ''
       }
-      console.log('Search complete — sources:', searchResults.length, 'gemini text:', geminiSearchText.length)
+      console.log('OpenAI search complete — sources:', searchResults.length, 'text:', geminiSearchText.length)
     }
 
     // Extract SAP Note numbers from search results — build direct login links
