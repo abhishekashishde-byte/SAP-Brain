@@ -45,7 +45,7 @@ flags:
 isCode: true if message contains ABAP keywords (METHOD, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, ENDLOOP, FORM, FUNCTION)
 isError: true if message contains error text, dump, ST22, SM21, runtime error, message class number
 isCorrection: true if user is correcting a previous wrong answer
-needsSearch: true if question is about latest S/4HANA changes, deprecated objects, or explicitly asks to search
+needsSearch: true if question is about latest S/4HANA changes, deprecated objects, explicitly asks to search, mentions SAP Notes or known issues, asks about errors or patches, or asks about a specific T-code behaviour
 
 Question: "${question.slice(0, 400)}"
 
@@ -84,7 +84,16 @@ Question: "${question.slice(0, 400)}"
     }
 
     // FIORI_REC must always search — app IDs hallucinate without live data
+    // Additional hard triggers — these always force search regardless of Groq
+    const isNoteSearch   = /\b(sap note|note \d{5,}|oss note|known issue|patch|correction note)\b/i.test(question)
+    const isErrorSearch  = /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.|termination|sy-msgno)\b/i.test(question)
+    const isNewFeature   = /\b(2024|2025|2026|S\/4HANA 2|latest|new in|what changed|release note|what.s new)\b/i.test(question)
+    const isSpecificTcode = /\b(VA01|VA02|VA03|IW31|IW32|IW33|ME21N|ME22N|MIGO|MB51|MM01|MM02|CO01|CO02|CO03|MD01|MD04|IE01|IE02|XK01|XK02|FK01|FK02|VF01|VF02|VL01N|VL02N|SPRO|SE38|SE80|SM30|PFCG)\b/.test(question)
+    const isBapiSearch   = /\b(bapi|function module|rfc|which.*bapi|bapi.*for|what.*bapi|what.*function module)\b/i.test(question)
+    const isExitSearch   = /\b(user exit|badi|ba[d]i|enhancement spot|enhancement point|which.*exit|exit.*for|badi.*for|userexit|include.*exit|implicit enhancement)\b/i.test(question)
+
     const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
+      || isNoteSearch || isErrorSearch || isNewFeature || isSpecificTcode
 
     return {
       intent,
@@ -94,6 +103,8 @@ Question: "${question.slice(0, 400)}"
       isError,
       isCorrection: result.isCorrection === true,
       needsSearch,
+      isBapiSearch,
+      isExitSearch,
     }
   } catch {
     return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false }
@@ -249,41 +260,101 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
   const cx = process.env.GOOGLE_CSE_ID
   if (!key || !cx) return []
 
-  try {
-    // For Fiori — search Fiori Apps Library specifically, fallback to SAP Help
-    const rawQuery = intent === 'FIORI_REC'
-      ? `site:fioriappslibrary.hana.ondemand.com SAP Fiori ${question}`
-      : `SAP ${question}`
-    const query = encodeURIComponent(rawQuery)
-    const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${query}&num=3`
-    const res = await fetch(url)
-    if (!res.ok) return []
-    const data = await res.json()
-    let items = data.items || []
+  // Helper — run a single CSE query and return mapped items
+  async function runCSE(rawQuery, num = 3) {
+    try {
+      const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${encodeURIComponent(rawQuery)}&num=${num}`
+      const res = await fetch(url)
+      if (!res.ok) return []
+      const data = await res.json()
+      return (data.items || []).map(item => ({
+        title: item.title,
+        url: item.link,
+        snippet: item.snippet?.slice(0, 150),
+        source: item.displayLink?.includes('fioriappslibrary') ? 'SAP Fiori Library'
+          : item.displayLink?.includes('community.sap.com') ? 'SAP Community'
+          : item.displayLink?.includes('help.sap.com') ? 'SAP Help'
+          : item.displayLink?.includes('blogs.sap.com') ? 'SAP Blog'
+          : item.displayLink?.includes('launchpad.support.sap.com') ? 'SAP Support'
+          : 'SAP',
+      }))
+    } catch { return [] }
+  }
 
-    // Fiori fallback — if Fiori Library returns nothing, try SAP Help
-    if (intent === 'FIORI_REC' && items.length === 0) {
-      const fallbackQuery = encodeURIComponent(`site:help.sap.com SAP Fiori ${question}`)
-      const fallbackUrl = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${fallbackQuery}&num=3`
-      const fallbackRes = await fetch(fallbackUrl)
-      if (fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json()
-        items = fallbackData.items || []
+  try {
+    let results = []
+
+    // ── FIORI: target Fiori Apps Library specifically ────────────────────────
+    if (intent === 'FIORI_REC') {
+      results = await runCSE(`site:fioriappslibrary.hana.ondemand.com SAP Fiori ${question}`)
+      if (results.length === 0) {
+        results = await runCSE(`site:help.sap.com SAP Fiori ${question}`)
       }
+      return results
     }
-    return items.map(item => ({
-      title: item.title,
-      url: item.link,
-      snippet: item.snippet?.slice(0, 120),
-      source: item.displayLink?.includes('fioriappslibrary') ? 'SAP Fiori Library'
-        : item.displayLink?.includes('community.sap.com') ? 'SAP Community'
-        : item.displayLink?.includes('help.sap.com') ? 'SAP Help'
-        : item.displayLink?.includes('blogs.sap.com') ? 'SAP Blog' : 'SAP',
-    }))
+
+    // ── ERROR: search SAP Community for solved threads + SAP Help ───────────
+    if (intent === 'ERROR_ANALYSIS') {
+      const [communityResults, helpResults] = await Promise.all([
+        runCSE(`site:community.sap.com ${question} solved answer`, 3),
+        runCSE(`site:help.sap.com SAP ${question}`, 2),
+      ])
+      results = [...communityResults, ...helpResults]
+      return results
+    }
+
+    // ── NOTE questions: search for SAP Note numbers specifically ─────────────
+    const isNoteQuestion = /\b(sap note|note \d{5,}|oss note|known issue|patch|correction)\b/i.test(question)
+    if (isNoteQuestion) {
+      results = await runCSE(`SAP Note ${question} site:community.sap.com OR site:help.sap.com`, 5)
+      return results
+    }
+
+    // ── BAPI/FM questions: target SAP Help API docs ──────────────────────────
+    const isBapiQuestion = /\b(bapi|function module|rfc)\b/i.test(question)
+    if (isBapiQuestion) {
+      results = await runCSE(`SAP ${question} site:help.sap.com OR site:community.sap.com`, 4)
+      return results
+    }
+
+    // ── EXIT/BAdI questions: target SAP Help enhancement docs ────────────────
+    const isExitQuestion = /\b(user exit|badi|enhancement spot|enhancement point)\b/i.test(question)
+    if (isExitQuestion) {
+      results = await runCSE(`SAP ${question} enhancement site:help.sap.com OR site:community.sap.com`, 4)
+      return results
+    }
+
+    // ── DEFAULT: general SAP search ──────────────────────────────────────────
+    results = await runCSE(`SAP ${question}`, 3)
+    return results
+
   } catch (err) {
     console.error('Google CSE error:', err.message)
     return []
   }
+}
+
+// ── 5a. EXTRACT SAP NOTE NUMBERS from search results ─────────────────────────
+// Finds note numbers in titles and snippets, builds direct login links
+function extractNoteNumbers(searchResults) {
+  const notePattern = /\b(?:SAP\s+)?[Nn]ote[s]?\s+#?(\d{6,10})\b|\b(\d{7,10})\b/g
+  const found = new Map()
+  for (const r of searchResults) {
+    const text = `${r.title} ${r.snippet || ''}`
+    let match
+    while ((match = notePattern.exec(text)) !== null) {
+      const num = match[1] || match[2]
+      // Filter out obvious non-note numbers (years, short numbers)
+      if (num && num.length >= 6 && !found.has(num)) {
+        found.set(num, {
+          number: num,
+          url: `https://me.sap.com/notes/${num}`,
+          sourceTitle: r.title,
+        })
+      }
+    }
+  }
+  return Array.from(found.values()).slice(0, 5)
 }
 
 // ── 6. LOAD + SAVE CORRECTIONS ───────────────────────────────────────────────
@@ -597,7 +668,7 @@ export default async function handler(req, res) {
       loadGlobalCorrections().catch(() => []),
     ])
 
-    const { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError } = classification
+    const { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError, isBapiSearch, isExitSearch } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, confidence, secondaryIntent, needsSearch,
@@ -617,6 +688,9 @@ export default async function handler(req, res) {
     // STEP 4 — Google search — resolve BEFORE building prompt so results can be injected
     // FIORI_REC always searches. Others search only when needsSearch=true.
     const searchResults = (!isCode && needsSearch) ? await googleSAPSearch(lastMsg, intent) : []
+
+    // Extract SAP Note numbers from search results — build direct login links
+    const noteRefs = searchResults.length > 0 ? extractNoteNumbers(searchResults) : []
 
     // STEP 5.5 — Semantic knowledge fetch (parallel already started above)
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
@@ -694,12 +768,25 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
 
     // Search results injected BEFORE model answers — critical for FIORI_REC accuracy
     if (searchResults.length > 0) {
-      systemPrompt += `\n\nLIVE SEARCH RESULTS (use as primary source where relevant):
-${searchResults.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet || ''}`).join('\n\n')}
-Cite these sources when they support your answer. Do not invent information not present in these results.`
+      systemPrompt += `\n\nLIVE SEARCH RESULTS (use as primary source where relevant):\n${searchResults.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet || ''}`).join('\n\n')}\nCite these sources when they support your answer. Do not invent information not present in these results.`
     }
 
-    // User context
+    // SAP Note references — extracted from search results, direct login links for S-user
+    if (noteRefs.length > 0) {
+      systemPrompt += `\n\n📋 SAP NOTES FOUND IN SEARCH RESULTS:\nPresent these to the user clearly. Tell them to log in with their S-user at me.sap.com to read the full note content:\n${noteRefs.map(n => `- SAP Note ${n.number}: ${n.url}`).join('\n')}`
+    }
+
+    // BAPI/Function Module questions — hard anti-hallucination enforcement
+    if (isBapiSearch) {
+      systemPrompt += `\n\n⚠️ BAPI/FM ACCURACY RULE: NEVER invent or guess BAPI or Function Module names. Only state names you are 100% certain exist. If uncertain, say "verify in SE37 or SAP API Business Hub" and provide this link: https://api.sap.com`
+    }
+
+    // User Exit / BAdI questions — structured table output + anti-hallucination
+    if (isExitSearch) {
+      systemPrompt += `\n\n⚠️ USER EXIT/BAdI RULE: Format your answer as a markdown table with columns: Exit/BAdI Name | Type | T-code | What It Controls. Only state exits and BAdIs you are certain exist. For verification, direct the user to SE84 in their SAP system (Program > Enhancements > Business Add-Ins or User Exits). NEVER invent exit or BAdI names.`
+    }
+
+        // User context
     if (firstName) {
       systemPrompt += `\n\nConsultant: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
     }
