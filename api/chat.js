@@ -261,7 +261,11 @@ async function streamGPT(systemPrompt, messages, onChunk) {
 async function googleSAPSearch(question, intent = 'SAP_QA') {
   const key = process.env.GOOGLE_CSE_KEY
   const cx = process.env.GOOGLE_CSE_ID
-  if (!key || !cx) return []
+  if (!key || !cx) {
+    console.error('Google CSE: missing key or cx. GOOGLE_CSE_KEY:', !!key, 'GOOGLE_CSE_ID:', !!cx)
+    return []
+  }
+  console.log('Google CSE: searching for:', question.slice(0, 60), 'intent:', intent)
 
   // Helper — run a single CSE query and return mapped items
   async function runCSE(rawQuery, num = 3) {
@@ -335,6 +339,7 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     console.error('Google CSE error:', err.message)
     return []
   }
+  console.log('Google CSE: search complete, results:', results?.length || 0)
 }
 
 // ── 5a. EXTRACT SAP NOTE NUMBERS from search results ─────────────────────────
