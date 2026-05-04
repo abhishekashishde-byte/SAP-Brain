@@ -303,10 +303,15 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
       return results
     }
 
-    // ── ERROR: search SAP Community for solved threads + SAP Help ───────────
+    // ── ERROR: simplified query for better CSE results ───────────────────────
     if (intent === 'ERROR_ANALYSIS') {
-      results = await runCSE(`SAP ${question}`, 5)
-      console.log('Google CSE ERROR_ANALYSIS results:', results.length)
+      // Strip question words to get core search terms
+      const coreQuery = question
+        .replace(/what sap notes are available for/i, '')
+        .replace(/how to fix|how do i|what is|what are/i, '')
+        .trim()
+      results = await runCSE(coreQuery, 5)
+      console.log('Google CSE ERROR_ANALYSIS results:', results.length, 'query:', coreQuery.slice(0,50))
       return results
     }
 
@@ -332,7 +337,9 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     }
 
     // ── DEFAULT: general SAP search ──────────────────────────────────────────
-    results = await runCSE(`SAP ${question}`, 3)
+    const shortQuery = question.replace(/what is|what are|how to|how do i|please explain/gi, '').trim()
+    results = await runCSE(shortQuery.slice(0, 100), 3)
+    console.log('Google CSE DEFAULT results:', results.length)
     return results
 
   } catch (err) {
