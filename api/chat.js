@@ -795,7 +795,15 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
 
     // Gemini search text — inject as primary web context
     if (geminiSearchText) {
-      systemPrompt += `\n\nWEB SEARCH RESULTS (from Google via Gemini — use as primary source):\n${geminiSearchText.slice(0, 2000)}\n\nBase your answer on this search data. Cite sources where relevant.`
+      // Replace Gemini redirect URLs with direct SAP note links where possible
+      const cleanedText = geminiSearchText.replace(
+        /https:\/\/vertexaisearch\.cloud\.google\.com\/grounding-api-redirect\/[^\s\)]+/g,
+        (url) => {
+          // Try to extract note number from surrounding context — will be handled by note extractor
+          return url
+        }
+      )
+      systemPrompt += `\n\nWEB SEARCH RESULTS (from Google via Gemini — use as primary source):\n${cleanedText.slice(0, 2000)}\n\nIMPORTANT: For any SAP Note numbers found above, present them as direct links in this format: https://me.sap.com/notes/NOTENUMBER — replace the Gemini redirect URLs with these direct SAP links. Tell user to log in with their S-user to read the full note.`
     }
 
     // Source links — show to user
@@ -803,8 +811,10 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       systemPrompt += `\n\nSOURCE LINKS:\n${searchResults.map((r, i) => `[${i+1}] ${r.title}\n${r.url}`).join('\n\n')}`
     }
 
-    // SAP Note references — extracted from search results, direct login links for S-user
-    if (noteRefs.length > 0) {
+    // SAP Note anti-hallucination — critical rule
+    if (isNoteSearch || intent === 'ERROR_ANALYSIS') {
+      systemPrompt += `\n\n⚠️ SAP NOTE RULE: NEVER invent or guess SAP Note numbers. Do NOT make up note numbers like 1234567. If you do not have verified note numbers from search results, tell the user to search SAP Support Portal at support.sap.com/notes using these exact search terms: "${lastMsg.slice(0, 80)}". Never present invented note numbers as real.`
+    }
       systemPrompt += `\n\n📋 SAP NOTES FOUND IN SEARCH RESULTS:\nPresent these to the user clearly. Tell them to log in with their S-user at me.sap.com to read the full note content:\n${noteRefs.map(n => `- SAP Note ${n.number}: ${n.url}`).join('\n')}`
     }
 
