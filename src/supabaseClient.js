@@ -9,13 +9,15 @@ export const signOut = () => supabase.auth.signOut()
 
 // Conversations
 export const loadConversations = async (userId) => {
-  const { data, error } = await supabase
-    .from('conversations')
-    .select('*')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-  if (error) throw error
-  return data || []
+  try {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+    if (error) return []
+    return data || []
+  } catch { return [] }
 }
 
 export const createConversation = async (userId, { title, module, topic, messages }) => {
@@ -63,14 +65,16 @@ export const markAsProject = async (convId, fsTitle) => {
 }
 
 export const loadProjects = async (userId) => {
-  const { data, error } = await supabase
-    .from('conversations')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_project', true)
-    .order('fs_generated_at', { ascending: false })
-  if (error) throw error
-  return data || []
+  try {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_project', true)
+      .order('updated_at', { ascending: false })
+    if (error) return []
+    return data || []
+  } catch { return [] }
 }
 
 // Profile
