@@ -4,7 +4,7 @@
 // Claude Sonnet for code analysis only
 // Google CSE for SAP source links (needsSearch=true only)
 
-import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS } from './_shared.js'
+import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callGeminiSearch } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
@@ -303,14 +303,18 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
       return results
     }
 
-    // ── ERROR: simplified query for better CSE results ───────────────────────
+    // ── ERROR: simplified query with fallback ────────────────────────────────
     if (intent === 'ERROR_ANALYSIS') {
-      // Strip question words to get core search terms
       const coreQuery = question
         .replace(/what sap notes are available for/i, '')
         .replace(/how to fix|how do i|what is|what are/i, '')
         .trim()
       results = await runCSE(coreQuery, 5)
+      // Fallback — try even shorter query if no results
+      if (results.length === 0) {
+        const keywords = coreQuery.split(' ').slice(0, 4).join(' ')
+        results = await runCSE(keywords, 5)
+      }
       console.log('Google CSE ERROR_ANALYSIS results:', results.length, 'query:', coreQuery.slice(0,50))
       return results
     }
@@ -700,9 +704,17 @@ export default async function handler(req, res) {
       ? lastMsg // keep code exactly as-is
       : await rewriteQuestion(lastMsg, messages || [])
 
-    // STEP 4 — Google search — resolve BEFORE building prompt so results can be injected
-    // FIORI_REC always searches. Others search only when needsSearch=true.
-    const searchResults = (!isCode && needsSearch) ? await googleSAPSearch(lastMsg, intent) : []
+    // STEP 4 — Web search via Gemini (full web access, no site restrictions)
+    let searchResults = []
+    let geminiSearchText = ''
+    if (!isCode && needsSearch) {
+      const geminiResult = await callGeminiSearch(lastMsg)
+      if (geminiResult && typeof geminiResult === 'object') {
+        searchResults = geminiResult.sources || []
+        geminiSearchText = geminiResult.text || ''
+      }
+      console.log('Search complete — sources:', searchResults.length, 'gemini text:', geminiSearchText.length)
+    }
 
     // Extract SAP Note numbers from search results — build direct login links
     const noteRefs = searchResults.length > 0 ? extractNoteNumbers(searchResults) : []
@@ -781,9 +793,14 @@ Base your output on this document. Reference specific sections.`
 ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}`
     }
 
-    // Search results injected BEFORE model answers — critical for FIORI_REC accuracy
+    // Gemini search text — inject as primary web context
+    if (geminiSearchText) {
+      systemPrompt += `\n\nWEB SEARCH RESULTS (from Google via Gemini — use as primary source):\n${geminiSearchText.slice(0, 2000)}\n\nBase your answer on this search data. Cite sources where relevant.`
+    }
+
+    // Source links — show to user
     if (searchResults.length > 0) {
-      systemPrompt += `\n\nLIVE SEARCH RESULTS (use as primary source where relevant):\n${searchResults.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet || ''}`).join('\n\n')}\nCite these sources when they support your answer. Do not invent information not present in these results.`
+      systemPrompt += `\n\nSOURCE LINKS:\n${searchResults.map((r, i) => `[${i+1}] ${r.title}\n${r.url}`).join('\n\n')}`
     }
 
     // SAP Note references — extracted from search results, direct login links for S-user
