@@ -32,6 +32,7 @@ TEST_CASES     = generate test cases or test script
 GAP_ANALYSIS   = find gaps, missing items, what is incomplete
 WORKSHOP_PLAN  = create workshop plan, agenda, questions for business
 WORKSHOP_TOPICS= what topics to cover for a module/phase/object
+WORKSHOP_PPT   = create a PowerPoint or slide presentation for a workshop on a standard SAP process
 FORMS_SPEC     = SAP output forms: Adobe, SmartForms, NACE, Output Mgmt
 FIORI_REC      = recommend Fiori apps for a process or role
 SLIDE_CONTENT  = create presentation content, slide structure, storyline
@@ -63,6 +64,7 @@ Question: "${question.slice(0, 400)}"
     const isFsKeyword    = /\b(functional spec|FS|create.*spec|write.*spec|generate.*spec|specification for)\b/i.test(question)
     const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
     const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
+    const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop|presentation.*workshop|create.*ppt|make.*ppt|generate.*ppt|build.*ppt)\b/i.test(question)
 
     let intent = result.intent || 'SAP_QA'
     let confidence = typeof result.confidence === 'number' ? result.confidence : 0.7
@@ -71,9 +73,10 @@ Question: "${question.slice(0, 400)}"
     // Hard overrides — regex is more reliable than LLM for these
     if (isCode)        { intent = 'CODE_ANALYSIS';  confidence = 1.0 }
     if (isError)       { intent = 'ERROR_ANALYSIS'; confidence = 1.0 }
-    if (isFsKeyword && !isCode && !isError)   { intent = 'FS_SPEC';    confidence = 0.95 }
-    if (isTestKeyword && !isCode && !isError) { intent = 'TEST_CASES'; confidence = 0.95 }
-    if (isFioriKeyword && !isCode && !isError){ intent = 'FIORI_REC';  confidence = 0.95 }
+    if (isFsKeyword && !isCode && !isError)   { intent = 'FS_SPEC';       confidence = 0.95 }
+    if (isTestKeyword && !isCode && !isError) { intent = 'TEST_CASES';    confidence = 0.95 }
+    if (isFioriKeyword && !isCode && !isError){ intent = 'FIORI_REC';     confidence = 0.95 }
+    if (isWorkshopPPT && !isCode && !isError) { intent = 'WORKSHOP_PPT';  confidence = 1.0  }
 
     // ── Low confidence fallback — use SAP_QA rather than force wrong template ──
     // Deliverable intents need high confidence — wrong template produces useless output
@@ -809,7 +812,7 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     const modelUsed = usesSonnet ? 'claude-sonnet' : 'gpt4o'
 
     // Deliverable type — stored on conversation for UI filtering
-    const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC'])
+    const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT'])
     const deliverableType = DELIVERABLE_TYPES.has(intent) ? intent : 'NONE'
 
     if (!fullAnswer?.trim()) {
@@ -824,11 +827,15 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     }
 
     // Detect FS completion signal — triggers Word doc download on frontend
-    const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE')
-    const cleanAnswer = fsComplete ? fullAnswer.replace(/WANI_FS_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
+    const fsComplete = cleanAnswer.includes('WANI_FS_COMPLETE') || fullAnswer.includes('WANI_FS_COMPLETE')
 
-    send({ type: 'done', model: modelUsed, full: cleanAnswer, deliverableType,
-      ...(fsComplete ? { fsComplete: true, fsText: cleanAnswer } : {}) })
+    // Detect PPT completion signal — triggers PowerPoint generation on frontend
+    const pptComplete = fullAnswer.includes('WANI_PPT_COMPLETE')
+    const cleanPPTAnswer = pptComplete ? fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
+
+    send({ type: 'done', model: modelUsed, full: pptComplete ? cleanPPTAnswer : cleanAnswer, deliverableType,
+      ...(fsComplete ? { fsComplete: true, fsText: cleanAnswer } : {}),
+      ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}) })
 
   } catch (err) {
     console.error('HANDLER ERROR:', err.message)
