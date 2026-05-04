@@ -827,9 +827,9 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     }
 
     // Detect FS completion signal — triggers Word doc download on frontend
-    const fsComplete = cleanAnswer.includes('WANI_FS_COMPLETE') || fullAnswer.includes('WANI_FS_COMPLETE')
+    const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE')
+    const cleanAnswer = fsComplete ? fullAnswer.replace(/WANI_FS_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
 
-    // Detect PPT completion signal — triggers PowerPoint generation on frontend
     const pptComplete = fullAnswer.includes('WANI_PPT_COMPLETE')
     const cleanPPTAnswer = pptComplete ? fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
 
