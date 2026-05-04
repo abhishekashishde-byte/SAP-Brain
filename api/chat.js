@@ -108,6 +108,7 @@ Question: "${question.slice(0, 400)}"
       needsSearch,
       isBapiSearch,
       isExitSearch,
+      isNoteSearch,
     }
   } catch {
     return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false }
@@ -687,7 +688,7 @@ export default async function handler(req, res) {
       loadGlobalCorrections().catch(() => []),
     ])
 
-    const { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError, isBapiSearch, isExitSearch } = classification
+    const { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError, isBapiSearch, isExitSearch, isNoteSearch } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, confidence, secondaryIntent, needsSearch,
