@@ -736,7 +736,7 @@ export default async function handler(req, res) {
       loadGlobalCorrections().catch(() => []),
     ])
 
-    const { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError, isBapiSearch, isExitSearch, isNoteSearch } = classification
+    let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError, isBapiSearch, isExitSearch, isNoteSearch } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, confidence, secondaryIntent, needsSearch,
