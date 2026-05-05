@@ -36,6 +36,7 @@ WORKSHOP_PPT   = create a PowerPoint or slide presentation for a workshop on a s
 FORMS_SPEC     = SAP output forms: Adobe, SmartForms, NACE, Output Mgmt
 FIORI_REC      = recommend Fiori apps for a process or role
 SLIDE_CONTENT  = create presentation content, slide structure, storyline
+CUSTOMIZING    = question about SAP SPRO configuration, customizing paths, where to configure something in SPRO, IMG activities, configuration tables, how to set up order types, movement types, document types, pricing, scheduling parameters
 GENERAL        = anything else
 
 Also detect secondary intents if the question clearly asks for multiple things.
@@ -65,6 +66,7 @@ Question: "${question.slice(0, 400)}"
     const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
     const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
     const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop|presentation.*workshop|create.*ppt|make.*ppt|generate.*ppt|build.*ppt)\b/i.test(question)
+    const isCustomizing  = /\b(spro|customiz|IMG|where.*config|config.*where|how.*config|configure.*path|customising|t-code.*config|configuration.*path|where.*set up|where.*setup|where.*maintain|where can i|where do i.*config)\b/i.test(question)
 
     let intent = result.intent || 'SAP_QA'
     let confidence = typeof result.confidence === 'number' ? result.confidence : 0.7
@@ -77,6 +79,7 @@ Question: "${question.slice(0, 400)}"
     if (isTestKeyword && !isCode && !isError) { intent = 'TEST_CASES';    confidence = 0.95 }
     if (isFioriKeyword && !isCode && !isError){ intent = 'FIORI_REC';     confidence = 0.95 }
     if (isWorkshopPPT && !isCode && !isError) { intent = 'WORKSHOP_PPT';  confidence = 1.0  }
+    if (isCustomizing && !isCode && !isError)  { intent = 'CUSTOMIZING';  confidence = 0.95 }
 
     // ── Low confidence fallback — use SAP_QA rather than force wrong template ──
     // Deliverable intents need high confidence — wrong template produces useless output
@@ -939,7 +942,7 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     }
 
     // Deliverable type — stored on conversation for UI filtering
-    const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT'])
+    const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING'])
     const deliverableType = DELIVERABLE_TYPES.has(intent) ? intent : 'NONE'
 
     if (!fullAnswer?.trim()) {
