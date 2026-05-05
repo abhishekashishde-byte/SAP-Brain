@@ -626,7 +626,7 @@ function topFor(slot){return slot===0?0:CARD_H+(slot-1)*PEEK}
 function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
-function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
+function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark }) {
   const cardRefs=useRef([]),slotsRef=useRef(MODULE_STACK.map((_,i)=>i)),busyRef=useRef(false)
   const [dotIdx,setDotIdx]=useState(0)
   const ty0=useRef(0),tdrag=useRef(false),my0=useRef(0),mdrag=useRef(false),mdown=useRef(false)
@@ -657,6 +657,70 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, t, dark }) {
       <div style={{ position:'relative',zIndex:1,textAlign:'center',marginBottom:28 }}>
         <div style={{ fontFamily:"'Inter',sans-serif",fontSize:21,fontWeight:600,color:t.text,marginBottom:5 }}>What would you like to explore?</div>
         <p style={{ fontSize:11,color:t.text3 }}>click card · swipe to cycle modules</p>
+      </div>
+
+      {/* ── QUICK LAUNCHER TILES ─────────────────────────────────────────── */}
+      <div style={{ position:'relative',zIndex:1,width:'min(100%,420px)',marginBottom:24 }}>
+        <div style={{ fontSize:10,fontWeight:700,color:t.text4,letterSpacing:0.9,textTransform:'uppercase',marginBottom:10,textAlign:'center' }}>Quick Launch</div>
+        <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10 }}>
+          {[
+            { icon:'/icon-fs.png',         label:'Write FS',        action:'fs'       },
+            { icon:'/icon-customizing.png', label:'Customizing',     action:'customizing' },
+            { icon:'/icon-code.png',        label:'Analyse Code',    action:'code'     },
+            { icon:'/icon-workshop.png',    label:'Workshop PPT',    action:'workshop' },
+            { icon:'/icon-fiori.png',       label:'Fiori Apps',      action:'fiori'    },
+            { icon:'/icon-cloud.png',       label:'SAP Public Cloud',action:'cloud'    },
+          ].map(tile => (
+            <button key={tile.action}
+              onClick={() => onQuickLaunch(tile.action)}
+              style={{
+                background: dark
+                  ? 'linear-gradient(145deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))'
+                  : 'linear-gradient(145deg,#ffffff,#f4f4f8)',
+                border: `1px solid ${dark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.07)'}`,
+                borderRadius:16,
+                padding:'14px 8px 12px',
+                display:'flex',flexDirection:'column',alignItems:'center',gap:8,
+                cursor:'pointer',
+                transition:'transform 0.18s ease, box-shadow 0.18s ease',
+                boxShadow: dark
+                  ? '0 4px 16px rgba(0,0,0,0.3)'
+                  : '0 2px 12px rgba(0,0,0,0.08)',
+              }}
+              onMouseEnter={e=>{
+                e.currentTarget.style.transform='translateY(-3px)'
+                e.currentTarget.style.boxShadow=dark
+                  ?'0 8px 24px rgba(79,70,229,0.25)'
+                  :'0 6px 20px rgba(79,70,229,0.15)'
+              }}
+              onMouseLeave={e=>{
+                e.currentTarget.style.transform='translateY(0)'
+                e.currentTarget.style.boxShadow=dark
+                  ?'0 4px 16px rgba(0,0,0,0.3)'
+                  :'0 2px 12px rgba(0,0,0,0.08)'
+              }}
+            >
+              {/* Icon — mix-blend-mode multiply removes white background on light, screen on dark */}
+              <div style={{ width:52,height:52,display:'flex',alignItems:'center',justifyContent:'center',position:'relative' }}>
+                <img
+                  src={tile.icon}
+                  alt={tile.label}
+                  style={{
+                    width:52,height:52,objectFit:'contain',
+                    mixBlendMode: dark ? 'screen' : 'multiply',
+                    filter: dark ? 'brightness(1.1)' : 'none',
+                  }}
+                />
+              </div>
+              <span style={{
+                fontSize:10,fontWeight:600,
+                color:t.text2,
+                textAlign:'center',lineHeight:1.3,
+                fontFamily:"'Inter','DM Sans',sans-serif",
+              }}>{tile.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
       <div className="hs-card-wrap" style={{ position:'relative',zIndex:1,width:'min(100%,420px)',height:`${CARD_H+20}px`,touchAction:'none',cursor:'pointer',flexShrink:0,overflow:'hidden',borderRadius:22 }}
         onClick={e=>{if(e.target.closest('.hs-open-btn')||e.target.closest('.hs-topic'))return;advance()}}
@@ -766,6 +830,7 @@ export default function Brain({ session }) {
   const [input, setInput]                 = useState('')
   const [attachedCode, setAttachedCode]   = useState(null) // { content, lines, language }
   const [expandedCode, setExpandedCode]   = useState(false)
+  const [quickLaunchMessages, setQuickLaunchMessages] = useState([])
   const [isLoading, setIsLoading]         = useState(false)
   const [isStreaming, setIsStreaming]      = useState(false)
   const [streamingText, setStreamingText] = useState('')
@@ -1070,10 +1135,74 @@ export default function Brain({ session }) {
     setInput('')
     setAttachedCode(null)
     setExpandedCode(false)
+    setQuickLaunchMessages([])
     if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } 
     else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) }
     try { window.history.pushState({ view:'chat',convId,mod,topic },'',window.location.pathname) } catch(e){}
     if(isMobileWidth())setSidebarOpen(false) 
+  }
+
+  // Quick launcher — opens new chat with pre-set intent and opening message from Wani
+  const handleQuickLaunch = (action) => {
+    const configs = {
+      fs: {
+        mod: null, topic: 'FS Development',
+        openingMsg: `Hi ${profile?.name?.split(' ')[0] || session?.user?.email?.split('@')[0] || 'there'}! I'm ready to help you build a Functional Specification. To get started — what is the FS about? Tell me the business requirement or the Z-program/report you need to specify, and we'll build it together step by step.`
+      },
+      customizing: {
+        mod: null, topic: 'Customizing',
+        openingMsg: `Hi ${profile?.name?.split(' ')[0] || session?.user?.email?.split('@')[0] || 'there'}! I can guide you through any SAP customizing configuration. Which module are you working in — PP, PM, MM, SD, QM, CS, PS, WM or IM? And what do you need to configure?`
+      },
+      code: {
+        mod: null, topic: 'ABAP Analysis',
+        openingMsg: null, // B behaviour — pre-fill input
+        inputText: 'Analyse this ABAP code:\n\n'
+      },
+      workshop: {
+        mod: null, topic: 'Workshop PPT',
+        openingMsg: null, // already has scoping flow
+        inputText: 'I need a workshop PPT on '
+      },
+      fiori: {
+        mod: null, topic: 'Fiori Apps',
+        openingMsg: null, // B behaviour
+        inputText: 'Which Fiori app should I use for '
+      },
+      cloud: {
+        mod: null, topic: 'SAP Public Cloud',
+        openingMsg: `Hi ${profile?.name?.split(' ')[0] || session?.user?.email?.split('@')[0] || 'there'}! I can help with SAP Public Cloud. Which product are you working with — S/4HANA Public Cloud, SAP BTP, SuccessFactors, Ariba, or another? And what do you need help with?`
+      },
+    }
+
+    const config = configs[action]
+    if (!config) return
+
+    // Clear state and go to chat
+    setFilterDropdownOpen(false)
+    setAttachedCode(null)
+    setExpandedCode(false)
+    setActiveConvId(null)
+    setBrowseModule(config.mod)
+    setBrowseTopic(config.topic)
+    setView('chat')
+    try { window.history.pushState({ view:'chat', mod:config.mod, topic:config.topic },'',window.location.pathname) } catch(e){}
+    if(isMobileWidth()) setSidebarOpen(false)
+
+    if (config.openingMsg) {
+      // A behaviour — Wani speaks first
+      setInput('')
+      // Inject opening message as assistant message after a brief delay
+      setTimeout(() => {
+        const openingUserMsg = { role:'user', content:`__QUICK_LAUNCH_${action.toUpperCase()}__`, _display:'', _system:true }
+        const openingAssistantMsg = { role:'assistant', content: config.openingMsg, _quickLaunch: true }
+        // We directly set messages via a special state trigger
+        setQuickLaunchMessages([openingAssistantMsg])
+      }, 100)
+    } else if (config.inputText) {
+      // B behaviour — pre-fill input
+      setInput(config.inputText)
+      setTimeout(() => inputRef.current?.focus(), 200)
+    }
   }
 
   const handleSend = async (overrideText) => {
@@ -1646,7 +1775,7 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)}/>}
+        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch}/>}
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat'&&(
@@ -1654,6 +1783,13 @@ export default function Brain({ session }) {
             <div ref={chatScrollRef} className="chat-messages" style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
               <div style={{ maxWidth:720,margin:'0 auto' }}>
                 {messages.length===0?(
+                  quickLaunchMessages.length > 0 ? (
+                    <div style={{ animation:'fadeIn 0.4s ease', padding:'20px 0' }}>
+                      {quickLaunchMessages.map((msg, i) => (
+                        <MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                      ))}
+                    </div>
+                  ) : (
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'40px 20px' }}>
                     <WaniLogo size={window.innerWidth<768?48:80} dark={dark}/>
                     <div style={{ marginTop:16,marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:40} dark={dark}/></div>
@@ -1665,6 +1801,7 @@ export default function Brain({ session }) {
                       </div>
                     )}
                   </div>
+                  )
                 ):(
                   <>
                     {messages.map((msg,i)=>{
