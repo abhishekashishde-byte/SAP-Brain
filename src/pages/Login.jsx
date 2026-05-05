@@ -1,34 +1,86 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-// ── Logo components — using real PNG assets
 export const WaniLogo = ({ size = 36, dark = false }) => (
-  <img
-    src={dark ? '/logo-w-dark.png' : '/logo-w-light.png'}
-    alt="Wani"
-    style={{ height: size, width: 'auto', display:'block' }}
-  />
+  <img src={dark ? '/logo-w-dark.png' : '/logo-w-light.png'} alt="Wani"
+    style={{ height: size, width: 'auto', display:'block' }} />
 )
 
 export const WaniWordmark = ({ height = 28, dark = false }) => (
-  <img
-    src={dark ? '/logo-wordmark-dark.png' : '/logo-wordmark-light.png'}
-    alt="wani"
-    style={{ height: height, width:'auto', display:'block' }}
-  />
+  <img src={dark ? '/logo-wordmark-dark.png' : '/logo-wordmark-light.png'} alt="wani"
+    style={{ height: height, width:'auto', display:'block' }} />
 )
 
-// ── Shared styles
-const labelStyle = { fontSize:11, fontWeight:700, color:'#8A8A8E', letterSpacing:0.8, textTransform:'uppercase', display:'block', marginBottom:6 }
-const errorBox   = { marginTop:10, padding:'8px 12px', background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:8, fontSize:12, color:'#DC2626' }
-const successBox = { marginTop:10, padding:'8px 12px', background:'#F0FDF4', border:'1px solid #BBF7D0', borderRadius:8, fontSize:12, color:'#15803D', lineHeight:1.5 }
-const Spinner    = () => <div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
+const Spinner = () => (
+  <div style={{ width:18, height:18, border:'2.5px solid rgba(255,255,255,0.35)',
+    borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
+)
+
+function GoogleButton({ onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      width:'100%', padding:'12px 16px',
+      background:'#fff', border:'1.5px solid #E2E8F0',
+      borderRadius:12, cursor:'pointer',
+      display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+      fontSize:14, fontWeight:500, color:'#1a1a2e',
+      fontFamily:"'DM Sans',sans-serif",
+      boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
+      transition:'all 0.18s',
+    }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow='0 3px 12px rgba(0,0,0,0.1)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.06)'}
+    >
+      <svg width="18" height="18" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Continue with Google
+    </button>
+  )
+}
+
+function Divider() {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:12, margin:'4px 0' }}>
+      <div style={{ flex:1, height:1, background:'#E2E8F0' }}/>
+      <span style={{ fontSize:12, color:'#94A3B8', fontWeight:500 }}>or</span>
+      <div style={{ flex:1, height:1, background:'#E2E8F0' }}/>
+    </div>
+  )
+}
+
+function Input({ type, value, onChange, onKeyDown, placeholder, label }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+      <label style={{ fontSize:11, fontWeight:700, color:'#64748B',
+        letterSpacing:0.7, textTransform:'uppercase' }}>{label}</label>
+      <input type={type} value={value} onChange={onChange} onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        style={{
+          width:'100%', padding:'11px 14px', boxSizing:'border-box',
+          border:'1.5px solid #E2E8F0', borderRadius:10,
+          fontSize:14, color:'#1a1a2e', background:'#FAFBFC',
+          fontFamily:"'DM Sans',sans-serif", outline:'none',
+          transition:'border-color 0.18s, box-shadow 0.18s',
+        }}
+        onFocus={e => { e.target.style.borderColor='#4F46E5'; e.target.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)' }}
+        onBlur={e => { e.target.style.borderColor='#E2E8F0'; e.target.style.boxShadow='none' }}
+      />
+    </div>
+  )
+}
 
 function SignInForm({ onSwitch }) {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
+
+  const handleGoogle = () =>
+    supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
 
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) return setError('Please enter email and password.')
@@ -38,50 +90,39 @@ function SignInForm({ onSwitch }) {
     if (error) setError('Incorrect email or password.')
   }
 
-  const handleGoogle = async () => {
-    await supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
-  }
-
   return (
-    <div style={{ width:'100%', maxWidth:300 }}>
-      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#1C1C1E', textAlign:'center', marginBottom:4 }}>Sign In</div>
-      <p style={{ fontSize:12, color:'#AEAEB2', textAlign:'center', marginBottom:20 }}>Welcome back to Wani</p>
-      <button onClick={handleGoogle} style={{
-        width:'100%', padding:'11px', border:'1.5px solid #E8E3D5', borderRadius:12,
-        background:'#fff', color:'#3A3A3C', fontSize:13, fontWeight:500,
-        fontFamily:"'DM Sans',sans-serif", cursor:'pointer',
-        display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-        marginBottom:16, transition:'all 0.2s', boxShadow:'2px 2px 6px rgba(0,0,0,0.06)',
-      }}
-        onMouseEnter={e=>e.currentTarget.style.background='#FAFAF8'}
-        onMouseLeave={e=>e.currentTarget.style.background='#fff'}
-      >
-        <svg width="18" height="18" viewBox="0 0 48 48">
-          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        </svg>
-        Continue with Google
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <GoogleButton onClick={handleGoogle}/>
+      <Divider/>
+      <Input label="Email" type="email" value={email}
+        onChange={e => { setEmail(e.target.value); setError('') }}
+        onKeyDown={e => e.key==='Enter' && handleSignIn()}
+        placeholder="you@company.com"/>
+      <Input label="Password" type="password" value={password}
+        onChange={e => { setPassword(e.target.value); setError('') }}
+        onKeyDown={e => e.key==='Enter' && handleSignIn()}
+        placeholder="••••••••"/>
+      {error && (
+        <div style={{ padding:'10px 14px', background:'#FEF2F2', border:'1px solid #FECACA',
+          borderRadius:8, fontSize:13, color:'#DC2626' }}>{error}</div>
+      )}
+      <button onClick={handleSignIn} disabled={loading} style={{
+        width:'100%', padding:'13px', border:'none', borderRadius:12,
+        background: loading ? '#94A3B8' : 'linear-gradient(135deg,#4F46E5,#7C3AED)',
+        color:'#fff', fontSize:14, fontWeight:700,
+        fontFamily:"'DM Sans',sans-serif", cursor: loading ? 'not-allowed' : 'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+        boxShadow: loading ? 'none' : '0 4px 14px rgba(79,70,229,0.35)',
+        transition:'all 0.2s',
+      }}>
+        {loading ? <Spinner/> : 'Sign In →'}
       </button>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-        <div style={{ flex:1, height:1, background:'#E8E3D5' }}/><span style={{ fontSize:11, color:'#AEAEB2' }}>or</span><div style={{ flex:1, height:1, background:'#E8E3D5' }}/>
-      </div>
-      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-        <div><label style={labelStyle}>Email</label>
-          <input className="nm-input" type="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}} onKeyDown={e=>e.key==='Enter'&&handleSignIn()} placeholder="you@company.com"/>
-        </div>
-        <div><label style={labelStyle}>Password</label>
-          <input className="nm-input" type="password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}} onKeyDown={e=>e.key==='Enter'&&handleSignIn()} placeholder="••••••••"/>
-        </div>
-      </div>
-      {error && <div style={errorBox}>{error}</div>}
-      <button className="grad-btn" onClick={handleSignIn} disabled={loading} style={{ marginTop:20 }}>
-        {loading ? <Spinner/> : 'SIGN IN →'}
-      </button>
-      <div style={{ textAlign:'center', marginTop:14, fontSize:12, color:'#AEAEB2' }}>
-        No account? <button className="ghost-link" onClick={onSwitch}>Sign up free</button>
-      </div>
+      <p style={{ textAlign:'center', fontSize:13, color:'#94A3B8', margin:0 }}>
+        No account?{' '}
+        <button onClick={onSwitch} style={{ background:'none', border:'none', cursor:'pointer',
+          color:'#4F46E5', fontWeight:600, fontSize:13, fontFamily:"'DM Sans',sans-serif",
+          textDecoration:'underline', textUnderlineOffset:3 }}>Sign up free</button>
+      </p>
     </div>
   )
 }
@@ -95,251 +136,127 @@ function SignUpForm({ onSwitch }) {
   const [error, setError]       = useState('')
   const [success, setSuccess]   = useState('')
 
+  const handleGoogle = () =>
+    supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
+
   const handleSignUp = async () => {
     if (!email.trim() || !password.trim()) return setError('Please fill in all fields.')
     if (password.length < 6) return setError('Password must be at least 6 characters.')
     if (password !== confirm) return setError('Passwords do not match.')
     setLoading(true); setError('')
-    const { error } = await supabase.auth.signUp({ email:email.trim(), password, options:{ data:{ name:name.trim() } } })
+    const { error } = await supabase.auth.signUp({
+      email: email.trim(), password,
+      options: { data: { name: name.trim() } }
+    })
     setLoading(false)
     if (error) setError(error.message)
-    else setSuccess('Account created! You can now sign in.')
-  }
-
-  const handleGoogle = async () => {
-    await supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
+    else setSuccess('Account created! Check your email to confirm, then sign in.')
   }
 
   return (
-    <div style={{ width:'100%', maxWidth:300 }}>
-      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#1C1C1E', textAlign:'center', marginBottom:4 }}>Create Account</div>
-      <p style={{ fontSize:12, color:'#AEAEB2', textAlign:'center', marginBottom:16 }}>Your private SAP knowledge base</p>
-      <button onClick={handleGoogle} style={{
-        width:'100%', padding:'11px', border:'1.5px solid #E8E3D5', borderRadius:12,
-        background:'#fff', color:'#3A3A3C', fontSize:13, fontWeight:500,
-        fontFamily:"'DM Sans',sans-serif", cursor:'pointer',
-        display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-        marginBottom:14, transition:'all 0.2s', boxShadow:'2px 2px 6px rgba(0,0,0,0.06)',
-      }}
-        onMouseEnter={e=>e.currentTarget.style.background='#FAFAF8'}
-        onMouseLeave={e=>e.currentTarget.style.background='#fff'}
-      >
-        <svg width="18" height="18" viewBox="0 0 48 48">
-          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        </svg>
-        Continue with Google
+    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      <GoogleButton onClick={handleGoogle}/>
+      <Divider/>
+      <Input label="Name" type="text" value={name}
+        onChange={e => { setName(e.target.value); setError('') }}
+        placeholder="Your name"/>
+      <Input label="Email" type="email" value={email}
+        onChange={e => { setEmail(e.target.value); setError('') }}
+        placeholder="you@company.com"/>
+      <Input label="Password" type="password" value={password}
+        onChange={e => { setPassword(e.target.value); setError('') }}
+        placeholder="Min. 6 characters"/>
+      <Input label="Confirm Password" type="password" value={confirm}
+        onChange={e => { setConfirm(e.target.value); setError('') }}
+        onKeyDown={e => e.key==='Enter' && handleSignUp()}
+        placeholder="Repeat password"/>
+      {error && (
+        <div style={{ padding:'10px 14px', background:'#FEF2F2', border:'1px solid #FECACA',
+          borderRadius:8, fontSize:13, color:'#DC2626' }}>{error}</div>
+      )}
+      {success && (
+        <div style={{ padding:'10px 14px', background:'#F0FDF4', border:'1px solid #BBF7D0',
+          borderRadius:8, fontSize:13, color:'#15803D', lineHeight:1.6 }}>{success}</div>
+      )}
+      <button onClick={handleSignUp} disabled={loading} style={{
+        width:'100%', padding:'13px', border:'none', borderRadius:12,
+        background: loading ? '#94A3B8' : 'linear-gradient(135deg,#4F46E5,#7C3AED)',
+        color:'#fff', fontSize:14, fontWeight:700,
+        fontFamily:"'DM Sans',sans-serif", cursor: loading ? 'not-allowed' : 'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+        boxShadow: loading ? 'none' : '0 4px 14px rgba(79,70,229,0.35)',
+        transition:'all 0.2s',
+      }}>
+        {loading ? <Spinner/> : 'Create Account →'}
       </button>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
-        <div style={{ flex:1, height:1, background:'#E8E3D5' }}/><span style={{ fontSize:11, color:'#AEAEB2' }}>or</span><div style={{ flex:1, height:1, background:'#E8E3D5' }}/>
-      </div>
-      <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
-        <div><label style={labelStyle}>Name</label><input className="nm-input" type="text" value={name} onChange={e=>{setName(e.target.value);setError('')}} placeholder="Your name"/></div>
-        <div><label style={labelStyle}>Email</label><input className="nm-input" type="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}} placeholder="you@company.com"/></div>
-        <div><label style={labelStyle}>Password</label><input className="nm-input" type="password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}} placeholder="Min. 6 characters"/></div>
-        <div><label style={labelStyle}>Confirm Password</label><input className="nm-input" type="password" value={confirm} onChange={e=>{setConfirm(e.target.value);setError('')}} onKeyDown={e=>e.key==='Enter'&&handleSignUp()} placeholder="Repeat password"/></div>
-      </div>
-      {error   && <div style={errorBox}>{error}</div>}
-      {success && <div style={successBox}>{success}</div>}
-      <button className="grad-btn" onClick={handleSignUp} disabled={loading} style={{ marginTop:14 }}>
-        {loading ? <Spinner/> : 'CREATE ACCOUNT →'}
-      </button>
-      <div style={{ textAlign:'center', marginTop:10, fontSize:12, color:'#AEAEB2' }}>
-        Have an account? <button className="ghost-link" onClick={onSwitch}>Sign in</button>
-      </div>
+      <p style={{ textAlign:'center', fontSize:13, color:'#94A3B8', margin:0 }}>
+        Have an account?{' '}
+        <button onClick={onSwitch} style={{ background:'none', border:'none', cursor:'pointer',
+          color:'#4F46E5', fontWeight:600, fontSize:13, fontFamily:"'DM Sans',sans-serif",
+          textDecoration:'underline', textUnderlineOffset:3 }}>Sign in</button>
+      </p>
     </div>
   )
 }
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false)
-  // Aggressive mobile detection — check multiple signals
-  // Android WebView with useWideViewPort can report wrong innerWidth
-  const isMobile = (
-    window.innerWidth <= 768 ||
-    window.screen.width <= 768 ||
-    /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ||
-    ('ontouchstart' in window)
-  )
 
   return (
     <div style={{
-      minHeight:'100dvh', display:'flex',
-      alignItems: isMobile ? 'flex-start' : 'center',
-      justifyContent:'center', overflowY:'auto',
-      background:'linear-gradient(135deg,#F0EDE8 0%,#E8E3DA 50%,#F0EDE8 100%)',
-      fontFamily:"'DM Sans',sans-serif", padding: isMobile ? '0' : '20px',
-      WebkitOverflowScrolling:'touch', position:'relative', zIndex:1,
+      minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center',
+      background:'linear-gradient(135deg,#F8F7FF 0%,#EEF2FF 50%,#F0F4FF 100%)',
+      fontFamily:"'DM Sans',sans-serif", padding:'20px',
+      position:'relative', overflow:'hidden',
     }}>
       <style>{`
-        @keyframes slideUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes floatA{0%,100%{transform:translate(0,0)}50%{transform:translate(30px,-25px)}}
-        @keyframes floatB{0%,100%{transform:translate(0,0)}50%{transform:translate(-25px,20px)}}
-        @keyframes floatC{0%,100%{transform:translate(0,0)}50%{transform:translate(15px,25px)}}
-        .nm-input{width:100%;padding:11px 14px;box-sizing:border-box;background:#EEE9E0;border:none;border-radius:12px;font-size:13px;color:#1C1C1E;font-family:'DM Sans',sans-serif;box-shadow:inset 3px 3px 7px rgba(0,0,0,0.13),inset -2px -2px 5px rgba(255,255,255,0.75);outline:none;transition:box-shadow 0.2s;}
-        .nm-input:focus{box-shadow:inset 4px 4px 9px rgba(0,0,0,0.15),inset -2px -2px 5px rgba(255,255,255,0.75),0 0 0 2px rgba(200,80,192,0.22);}
-        .nm-input::placeholder{color:#AEAEB2;}
-        .grad-btn{width:100%;padding:13px;border:none;border-radius:12px;background:linear-gradient(135deg,#C850C0,#FF6B35,#FFCC70);color:#fff;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;box-shadow:0 4px 16px rgba(200,80,192,0.3);transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px;letter-spacing:0.3px;}
-        .grad-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 22px rgba(200,80,192,0.4);}
-        .grad-btn:disabled{opacity:0.55;cursor:not-allowed;}
-        .ghost-link{background:none;border:none;cursor:pointer;color:#C850C0;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;text-decoration:underline;text-underline-offset:3px;}
-        .ghost-link:hover{opacity:0.72;}
-        .panel-btn{padding:10px 28px;background:transparent;border:2px solid rgba(255,255,255,0.6);border-radius:24px;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.6px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.2s;}
-        .panel-btn:hover{background:rgba(255,255,255,0.15);transform:translateY(-1px);}
-        /* Android WebView app — applied only when running inside Wani Android app */
-        .android-app .login-blobs{display:none!important;}
-        .android-app .login-card{height:auto!important;overflow:visible!important;}
-        .android-app .navy-panel{position:relative!important;left:auto!important;top:auto!important;width:100%!important;min-height:160px!important;border-radius:16px 16px 0 0!important;}
-        .android-app .form-panel{position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;opacity:1!important;pointer-events:all!important;height:auto!important;overflow:visible!important;display:block!important;padding:28px 24px 48px!important;}
-        .android-app{overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;}
-        @media(max-width:640px){
-          /* Hide animated blobs on mobile — they block touch events in Chrome */
-          .login-blobs{display:none!important;}
-          /* Card: auto height, no overflow clip, full width */
-          .login-card{
-            flex-direction:column!important;
-            height:auto!important;
-            min-height:auto!important;
-            width:100%!important;
-            overflow:visible!important;
-            max-width:100%!important;
-          }
-          /* Navy panel: stacks on top, fixed height, no absolute positioning */
-          .navy-panel{
-            width:100%!important;
-            min-height:180px!important;
-            max-height:220px!important;
-            position:relative!important;
-            left:auto!important;
-            top:auto!important;
-            bottom:auto!important;
-            border-radius:16px 16px 0 0!important;
-            order:-1;
-          }
-          /* Form panel: full width, relative position, fully visible, scrollable */
-          .form-panel{
-            width:100%!important;
-            position:relative!important;
-            top:auto!important;
-            left:auto!important;
-            right:auto!important;
-            bottom:auto!important;
-            opacity:1!important;
-            pointer-events:all!important;
-            padding:28px 24px 48px!important;
-            overflow:visible!important;
-            height:auto!important;
-            min-height:auto!important;
-            display:block!important;
-            align-items:unset!important;
-            justify-content:unset!important;
-          }
-          /* Bigger inputs — prevents iOS zoom on focus */
-          .nm-input{font-size:16px!important;padding:13px 14px!important;}
-          .nm-input::placeholder{font-size:16px!important;}
-          .grad-btn{font-size:15px!important;padding:15px!important;}
-          .ghost-link{font-size:15px!important;}
-        }
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+        @keyframes spin { to { transform:rotate(360deg) } }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(20px,-30px)} }
+        @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-25px,20px)} }
       `}</style>
 
-      {/* Animated blobs */}
-      <div className="login-blobs" style={{ position:'fixed', inset:0, pointerEvents:'none', overflow:'hidden', touchAction:'none', zIndex:0 }}>
-        <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.12) 0%,transparent 70%)', top:'-5%', left:'5%', animation:'floatA 9s ease-in-out infinite' }}/>
-        <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.1) 0%,transparent 70%)', bottom:'5%', right:'5%', animation:'floatB 11s ease-in-out infinite' }}/>
-        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,204,112,0.1) 0%,transparent 70%)', top:'40%', right:'20%', animation:'floatC 7s ease-in-out infinite' }}/>
+      {/* Background blobs */}
+      <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0 }}>
+        <div style={{ position:'absolute', width:600, height:600, borderRadius:'50%',
+          background:'radial-gradient(circle,rgba(79,70,229,0.08) 0%,transparent 70%)',
+          top:'-10%', left:'-10%', animation:'float1 12s ease-in-out infinite' }}/>
+        <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%',
+          background:'radial-gradient(circle,rgba(124,58,237,0.07) 0%,transparent 70%)',
+          bottom:'-10%', right:'-5%', animation:'float2 15s ease-in-out infinite' }}/>
       </div>
 
       {/* Card */}
-      <div className="login-card" style={{
-        position:'relative', width: isMobile ? '100%' : 840, maxWidth:'100%',
-        height: isMobile ? 'auto' : 520,
-        minHeight: isMobile ? '100dvh' : 'unset',
-        borderRadius: isMobile ? 0 : 24,
-        overflow: isMobile ? 'visible' : 'hidden',
-        display:'flex', flexDirection: isMobile ? 'column' : 'row',
-        background:'#EEE9E0',
-        boxShadow: isMobile ? 'none' : '20px 20px 52px rgba(0,0,0,0.13),-8px -8px 24px rgba(255,255,255,0.84)',
-        animation:'slideUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards',
+      <div style={{
+        position:'relative', zIndex:1,
+        width:'100%', maxWidth:420,
+        background:'#ffffff',
+        borderRadius:20,
+        boxShadow:'0 8px 40px rgba(79,70,229,0.12), 0 1px 3px rgba(0,0,0,0.06)',
+        padding:'36px 36px 32px',
+        animation:'fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) forwards',
       }}>
-        {/* Sign In form — LEFT side always */}
-        <div className="form-panel" style={{
-          position: isMobile ? 'relative' : 'absolute',
-          top: isMobile ? 'auto' : 0,
-          bottom: isMobile ? 'auto' : 0,
-          left: isMobile ? 'auto' : 0,
-          width: isMobile ? '100%' : '55%',
-          display: isMobile ? (isSignUp ? 'none' : 'block') : 'flex',
-          alignItems:'center', justifyContent:'center',
-          padding: isMobile ? '28px 24px 48px' : '32px 44px', zIndex:1,
-          opacity: (!isMobile && isSignUp) ? 0 : 1,
-          transition:'opacity 0.25s',
-          pointerEvents: (!isMobile && isSignUp) ? 'none' : 'all',
-          height: isMobile ? 'auto' : 'unset',
-          overflow: isMobile ? 'visible' : 'unset',
-        }}>
-          <SignInForm onSwitch={()=>setIsSignUp(true)}/>
+        {/* Logo */}
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, marginBottom:28 }}>
+          <WaniLogo size={48} dark={false}/>
+          <WaniWordmark height={22} dark={false}/>
+          <p style={{ fontSize:13, color:'#94A3B8', margin:0, marginTop:2 }}>
+            {isSignUp ? 'Create your SAP AI account' : 'Welcome back to Wani'}
+          </p>
         </div>
 
-        {/* Sign Up form — LEFT side always */}
-        <div className="form-panel" style={{
-          position: isMobile ? 'relative' : 'absolute',
-          top: isMobile ? 'auto' : 0,
-          bottom: isMobile ? 'auto' : 0,
-          left: isMobile ? 'auto' : 0,
-          width: isMobile ? '100%' : '55%',
-          display: isMobile ? (isSignUp ? 'block' : 'none') : 'flex',
-          alignItems:'center', justifyContent:'center',
-          padding: isMobile ? '28px 24px 48px' : '28px 44px', zIndex:1,
-          opacity: (!isMobile && !isSignUp) ? 0 : 1,
-          transition:'opacity 0.25s',
-          pointerEvents: (!isMobile && !isSignUp) ? 'none' : 'all',
-          height: isMobile ? 'auto' : 'unset',
-          overflow: isMobile ? 'visible' : 'unset',
-        }}>
-          <SignUpForm onSwitch={()=>setIsSignUp(false)}/>
-        </div>
+        {/* Title */}
+        <h1 style={{ fontSize:20, fontWeight:700, color:'#1a1a2e', textAlign:'center',
+          margin:'0 0 20px', fontFamily:"'DM Sans',sans-serif" }}>
+          {isSignUp ? 'Create Account' : 'Sign In'}
+        </h1>
 
-        {/* Navy panel — always RIGHT on desktop, top on mobile */}
-        <div className="navy-panel" style={{
-          position: isMobile ? 'relative' : 'absolute',
-          top: isMobile ? 'auto' : 0,
-          bottom: isMobile ? 'auto' : 0,
-          right: isMobile ? 'auto' : 0,
-          left: isMobile ? 'auto' : 'unset',
-          width: isMobile ? '100%' : '45%',
-          minHeight: isMobile ? 200 : 'unset',
-          background:'linear-gradient(145deg,#1A1035 0%,#0F0A2A 50%,#08061A 100%)',
-          display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-          padding: isMobile ? '32px 24px' : '40px 32px',
-          zIndex:20, overflow:'hidden',
-          transition: 'none',
-          borderRadius: isMobile ? '0 0 0 0' : '0 24px 24px 0',
-          order: isMobile ? -1 : 'unset',
-        }}>
-          <div style={{ position:'absolute', width:260, height:260, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.15) 0%,transparent 70%)', top:-60, right:-60 }}/>
-          <div style={{ position:'absolute', width:180, height:180, borderRadius:'50%', background:'radial-gradient(circle,rgba(255,107,53,0.12) 0%,transparent 70%)', bottom:20, left:-50 }}/>
-
-          <div style={{ marginBottom:24, display:'flex', flexDirection:'column', alignItems:'center', gap:14 }}>
-            <WaniLogo size={52} dark={true}/>
-            <WaniWordmark height={24} dark={true}/>
-          </div>
-
-          <div style={{ textAlign:'center', marginBottom:28 }}>
-            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:'#fff', marginBottom:10, lineHeight:1.3 }}>
-              {isSignUp ? 'Welcome Back!' : 'Hello!'}
-            </div>
-            <p style={{ fontSize:12, color:'rgba(255,255,255,0.5)', lineHeight:1.8, maxWidth:190 }}>
-              {isSignUp ? 'Already have an account? Sign in to continue.' : 'New here? Create your private SAP knowledge base.'}
-            </p>
-          </div>
-
-          <button className="panel-btn" onClick={()=>setIsSignUp(!isSignUp)}>
-            {isSignUp ? 'SIGN IN' : 'CREATE ACCOUNT'}
-          </button>
-        </div>
+        {/* Form */}
+        {isSignUp
+          ? <SignUpForm onSwitch={() => setIsSignUp(false)}/>
+          : <SignInForm onSwitch={() => setIsSignUp(true)}/>
+        }
       </div>
     </div>
   )
