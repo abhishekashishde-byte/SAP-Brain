@@ -859,9 +859,10 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       systemPrompt += `\n\nWEB SEARCH RESULTS (from Google via Gemini — use as primary source):\n${cleanedText.slice(0, 2000)}\n\nIMPORTANT: For any SAP Note numbers found above, present them as direct links in this format: https://me.sap.com/notes/NOTENUMBER — replace the Gemini redirect URLs with these direct SAP links. Tell user to log in with their S-user to read the full note.`
     }
 
-    // Source links — show to user
+    // Source links — Joule-style clean Sources block with inline citation instructions
     if (searchResults.length > 0) {
-      systemPrompt += `\n\nSOURCE LINKS:\n${searchResults.map((r, i) => `[${i+1}] ${r.title}\n${r.url}`).join('\n\n')}`
+      const sourceRef = searchResults.map((r, i) => `[${i+1}] ${r.title} — ${r.url}`).join('\n')
+      systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nIMPORTANT: Use inline citations [1] [2] [3] throughout your answer when referencing these sources. At the very end of your answer, add this exact block:\n\n---\n📚 **Sources**\n${sourceRef}`
     }
 
     // SAP Note anti-hallucination — critical rule
