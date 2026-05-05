@@ -131,7 +131,8 @@ function TypingDots() {
 function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
-  const displayContent = msg.displayText || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
+  const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
+  const codeAttachment = msg._code || null
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(null)
   const [codeExpanded, setCodeExpanded] = useState(false)
@@ -319,10 +320,10 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
       <div style={{ display:'flex',justifyContent:'flex-end',marginBottom:18,animation:'msgSlide 0.25s ease forwards',gap:8,alignItems:'flex-start' }}>
         <div style={{ maxWidth:'80%', display:'flex', flexDirection:'column', gap:6 }}>
           {/* Code attachment card */}
-          {msg.codeAttachment && (
+          {codeAttachment && (
             <CodeCard
-              language={msg.codeAttachment.language}
-              lines={msg.codeAttachment.lines}
+              language={codeAttachment.language}
+              lines={codeAttachment.lines}
               content={msg.content?.match(/\[ATTACHED_CODE[^\]]*\]([\s\S]*?)\[\/ATTACHED_CODE\]/)?.[1]?.trim() || ''}
               expanded={codeExpanded}
               onToggle={() => setCodeExpanded(p => !p)}
@@ -1079,13 +1080,18 @@ export default function Brain({ session }) {
     if (!baseText && !attachedCode) return
     if (isLoading || isStreaming) return
 
-    // Combine question with attached code
+    // Build the actual content sent to the API
     const msgText = attachedCode
       ? `${baseText ? baseText + '\n\n' : ''}[ATTACHED_CODE lang=${attachedCode.language} lines=${attachedCode.lines}]\n${attachedCode.content}\n[/ATTACHED_CODE]`
       : baseText
 
-    const displayText = baseText || `Analyse this ${attachedCode?.language || 'code'}`
-    const userMsg = { role:'user', content:msgText, displayText, hasCode: !!attachedCode, codeAttachment: attachedCode ? { language: attachedCode.language, lines: attachedCode.lines } : null }
+    // Store display metadata alongside content for UI rendering
+    const userMsg = {
+      role: 'user',
+      content: msgText,
+      _display: baseText || `Analyse this ${attachedCode?.language || 'code'}`,
+      _code: attachedCode ? { language: attachedCode.language, lines: attachedCode.lines } : null,
+    }
 
     setInput('')
     setAttachedCode(null)
