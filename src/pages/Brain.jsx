@@ -961,6 +961,7 @@ export default function Brain({ session }) {
     { key: 'ALL',           label: 'All Conversations',  group: null },
     // ── Knowledge & Q&A ─────────────────────────────────────────────────────
     { key: 'SAP_QA',        label: 'Questions & Answers', group: 'Knowledge' },
+    { key: 'CUSTOMIZING',   label: 'Customizing / SPRO',  group: 'Knowledge' },
     { key: 'BAPI_SEARCH',   label: 'BAPI / Function Modules', group: 'Knowledge' },
     { key: 'EXIT_SEARCH',   label: 'User Exits & BAdIs',  group: 'Knowledge' },
     { key: 'FIORI_REC',     label: 'Fiori Apps',          group: 'Knowledge' },
