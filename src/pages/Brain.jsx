@@ -66,6 +66,44 @@ const getInitials = (name, email) => {
 
 const isMobileWidth = () => window.innerWidth < 768
 
+// ── CODE ATTACHMENT CARD ──────────────────────────────────────────────────────
+function CodeCard({ language, lines, content, expanded, onToggle, onRemove, t, dark }) {
+  const langColors = { ABAP: '#1E6B4A', SQL: '#1A56DB', XML: '#9A3412', JSON: '#6D28D9', Code: '#374151' }
+  const bgColor = dark ? '#1E1E2E' : '#F8F9FC'
+  const borderColor = dark ? '#2D2D3D' : '#E2E8F0'
+
+  return (
+    <div style={{ borderRadius:10, border:`1.5px solid ${borderColor}`, background:bgColor, overflow:'hidden', marginBottom:6 }}>
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', cursor:'pointer', userSelect:'none' }}
+        onClick={onToggle}>
+        <span style={{ fontSize:14 }}>📄</span>
+        <span style={{ fontSize:12, fontWeight:600, color: langColors[language] || '#374151',
+          background: `${langColors[language] || '#374151'}18`, padding:'1px 7px', borderRadius:6 }}>
+          {language}
+        </span>
+        <span style={{ fontSize:12, color: t?.text4 || '#888' }}>{lines} lines</span>
+        <span style={{ marginLeft:'auto', fontSize:11, color: t?.text4 || '#888' }}>
+          {expanded ? '▲ collapse' : '▼ expand'}
+        </span>
+        {onRemove && (
+          <span onClick={e=>{ e.stopPropagation(); onRemove() }}
+            style={{ fontSize:14, color:'#DC2626', cursor:'pointer', marginLeft:4, lineHeight:1 }}>×</span>
+        )}
+      </div>
+      {/* Code preview */}
+      {expanded && (
+        <div style={{ borderTop:`1px solid ${borderColor}`, background: dark ? '#12121C' : '#F1F5F9',
+          padding:'10px 14px', maxHeight:240, overflowY:'auto' }}>
+          <pre style={{ margin:0, fontSize:11, fontFamily:"'Fira Code','Courier New',monospace",
+            color: dark ? '#A8D8A8' : '#1E293B', whiteSpace:'pre-wrap', wordBreak:'break-word',
+            lineHeight:1.6 }}>{content}</pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ModuleBadge({ module, small }) {
   const meta = MODULE_META[module]
   if (!meta) return null
@@ -93,8 +131,10 @@ function TypingDots() {
 function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
+  const displayContent = msg.displayText || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(null)
+  const [codeExpanded, setCodeExpanded] = useState(false)
 
   const inlineFormat = (text) => {
     if (!text) return ''
@@ -277,8 +317,25 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
   if (isUser) {
     return (
       <div style={{ display:'flex',justifyContent:'flex-end',marginBottom:18,animation:'msgSlide 0.25s ease forwards',gap:8,alignItems:'flex-start' }}>
-        <div style={{ maxWidth:'80%',background:t.msgUser,border:`1px solid ${t.msgUserBdr}`,borderRadius:'16px 4px 16px 16px',padding:'10px 14px',fontSize:16,lineHeight:1.7,color:t.text,wordBreak:'break-word' }}>
-          <span style={{ whiteSpace:'pre-wrap' }}>{content}</span>
+        <div style={{ maxWidth:'80%', display:'flex', flexDirection:'column', gap:6 }}>
+          {/* Code attachment card */}
+          {msg.codeAttachment && (
+            <CodeCard
+              language={msg.codeAttachment.language}
+              lines={msg.codeAttachment.lines}
+              content={msg.content?.match(/\[ATTACHED_CODE[^\]]*\]([\s\S]*?)\[\/ATTACHED_CODE\]/)?.[1]?.trim() || ''}
+              expanded={codeExpanded}
+              onToggle={() => setCodeExpanded(p => !p)}
+              onRemove={null}
+              t={t} dark={dark}
+            />
+          )}
+          {/* Message text */}
+          {displayContent && (
+            <div style={{ background:t.msgUser,border:`1px solid ${t.msgUserBdr}`,borderRadius:'16px 4px 16px 16px',padding:'10px 14px',fontSize:16,lineHeight:1.7,color:t.text,wordBreak:'break-word' }}>
+              <span style={{ whiteSpace:'pre-wrap' }}>{displayContent}</span>
+            </div>
+          )}
         </div>
         <div style={{ width:30,height:30,borderRadius:8,flexShrink:0,background:'linear-gradient(135deg,#1E3A5F,#2563EB)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#fff',marginTop:2 }}>
           {userInitial||'A'}
@@ -706,6 +763,8 @@ export default function Brain({ session }) {
   const [projects, setProjects]           = useState([])
   const [activeConvId, setActiveConvId]   = useState(null)
   const [input, setInput]                 = useState('')
+  const [attachedCode, setAttachedCode]   = useState(null) // { content, lines, language }
+  const [expandedCode, setExpandedCode]   = useState(false)
   const [isLoading, setIsLoading]         = useState(false)
   const [isStreaming, setIsStreaming]      = useState(false)
   const [streamingText, setStreamingText] = useState('')
@@ -1007,6 +1066,8 @@ export default function Brain({ session }) {
   const goChat=(convId,mod=null,topic=null)=>{ 
     setFilterDropdownOpen(false)
     setInput('')
+    setAttachedCode(null)
+    setExpandedCode(false)
     if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } 
     else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) }
     try { window.history.pushState({ view:'chat',convId,mod,topic },'',window.location.pathname) } catch(e){}
@@ -1014,10 +1075,20 @@ export default function Brain({ session }) {
   }
 
   const handleSend = async (overrideText) => {
-    const msgText = (overrideText || input).trim()
-    if (!msgText || isLoading || isStreaming) return
-    const userMsg = { role:'user', content:msgText }
+    const baseText = (overrideText || input).trim()
+    if (!baseText && !attachedCode) return
+    if (isLoading || isStreaming) return
+
+    // Combine question with attached code
+    const msgText = attachedCode
+      ? `${baseText ? baseText + '\n\n' : ''}[ATTACHED_CODE lang=${attachedCode.language} lines=${attachedCode.lines}]\n${attachedCode.content}\n[/ATTACHED_CODE]`
+      : baseText
+
+    const displayText = baseText || `Analyse this ${attachedCode?.language || 'code'}`
+    const userMsg = { role:'user', content:msgText, displayText, hasCode: !!attachedCode, codeAttachment: attachedCode ? { language: attachedCode.language, lines: attachedCode.lines } : null }
+
     setInput('')
+    setAttachedCode(null)
     if (inputRef.current) inputRef.current.style.height = '24px'
     setIsLoading(true)
 
@@ -1196,6 +1267,43 @@ export default function Brain({ session }) {
   }
 
   // Send a specific text programmatically — used by code analysis buttons
+  // ── CODE DETECTION — detects ABAP, SQL, JS, XML, JSON pastes ────────────────
+  const detectCode = (text) => {
+    const lines = text.split('\n')
+    if (lines.length < 4) return null // too short to be code
+
+    const abapSignals = [
+      /^REPORT\s+/im, /^FUNCTION\s+/im, /^CLASS\s+/im, /^METHOD\s+/im,
+      /^DATA\s*:/im, /^TYPES\s*:/im, /^CONSTANTS\s*:/im, /^TABLES\s*:/im,
+      /^SELECT\s+/im, /^LOOP\s+AT\s+/im, /^IF\s+/im, /^ENDLOOP\./im,
+      /^ENDIF\./im, /^ENDFUNCTION\./im, /^ENDCLASS\./im,
+      /CALL\s+FUNCTION/im, /PERFORM\s+/im, /^WRITE\s*:/im,
+    ]
+    const xmlSignals = [/^<\?xml/i, /^<[A-Z_]+>/i]
+    const jsonSignals = [/^\{[\s\S]*\}$/, /^\[[\s\S]*\]$/]
+    const sqlSignals = [/^SELECT\s+.*FROM\s+/im, /^INSERT\s+INTO\s+/im]
+
+    const abapScore = abapSignals.filter(r => r.test(text)).length
+    if (abapScore >= 2) return { content: text, lines: lines.length, language: 'ABAP' }
+    if (xmlSignals.some(r => r.test(text.trim()))) return { content: text, lines: lines.length, language: 'XML' }
+    if (jsonSignals.some(r => r.test(text.trim()))) return { content: text, lines: lines.length, language: 'JSON' }
+    if (sqlSignals.some(r => r.test(text))) return { content: text, lines: lines.length, language: 'SQL' }
+    if (lines.length >= 15) return { content: text, lines: lines.length, language: 'Code' }
+    return null
+  }
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData?.getData('text') || ''
+    const detected = detectCode(pasted)
+    if (detected) {
+      e.preventDefault()
+      setAttachedCode(detected)
+      // Clear any existing code from input
+      setInput(prev => prev.replace(pasted, '').trim())
+    }
+    // If not code — let normal paste happen
+  }
+
   const handleSendText = (text) => {
     setInput('')
     handleSend(text)
@@ -1620,14 +1728,30 @@ export default function Brain({ session }) {
                   </button>
                   <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
 
+                  {/* Attached code card */}
+                  {attachedCode && (
+                    <div style={{ width:'100%', marginBottom:6 }}>
+                      <CodeCard
+                        language={attachedCode.language}
+                        lines={attachedCode.lines}
+                        content={attachedCode.content}
+                        expanded={expandedCode}
+                        onToggle={() => setExpandedCode(p => !p)}
+                        onRemove={() => { setAttachedCode(null); setExpandedCode(false) }}
+                        t={t} dark={dark}
+                      />
+                    </div>
+                  )}
+
                   <textarea ref={inputRef} value={input}
                     onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px'}}
                     onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
+                    onPaste={handlePaste}
                     placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
                     style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
-                  <button onClick={handleSend} disabled={!input.trim()||isLoading||isStreaming}
-                    style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:input.trim()&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:input.trim()&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:input.trim()&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+                  <button onClick={handleSend} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+                    style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
                   >→</button>
                 </div>
                 <div style={{ fontSize:11,color:t.text4,textAlign:'right',marginTop:4 }}>{activeConv?.module||browseModule||'Free mode'} · verify system-specific behaviour</div>
