@@ -264,14 +264,13 @@ export default function Login() {
         boxShadow: isMobile ? 'none' : '20px 20px 52px rgba(0,0,0,0.13),-8px -8px 24px rgba(255,255,255,0.84)',
         animation:'slideUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards',
       }}>
-        {/* Sign In form — RIGHT on desktop, below navy on mobile */}
+        {/* Sign In form — LEFT side always */}
         <div className="form-panel" style={{
           position: isMobile ? 'relative' : 'absolute',
           top: isMobile ? 'auto' : 0,
           bottom: isMobile ? 'auto' : 0,
-          right: isMobile ? 'auto' : 0,
-          left: isMobile ? 'auto' : 'unset',
-          width: isMobile ? '100%' : '50%',
+          left: isMobile ? 'auto' : 0,
+          width: isMobile ? '100%' : '55%',
           display: isMobile ? (isSignUp ? 'none' : 'block') : 'flex',
           alignItems:'center', justifyContent:'center',
           padding: isMobile ? '28px 24px 48px' : '32px 44px', zIndex:1,
@@ -284,13 +283,13 @@ export default function Login() {
           <SignInForm onSwitch={()=>setIsSignUp(true)}/>
         </div>
 
-        {/* Sign Up form — LEFT on desktop, below navy on mobile */}
+        {/* Sign Up form — LEFT side always */}
         <div className="form-panel" style={{
           position: isMobile ? 'relative' : 'absolute',
           top: isMobile ? 'auto' : 0,
           bottom: isMobile ? 'auto' : 0,
           left: isMobile ? 'auto' : 0,
-          width: isMobile ? '100%' : '50%',
+          width: isMobile ? '100%' : '55%',
           display: isMobile ? (isSignUp ? 'block' : 'none') : 'flex',
           alignItems:'center', justifyContent:'center',
           padding: isMobile ? '28px 24px 48px' : '28px 44px', zIndex:1,
@@ -303,20 +302,21 @@ export default function Login() {
           <SignUpForm onSwitch={()=>setIsSignUp(false)}/>
         </div>
 
-        {/* Sliding navy panel — slides on desktop, fixed header on mobile */}
+        {/* Navy panel — always RIGHT on desktop, top on mobile */}
         <div className="navy-panel" style={{
           position: isMobile ? 'relative' : 'absolute',
           top: isMobile ? 'auto' : 0,
           bottom: isMobile ? 'auto' : 0,
-          left: isMobile ? 'auto' : (isSignUp ? '50%' : '0%'),
-          width: isMobile ? '100%' : '50%',
+          right: isMobile ? 'auto' : 0,
+          left: isMobile ? 'auto' : 'unset',
+          width: isMobile ? '100%' : '45%',
           minHeight: isMobile ? 200 : 'unset',
           background:'linear-gradient(145deg,#1A1035 0%,#0F0A2A 50%,#08061A 100%)',
           display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
           padding: isMobile ? '32px 24px' : '40px 32px',
           zIndex:20, overflow:'hidden',
-          transition: isMobile ? 'none' : 'left 0.7s cubic-bezier(0.68,-0.1,0.27,1.1)',
-          borderRadius: isMobile ? '0 0 0 0' : 'unset',
+          transition: 'none',
+          borderRadius: isMobile ? '0 0 0 0' : '0 24px 24px 0',
           order: isMobile ? -1 : 'unset',
         }}>
           <div style={{ position:'absolute', width:260, height:260, borderRadius:'50%', background:'radial-gradient(circle,rgba(200,80,192,0.15) 0%,transparent 70%)', top:-60, right:-60 }}/>
