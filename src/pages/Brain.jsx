@@ -666,10 +666,10 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
       color: '#EF4444',
     },
     {
-      action: 'cloud',
+      action: 'bestpractice',
       icon: '/icon-cloud.png',
-      label: 'SAP Public Cloud',
-      desc: 'Get guidance on S/4HANA Public Cloud, BTP, SuccessFactors and Ariba',
+      label: 'SAP Best Practices',
+      desc: 'Explore SAP standard processes, Activate methodology and fit-to-standard guidance',
       color: '#0EA5E9',
     },
   ]
@@ -689,7 +689,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
 
       <style>{`
         @keyframes auroraHS{0%{transform:scale(1) translateY(0);opacity:1}50%{transform:scale(1.07) translateY(-18px);opacity:0.7}100%{transform:scale(1) translateY(0);opacity:1}}
-        @keyframes tileIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes tileIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}} @keyframes wiggle{0%{transform:rotate(0deg)}15%{transform:rotate(-8deg)}30%{transform:rotate(8deg)}45%{transform:rotate(-5deg)}60%{transform:rotate(5deg)}75%{transform:rotate(-2deg)}100%{transform:rotate(0deg)}} .ql-icon-img{transition:transform 0.2s ease} .ql-tile:hover .ql-icon-img{animation:wiggle 0.5s ease}
         .ql-tile{animation:tileIn 0.4s ease both}
         .ql-tile:nth-child(1){animation-delay:0.05s}
         .ql-tile:nth-child(2){animation-delay:0.1s}
@@ -711,7 +711,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
       </div>
 
       {/* Quick Launch Grid */}
-      <div style={{ position:'relative', zIndex:1, width:'min(100%,560px)', marginBottom:32 }}>
+      <div style={{ position:'relative', zIndex:1, width:'min(100%,680px)', marginBottom:32 }}>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
           {TILES.map(tile => (
             <button key={tile.action}
@@ -740,10 +740,10 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
               }}
             >
               {/* Icon */}
-              <div style={{ width:64, height:64, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <img src={tile.icon} alt={tile.label}
+              <div style={{ width:80, height:80, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <img src={tile.icon} alt={tile.label} className="ql-icon-img"
                   style={{
-                    width:64, height:64, objectFit:'contain',
+                    width:80, height:80, objectFit:'contain',
                     mixBlendMode: dark ? 'screen' : 'multiply',
                     filter: dark ? 'brightness(1.15)' : 'none',
                   }}
@@ -764,36 +764,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         </div>
       </div>
 
-      {/* Recent Conversations */}
-      {recentConvs.length > 0 && (
-        <div style={{ position:'relative', zIndex:1, width:'min(100%,560px)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-            <div style={{ flex:1, height:1, background:`linear-gradient(90deg,transparent,${dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'},transparent)` }}/>
-            <span style={{ fontSize:10, fontWeight:700, color:t.text4, letterSpacing:0.9, textTransform:'uppercase', whiteSpace:'nowrap' }}>Recent</span>
-            <div style={{ flex:1, height:1, background:`linear-gradient(90deg,${dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)'},transparent)` }}/>
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            {recentConvs.map(conv => (
-              <div key={conv.id} className="hs-recent-row"
-                onClick={() => onSelectTopic(conv.module, null, conv.id)}>
-                {conv.module && (
-                  <span style={{ fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:6,
-                    background:'rgba(79,70,229,0.1)', color:'#4F46E5', flexShrink:0 }}>
-                    {conv.module}
-                  </span>
-                )}
-                <span style={{ fontSize:13, color:t.text, flex:1, whiteSpace:'nowrap',
-                  overflow:'hidden', textOverflow:'ellipsis' }}>
-                  {conv.title || 'Untitled conversation'}
-                </span>
-                <span style={{ fontSize:11, color:t.text4, flexShrink:0 }}>
-                  {new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }
@@ -1182,9 +1153,9 @@ export default function Brain({ session }) {
         openingMsg: null, // B behaviour
         inputText: 'Which Fiori app should I use for '
       },
-      cloud: {
-        mod: null, topic: 'SAP Public Cloud',
-        openingMsg: `Hi ${profile?.name?.split(' ')[0] || session?.user?.email?.split('@')[0] || 'there'}! I can help with SAP Public Cloud. Which product are you working with — S/4HANA Public Cloud, SAP BTP, SuccessFactors, Ariba, or another? And what do you need help with?`
+      bestpractice: {
+        mod: null, topic: 'SAP Best Practices',
+        openingMsg: `Hi ${profile?.name?.split(' ')[0] || session?.user?.email?.split('@')[0] || 'there'}! I can help you explore SAP Best Practices and standard processes. Are you working with SAP Activate methodology, fit-to-standard workshops, or looking for a specific best practice process in PP, PM, MM, SD or another module? Tell me what you need.`
       },
     }
 
