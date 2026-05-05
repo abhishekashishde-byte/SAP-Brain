@@ -258,6 +258,48 @@ async function streamGPT(systemPrompt, messages, onChunk) {
   return fullText
 }
 
+// GPT-4o-mini — for simple Q&A, cheap and fast
+async function streamGPTMini(systemPrompt, messages, onChunk) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 2048,
+      temperature: 0.1,
+      stream: true,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ]
+    })
+  })
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`GPT-mini error ${res.status}: ${errText.slice(0, 100)}`)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = '', fullText = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') continue
+      try {
+        const delta = JSON.parse(data)?.choices?.[0]?.delta?.content
+        if (delta) { fullText += delta; onChunk?.(delta) }
+      } catch {}
+    }
+  }
+  return fullText
+}
+
 // ── 5. GOOGLE CUSTOM SEARCH — real SAP links ─────────────────────────────────
 async function googleSAPSearch(question, intent = 'SAP_QA') {
   const key = process.env.GOOGLE_CSE_KEY
@@ -730,6 +772,10 @@ export default async function handler(req, res) {
       /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(m.content || '')
     )
 
+    // Detect attached code block and its line count for complexity routing
+    const codeBlockMatch = lastMsg.match(/\[ATTACHED_CODE[^\]]*lines=(\d+)\]/)
+    const attachedCodeLines = codeBlockMatch ? parseInt(codeBlockMatch[1]) || 0 : 0
+
     const validMessages = recentMessages
       .filter(m => m.role && m.content?.trim())
       .map(m => ({
@@ -843,16 +889,54 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
     }
 
-    // ── ROUTE TO CORRECT MODEL based on intent ────────────────────────────────
-    // CODE_ANALYSIS → Claude Sonnet (superior code understanding)
-    // Everything else (SAP_QA, FS_SPEC, TEST_CASES, etc.) → GPT-4o
-    const usesSonnet = CODE_INTENTS.has(intent) || isCode || hasCodeInHistory
-    if (usesSonnet) {
+    // ── SMART MODEL ROUTING ───────────────────────────────────────────────────
+    //
+    // Claude Sonnet  → Complex ABAP analysis, FS generation
+    // GPT-4o         → Complex Q&A, impact analysis, workshops, error diagnosis
+    // GPT-4o-mini    → Simple Q&A, simple lookups, Fiori app search
+    //
+    // Complexity signals for ABAP:
+    // Complex = has CLASS/BADI/ENHANCEMENT keywords OR > 80 lines OR risk question
+    // Simple  = short program, basic SELECT/LOOP, explain-only question
+
+    const isComplexAbap = isCode && (
+      /\b(CLASS|INTERFACE|BADI|BA[Dd]I|ENHANCEMENT|ENHANCEMENT-POINT|IMPLICIT ENHANCEMENT|METHOD\s+\w+|CALL METHOD)\b/i.test(systemPrompt) ||
+      (attachedCodeLines > 80) ||
+      /\b(risk|vulnerabilit|why.*built|reverse engineer|impact|what.*break|performance|optimi[sz]e)\b/i.test(lastMsg)
+    )
+
+    const isSimpleQA = !isCode && !hasCodeInHistory && (
+      intent === 'SAP_QA' &&
+      confidence >= 0.9 &&
+      !needsSearch &&
+      lastMsg.length < 120 &&
+      !/\b(impact|what.*break|change.*affect|if.*change|complex|architecture|design|integration)\b/i.test(lastMsg)
+    )
+
+    const isComplexDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
+
+    let modelUsed
+    if (isComplexAbap || isCode) {
+      // Complex ABAP or any code → Claude Sonnet
       fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      modelUsed = 'claude-sonnet'
+      console.log('MODEL: Claude Sonnet (ABAP/code)')
+    } else if (isComplexDeliverable) {
+      // FS, Tech Spec, Workshop PPT → Claude Sonnet (best for long structured docs)
+      fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      modelUsed = 'claude-sonnet'
+      console.log('MODEL: Claude Sonnet (deliverable)')
+    } else if (isSimpleQA) {
+      // Simple SAP Q&A → GPT-4o-mini (cheap, fast, good enough)
+      fullAnswer = await streamGPTMini(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      modelUsed = 'gpt4o-mini'
+      console.log('MODEL: GPT-4o-mini (simple Q&A)')
     } else {
+      // Everything else → GPT-4o (complex Q&A, error diagnosis, impact analysis, workshops)
       fullAnswer = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      modelUsed = 'gpt4o'
+      console.log('MODEL: GPT-4o (complex/default)')
     }
-    const modelUsed = usesSonnet ? 'claude-sonnet' : 'gpt4o'
 
     // Deliverable type — stored on conversation for UI filtering
     const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT'])
