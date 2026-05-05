@@ -36,6 +36,7 @@ WORKSHOP_PPT   = create a PowerPoint or slide presentation for a workshop on a s
 FORMS_SPEC     = SAP output forms: Adobe, SmartForms, NACE, Output Mgmt
 FIORI_REC      = recommend Fiori apps for a process or role
 SLIDE_CONTENT  = create presentation content, slide structure, storyline
+BEST_PRACTICES = question about SAP best practices, SAP Activate methodology, fit-to-standard, scope items, standard SAP process design
 CUSTOMIZING    = question about SAP SPRO configuration, customizing paths, where to configure something in SPRO, IMG activities, configuration tables, how to set up order types, movement types, document types, pricing, scheduling parameters
 GENERAL        = anything else
 
@@ -80,6 +81,8 @@ Question: "${question.slice(0, 400)}"
     if (isFioriKeyword && !isCode && !isError){ intent = 'FIORI_REC';     confidence = 0.95 }
     if (isWorkshopPPT && !isCode && !isError) { intent = 'WORKSHOP_PPT';  confidence = 1.0  }
     if (isCustomizing && !isCode && !isError)  { intent = 'CUSTOMIZING';  confidence = 0.95 }
+    const isBestPractice = /\b(best practice|sap activate|fit.to.standard|scope item|standard process|activate methodology|rapid\.sap|solution package|explore phase|realize phase|fit gap|fit-gap)\b/i.test(question)
+    if (isBestPractice && !isCode && !isError)  { intent = 'BEST_PRACTICES'; confidence = 0.95 }
 
     // ── Low confidence fallback — use SAP_QA rather than force wrong template ──
     // Deliverable intents need high confidence — wrong template produces useless output
@@ -942,7 +945,7 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     }
 
     // Deliverable type — stored on conversation for UI filtering
-    const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING'])
+    const DELIVERABLE_TYPES = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING', 'BEST_PRACTICES'])
     const deliverableType = DELIVERABLE_TYPES.has(intent) ? intent : 'NONE'
 
     if (!fullAnswer?.trim()) {
