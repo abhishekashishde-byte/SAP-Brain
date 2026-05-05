@@ -964,7 +964,10 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE')
     const cleanAnswer = fsComplete ? fullAnswer.replace(/WANI_FS_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
 
-    const pptComplete = fullAnswer.includes('WANI_PPT_COMPLETE')
+    // Detect PPT completion — explicit signal OR fallback: 5+ slide blocks generated
+    const slideBlockCount = (fullAnswer.match(/---SLIDE \d+---/g) || []).length
+    const pptComplete = fullAnswer.includes('WANI_PPT_COMPLETE') ||
+      (intent === 'WORKSHOP_PPT' && slideBlockCount >= 5)
     const cleanPPTAnswer = pptComplete ? fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
 
     send({ type: 'done', model: modelUsed, full: pptComplete ? cleanPPTAnswer : cleanAnswer, deliverableType,
