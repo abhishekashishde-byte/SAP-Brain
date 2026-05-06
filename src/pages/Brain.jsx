@@ -627,7 +627,7 @@ function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
 function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark }) {
-  const [inputVal, setInputVal] = React.useState('')
+  const [inputVal, setInputVal] = useState('')
 
   const TILES = [
     { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',              accent:'#F97316' },
