@@ -644,6 +644,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         ? 'radial-gradient(circle at 85% 8%, rgba(251,191,36,0.10), transparent 24%), #0D0D14'
         : 'radial-gradient(circle at 90% 10%, rgba(251,191,36,0.18), transparent 22%), linear-gradient(180deg,#FFFFFF 0%,#FFFDF9 70%,#FFF7ED 100%)',
       fontFamily:"'DM Sans','Inter',system-ui,sans-serif",
+      paddingBottom: '110px',
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
@@ -671,37 +672,44 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
         .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
         @media (max-width:760px){
-          .wani-home-inner{padding:56px 32px 16px;}
-          .wani-hero{margin-bottom:32px;}
-          .wani-hero h1{font-size:34px;letter-spacing:-1px;margin-bottom:10px;white-space:nowrap;}
-          .wani-hero p{font-size:18px;white-space:nowrap;}
-          .wani-sparkle{width:104px;height:70px;flex-basis:104px;margin-top:0;}
-          .wani-tool-grid{gap:18px 20px;grid-template-columns:repeat(3,minmax(0,1fr));}
-          .wani-tool-card{min-height:310px!important;padding:34px 24px 24px!important;border-radius:26px!important;}
-          .wani-card-icon{width:128px;height:128px;margin-bottom:30px;}
-          .wani-card-title{font-size:22px;letter-spacing:-.5px;}
-          .wani-under{width:42px;height:3px;margin:14px auto 20px;}
-          .wani-card-desc{font-size:17px;line-height:1.42;max-width:210px;}
-          .wani-arrow{width:54px;height:54px;margin-top:auto;}
-          .wani-bottom-pill{margin-top:24px;padding:12px 14px 12px 18px;border-radius:26px;}
-          .wani-pill-left{font-size:18px;gap:12px;}
-          .wani-pill-icon{width:50px;height:50px;}
-          .wani-pill-action{width:66px;height:50px;border-radius:20px;}
+          .wani-home-inner{padding:30px 32px 96px;}
+          .wani-hero{margin-bottom:18px;}
+          .wani-hero h1{font-size:31px;letter-spacing:-1px;margin-bottom:8px;}
+          .wani-hero p{font-size:17px;line-height:1.28;}
+          .wani-sparkle{width:96px;height:62px;flex-basis:96px;margin-top:0;}
+          .wani-tool-grid{gap:14px 18px;grid-template-columns:repeat(3,minmax(0,1fr));}
+          .wani-tool-card{min-height:238px!important;height:238px!important;padding:20px 14px 14px!important;border-radius:24px!important;overflow:hidden;}
+          .wani-card-icon{width:86px;height:86px;margin-bottom:18px;}
+          .wani-card-title{font-size:18px;letter-spacing:-.5px;}
+          .wani-under{width:42px;height:3px;margin:10px auto 12px;}
+          .wani-card-desc{font-size:13px;line-height:1.28;max-width:150px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+          .wani-arrow{width:40px;height:40px;margin-top:auto;}
+          .wani-bottom-pill{display:none!important;}
         }
         @media (max-width:520px){
-          .wani-home-inner{padding:50px 18px 14px;}
-          .wani-hero h1{font-size:28px;}
-          .wani-hero p{font-size:15px;}
-          .wani-sparkle{width:74px;height:56px;flex-basis:74px;}
+          .wani-home-inner{padding:26px 18px 96px;}
+          .wani-hero{margin-bottom:16px;}
+          .wani-hero h1{font-size:27px;line-height:1.08;}
+          .wani-hero p{font-size:15px;line-height:1.3;}
+          .wani-sparkle{width:70px;height:50px;flex-basis:70px;}
           .wani-tool-grid{gap:12px;}
-          .wani-tool-card{min-height:270px!important;padding:24px 14px 18px!important;border-radius:22px!important;}
-          .wani-card-icon{width:92px;height:92px;margin-bottom:24px;}
-          .wani-card-title{font-size:17px;}
-          .wani-card-desc{font-size:13px;line-height:1.42;}
-          .wani-arrow{width:44px;height:44px;}
-          .wani-pill-left{font-size:14px;}
-          .wani-pill-icon{width:42px;height:42px;}
-          .wani-pill-action{width:52px;height:42px;}
+          .wani-tool-card{min-height:218px!important;height:218px!important;padding:18px 10px 12px!important;border-radius:22px!important;}
+          .wani-card-icon{width:74px;height:74px;margin-bottom:16px;}
+          .wani-card-title{font-size:16px;line-height:1.05;}
+          .wani-under{width:38px;height:3px;margin:9px auto 10px;}
+          .wani-card-desc{font-size:12px;line-height:1.22;max-width:112px;-webkit-line-clamp:3;}
+          .wani-arrow{width:38px;height:38px;}
+        }
+        @media (max-width:390px){
+          .wani-home-inner{padding:22px 14px 92px;}
+          .wani-hero h1{font-size:25px;}
+          .wani-hero p{font-size:14px;}
+          .wani-tool-grid{gap:10px;}
+          .wani-tool-card{height:206px!important;min-height:206px!important;padding:16px 8px 10px!important;}
+          .wani-card-icon{width:66px;height:66px;margin-bottom:14px;}
+          .wani-card-title{font-size:15px;}
+          .wani-card-desc{font-size:11px;max-width:100px;}
+          .wani-arrow{width:36px;height:36px;}
         }
       `}</style>
 
@@ -1780,7 +1788,7 @@ export default function Brain({ session }) {
                 position:'fixed',
                 left:isMobile?'14px':'calc(260px + 18px)',
                 right:isMobile?'14px':'18px',
-                bottom:'calc(env(safe-area-inset-bottom) + 10px)',
+                bottom:'calc(env(safe-area-inset-bottom) + 12px)',
                 zIndex:80,
                 background:'transparent',
                 borderTop:'none',
