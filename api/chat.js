@@ -115,18 +115,19 @@ Question: "${question.slice(0, 400)}"
 
     return {
       intent,
-      confidence,       // internal only — never shown to user
-      secondaryIntent,  // for multi-intent questions
+      confidence,
+      secondaryIntent,
       isCode,
       isError,
       isCorrection: result.isCorrection === true,
       needsSearch,
+      isConceptQuestion,
       isBapiSearch,
       isExitSearch,
       isNoteSearch,
     }
   } catch {
-    return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false }
+    return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false, isConceptQuestion: false, isBapiSearch: false, isExitSearch: false, isNoteSearch: false }
   }
 }
 
@@ -770,7 +771,7 @@ export default async function handler(req, res) {
       loadGlobalCorrections().catch(() => []),
     ])
 
-    let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError, isBapiSearch, isExitSearch, isNoteSearch } = classification
+    let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isConceptQuestion, isCode, isError, isBapiSearch, isExitSearch, isNoteSearch } = classification
 
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, confidence, secondaryIntent, needsSearch,
