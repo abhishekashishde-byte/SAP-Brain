@@ -670,7 +670,7 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
   )
 }
 
-function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark, inputProps }) {
+function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark, inputProps, profile, session }) {
   const TILES = [
     { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',                   accent:'#F97316', soft:'#FFF7ED' },
     { action:'customizing', icon:'/icon-customizing.png', label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                         accent:'#E11D48', soft:'#FFF1F2' },
@@ -679,6 +679,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
     { action:'fiori',       icon:'/icon-fiori.png',       label:'Explore Fiori',    desc:'Find the right Fiori app for any process',                        accent:'#E11D48', soft:'#FFF1F2' },
     { action:'bestpractice',icon:'/icon-cloud.png',       label:'Best Practices',   desc:'SAP-standard flows, Activate guidance and process recommendations', accent:'#7C3AED', soft:'#F5F3FF' },
   ]
+
+  const firstName = (profile?.name || session?.user?.email?.split('@')[0] || 'Abhishek').split(' ')[0]
 
   return (
     <div className="wani-home-exact" style={{
@@ -695,9 +697,9 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
         .wani-home-inner{max-width:1120px;margin:0 auto;padding:28px 34px 104px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;}
-        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;flex-shrink:0;}
-        .wani-hero h1{font-size:clamp(26px,4.2vw,40px);line-height:1.06;letter-spacing:-1.4px;margin:0 0 8px;font-weight:800;}
-        .wani-hero p{font-size:clamp(14px,2vw,20px);line-height:1.3;margin:0;font-weight:500;color:#6B7280;}
+        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-shrink:0;}
+        .wani-hero h1{font-size:clamp(20px,3.1vw,30px);line-height:1.08;letter-spacing:-.8px;margin:0 0 5px;font-weight:800;}
+        .wani-hero p{font-size:clamp(13px,1.5vw,16px);line-height:1.35;margin:0;font-weight:600;color:#6B7280;}
         .wani-sparkle{width:150px;height:82px;flex:0 0 150px;margin-top:0;}
         .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0;}
         .wani-tool-card{animation:exactTileIn .42s cubic-bezier(.16,1,.3,1) both;}
@@ -718,8 +720,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         @media (max-width:760px){
           .wani-home-inner{padding:24px 32px 104px;}
           .wani-hero{margin-bottom:16px;}
-          .wani-hero h1{font-size:32px;letter-spacing:-1px;margin-bottom:8px;white-space:normal;}
-          .wani-hero p{font-size:17px;white-space:normal;}
+          .wani-hero h1{font-size:22px;letter-spacing:-.6px;margin-bottom:5px;white-space:normal;}
+          .wani-hero p{font-size:14px;white-space:normal;}
           .wani-sparkle{width:92px;height:62px;flex-basis:92px;margin-top:0;}
           .wani-tool-grid{gap:14px 18px;grid-template-columns:repeat(3,minmax(0,1fr));}
           .wani-tool-card{min-height:0!important;padding:20px 16px 14px!important;border-radius:24px!important;}
@@ -735,8 +737,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         }
         @media (max-width:520px){
           .wani-home-inner{padding:20px 18px 104px;}
-          .wani-hero h1{font-size:28px;}
-          .wani-hero p{font-size:15px;}
+          .wani-hero h1{font-size:20px;}
+          .wani-hero p{font-size:13px;}
           .wani-sparkle{width:66px;height:50px;flex-basis:66px;}
           .wani-tool-grid{gap:12px;}
           .wani-tool-card{min-height:0!important;padding:16px 10px 12px!important;border-radius:22px!important;}
@@ -753,8 +755,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
       <div className="wani-home-inner">
         <div className="wani-hero">
           <div>
-            <h1 style={{ color:dark?'#F8FAFC':'#030303' }}>What would you like to do?</h1>
-            <p style={{ color:dark?'#A1A1AA':'#6B7280' }}>Pick a tool and get started — no typing needed.</p>
+            <h1 style={{ color:dark?'#F8FAFC':'#030303' }}>Welcome, {firstName} 👋</h1>
+            <p style={{ color:dark?'#A1A1AA':'#6B7280' }}>What are we planning to do today?</p>
           </div>
 
           <svg className="wani-sparkle" viewBox="0 0 188 104" fill="none" aria-hidden="true">
@@ -1817,7 +1819,7 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, attachedCode, isLoading, isStreaming }} />}
+        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, attachedCode, isLoading, isStreaming }} profile={profile} session={session} />}
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat'&&(
