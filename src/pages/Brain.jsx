@@ -660,7 +660,7 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
             placeholder="Ask your SAP question..." rows={1}
             style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.5,height:'24px',maxHeight:'120px',overflowY:'auto',padding:0,outline:'none' }}
           />
-          <button onClick={handleSend} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+          <button onClick={()=>handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
             style={{ width:44,height:44,borderRadius:13,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#111827':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
           >→</button>
         </div>
@@ -1249,7 +1249,8 @@ export default function Brain({ session }) {
   }
 
   const handleSend = async (overrideText) => {
-    const baseText = (overrideText || input).trim()
+    const safeOverride = typeof overrideText === 'string' ? overrideText : ''
+    const baseText = (safeOverride || input).trim()
     if (!baseText && !attachedCode) return
     if (isLoading || isStreaming) return
 
@@ -1282,6 +1283,7 @@ export default function Brain({ session }) {
       convId = newConv.id; currentMsgs = [userMsg]
       setConversations(prev=>[newConv,...prev])
       setActiveConvId(newConv.id)
+      setView('chat')
     } else {
       await updateConversation(convId,{ messages:currentMsgs })
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:currentMsgs}:c))
@@ -1938,7 +1940,7 @@ export default function Brain({ session }) {
                     placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
                     style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
-                  <button onClick={handleSend} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+                  <button onClick={()=>handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
                     style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
                   >→</button>
                 </div>
