@@ -446,28 +446,49 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     }
 
     // ── DEFAULT: clean keyword query, multi-source SAP search ────────────────
-    // ── DEFAULT: three parallel targeted calls — no OR operator (unreliable in CSE) ─
-    const [helpResults, communityResults, blogResults] = await Promise.all([
+    // ── DEFAULT: parallel searches — targeted + open to catch community/blogs ─
+    const [helpResults, communityResults, blogResults, openResults] = await Promise.all([
       runCSE(`${globalCleanQuery} site:help.sap.com`, 3),
-      runCSE(`${globalCleanQuery} site:community.sap.com`, 3),
+      runCSE(`${globalCleanQuery} site:community.sap.com`, 2),
       runCSE(`${globalCleanQuery} site:blogs.sap.com`, 2),
+      runCSE(globalCleanQuery, 4),  // unrestricted — catches whatever CSE is configured for
     ])
-    // Merge and deduplicate by URL
+
+    // Merge all, deduplicate by URL, prefer specific sources first
     const seenUrls = new Set()
-    results = [...helpResults, ...communityResults, ...blogResults].filter(r => {
+    const allResults = [...helpResults, ...communityResults, ...blogResults, ...openResults]
+    results = allResults.filter(r => {
       if (seenUrls.has(r.url)) return false
       seenUrls.add(r.url)
       return true
+    }).slice(0, 6)
+
+    console.log(`Google CSE — help:${helpResults.length} community:${communityResults.length} blogs:${blogResults.length} open:${openResults.length} total:${results.length}`)
+
+    // Always append search links for community + blogs if those sources have no results
+    // so the user always has a way to search those sources
+    const hasComm  = results.some(r => r.url.includes('community.sap.com'))
+    const hasBlog  = results.some(r => r.url.includes('blogs.sap.com'))
+    const rawTerms2 = globalCleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
+    const enc2 = encodeURIComponent(rawTerms2)
+    if (!hasComm) results.push({
+      title: `SAP Community: ${rawTerms2.slice(0, 55)}`,
+      url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${enc2}`,
+      snippet: 'Questions and answers from SAP consultants worldwide',
+      source: 'SAP Community',
     })
-    console.log(`Google CSE targeted — help:${helpResults.length} community:${communityResults.length} blogs:${blogResults.length} total:${results.length}`)
-
-    // Fallback 1 — open web if all targeted searches return nothing
-    if (results.length === 0) {
-      results = await runCSE(globalCleanQuery, 5)
-      console.log('Google CSE open results:', results.length)
-    }
-
-    // Fallback 2 — guaranteed curated links (always topic-specific via URL params)
+    if (!hasBlog) results.push({
+      title: `SAP Blogs: ${rawTerms2.slice(0, 60)}`,
+      url: `https://blogs.sap.com/?s=${enc2}`,
+      snippet: 'Expert blog posts from the SAP community',
+      source: 'SAP Blog',
+    })
+    if (!results.some(r => r.url.includes('help.sap.com'))) results.push({
+      title: `SAP Help: ${rawTerms2.slice(0, 60)}`,
+      url: `https://help.sap.com/docs/search?q=${enc2}`,
+      snippet: 'Official SAP documentation',
+      source: 'SAP Help',
+    })
     if (results.length === 0) {
       const rawTerms = globalCleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
       const encoded = encodeURIComponent(rawTerms)
@@ -1084,12 +1105,26 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     if (searchResults.length > 0) {
       send({ type: 'search_results', results: searchResults })
     }
-    // Send Google CSE links as further_reading — displayed as a clean "Further Reading" block
-    const allFurtherReading = [
-      ...googleLinks,
-      // Also include any OpenAI sources not already in googleLinks
-      ...searchResults.filter(r => !googleLinks.find(g => g.url === r.url))
+
+    // Build further_reading:
+    // 1. OpenAI sources = real pages with actual titles (always shown as full rows)
+    // 2. CSE supplemental pills = search-page links (shown as pills below)
+    // Separate them so the frontend can style them differently
+    const isCseSupplemental = r =>
+      /^(SAP Help:|SAP Community:|SAP Blogs?:|Google:)/i.test(r.title) ||
+      r.url.includes('searchpage/tab/message') ||
+      r.url.includes('blogs.sap.com/?s=') ||
+      r.url.includes('help.sap.com/docs/search') ||
+      r.url.includes('google.com/search')
+
+    const realPageLinks = [
+      ...searchResults,   // OpenAI sources — real pages, always first
+      ...googleLinks.filter(r => !isCseSupplemental(r) && !searchResults.find(s => s.url === r.url))
     ].slice(0, 6)
+
+    const suppLinks = googleLinks.filter(r => isCseSupplemental(r))
+
+    const allFurtherReading = [...realPageLinks, ...suppLinks]
     if (allFurtherReading.length > 0) {
       send({ type: 'further_reading', links: allFurtherReading })
     }
