@@ -689,21 +689,35 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
           .wani-pill-action{width:66px;height:50px;border-radius:20px;}
         }
         @media (max-width:520px){
-          .wani-home-inner{padding:30px 18px 14px;}
-          .wani-hero{margin-bottom:22px;}
-          .wani-hero h1{font-size:26px;line-height:1.08;}
-          .wani-hero p{font-size:14px;line-height:1.25;}
-          .wani-sparkle{width:74px;height:56px;flex-basis:74px;}
-          .wani-tool-grid{gap:12px;}
-          .wani-tool-card{min-height:250px!important;padding:22px 10px 16px!important;border-radius:22px!important;}
-          .wani-card-icon{width:84px;height:84px;margin-bottom:20px;}
-          .wani-card-title{font-size:16px;line-height:1.05;}
-          .wani-under{width:36px;margin:11px auto 15px;}
-          .wani-card-desc{font-size:12px;line-height:1.35;max-width:92px;}
-          .wani-arrow{width:42px;height:42px;}
-          .wani-pill-left{font-size:13px;}
-          .wani-pill-icon{width:40px;height:40px;}
-          .wani-pill-action{width:50px;height:40px;}
+          .wani-home-exact{overflow-y:hidden!important;}
+          .wani-home-inner{padding:20px 18px 10px;}
+          .wani-hero{margin-bottom:14px;gap:8px;}
+          .wani-hero h1{font-size:25px;line-height:1.08;letter-spacing:-.8px;margin-bottom:7px;}
+          .wani-hero p{font-size:14px;line-height:1.25;max-width:260px;}
+          .wani-sparkle{width:70px;height:50px;flex-basis:70px;margin-top:2px;}
+          .wani-tool-grid{gap:10px;grid-template-columns:repeat(3,minmax(0,1fr));}
+          .wani-tool-card{min-height:184px!important;height:184px!important;padding:15px 8px 12px!important;border-radius:22px!important;justify-content:flex-start;}
+          .wani-card-icon{width:66px;height:66px;margin-bottom:11px;}
+          .wani-card-title{font-size:15px;line-height:1.03;letter-spacing:-.35px;min-height:31px;display:flex;align-items:center;justify-content:center;}
+          .wani-under{width:34px;height:3px;margin:8px auto 9px;}
+          .wani-card-desc{font-size:10.5px;line-height:1.22;max-width:92px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+          .wani-arrow{width:34px;height:34px;margin-top:auto;}
+          .wani-arrow svg{width:20px;height:20px;}
+          .wani-bottom-pill{margin-top:10px;padding:9px 10px;border-radius:22px;}
+          .wani-pill-left{font-size:12px;gap:8px;}
+          .wani-pill-icon{width:34px;height:34px;}
+          .wani-pill-icon svg{width:22px;height:22px;}
+          .wani-pill-action{width:42px;height:34px;border-radius:16px;}
+          .wani-pill-action svg{width:24px;height:24px;}
+        }
+        @media (max-width:380px){
+          .wani-home-inner{padding:16px 14px 8px;}
+          .wani-tool-grid{gap:8px;}
+          .wani-tool-card{height:174px!important;min-height:174px!important;padding:12px 7px 10px!important;}
+          .wani-card-icon{width:58px;height:58px;margin-bottom:9px;}
+          .wani-card-title{font-size:14px;min-height:29px;}
+          .wani-card-desc{font-size:10px;-webkit-line-clamp:2;}
+          .wani-arrow{width:32px;height:32px;}
         }
       `}</style>
 
