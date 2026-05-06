@@ -159,58 +159,59 @@ function FurtherReading({ links, t, dark }) {
   return (
     <div style={{ marginTop: 10 }}>
 
-      {/* ── Real CSE results — full readable links, one per line ── */}
+      {/* ── Real CSE results — SAP-style tag pills with actual page titles ── */}
       {realLinks.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: dedupedFallback.length > 0 ? 8 : 0 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: dedupedFallback.length > 0 ? 8 : 0 }}>
+          <span style={{ fontSize: 11, color: t.text4, width: '100%', marginBottom: 2 }}>🔎 Further reading:</span>
           {realLinks.map((link, i) => {
-            const meta = SOURCE_META[link.source] || SOURCE_META['SAP']
             const cleanTitle = link.title.replace(/ \| SAP Help Portal$| \| SAP Community$| \| SAP$/i, '').trim()
             return (
               <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+                title={link.title}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  textDecoration: 'none', padding: '3px 0',
-                  transition: 'opacity 0.15s',
+                  display: 'inline-block',
+                  fontSize: 12, fontWeight: 400, color: t.text2,
+                  textDecoration: 'none',
+                  padding: '3px 10px', borderRadius: 20,
+                  border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`,
+                  background: 'transparent',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap', maxWidth: 300,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
                 }}
-                onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.color = '#4F46E5' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'; e.currentTarget.style.color = t.text2 }}
               >
-                <span style={{ fontSize: 13, flexShrink: 0 }}>{meta.icon}</span>
-                <span style={{
-                  fontSize: 13, fontWeight: 500, color: meta.color,
-                  borderBottom: `1px solid ${meta.color}40`,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  maxWidth: 420,
-                }}>
-                  {cleanTitle}
-                </span>
-                <span style={{ fontSize: 10, color: t.text4, flexShrink: 0 }}>↗</span>
+                {cleanTitle}
               </a>
             )
           })}
         </div>
       )}
 
-      {/* ── Fallback generic search links — compact inline row, only shown when no real results ── */}
+      {/* ── Fallback generic search links — SAP-style tag pills ── */}
       {realLinks.length === 0 && dedupedFallback.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5 }}>
-          <span style={{ fontSize: 11, color: t.text4 }}>🔎 Search:</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+          <span style={{ fontSize: 11, color: t.text4, width: '100%', marginBottom: 2 }}>🔎 Further reading:</span>
           {dedupedFallback.map((link, i) => {
             const meta = SOURCE_META[link.source] || SOURCE_META['Web']
             return (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                {i > 0 && <span style={{ color: t.text4, fontSize: 11 }}>·</span>}
-                <a href={link.url} target="_blank" rel="noopener noreferrer"
-                  style={{
-                    fontSize: 12, fontWeight: 500, color: meta.color,
-                    textDecoration: 'none', borderBottom: `1px solid ${meta.color}40`,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.borderBottomColor = meta.color}
-                  onMouseLeave={e => e.currentTarget.style.borderBottomColor = `${meta.color}40`}
-                >
-                  {meta.icon} {meta.label}
-                </a>
-              </span>
+              <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  fontSize: 12, fontWeight: 400, color: t.text2,
+                  textDecoration: 'none',
+                  padding: '3px 10px', borderRadius: 20,
+                  border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`,
+                  background: 'transparent',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.color = '#4F46E5' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'; e.currentTarget.style.color = t.text2 }}
+              >
+                {meta.icon} {meta.label}
+              </a>
             )
           })}
         </div>
