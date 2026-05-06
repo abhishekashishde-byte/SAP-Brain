@@ -878,34 +878,62 @@ export default async function handler(req, res) {
       ? lastMsg  // keep as-is — full conversation history already has context
       : await rewriteQuestion(lastMsg, messages || [])
 
-    // STEP 4 — Web search: OpenAI for content + Google CSE for real links (parallel)
-    // Skip entirely for FS/PPT — search adds latency and is irrelevant for doc generation
+    // STEP 4 — Web search: OpenAI for content, Groq for clean query → supplemental pills
+    // CSE removed — it returns 0 results consistently. OpenAI handles real link content.
     let searchResults = []
     let geminiSearchText = ''
-    let googleLinks = []
+    let googleLinks = []   // supplemental pill links — always generated from Groq query
 
     if (!isCode && !isDeliverable && needsSearch) {
-      // Run OpenAI search (content) + Google CSE (links) in parallel
-      const [openAIResult, cseLinks] = await Promise.all([
+      // Run OpenAI search + Groq query cleaning in parallel
+      const [openAIResult, cleanQuery] = await Promise.all([
         callOpenAISearch(lastMsg).catch(() => null),
-        googleSAPSearch(lastMsg, intent).catch(() => []),
+        buildSAPSearchQuery(lastMsg).catch(() => null),
       ])
 
       if (openAIResult && typeof openAIResult === 'object') {
         searchResults = openAIResult.sources || []
         geminiSearchText = openAIResult.text || ''
       }
-      // Merge: prefer Google CSE links (topic-specific) + OpenAI sources as supplement
-      googleLinks = cseLinks || []
-      // Deduplicate: remove CSE links that are already in OpenAI sources
-      const openAIUrls = new Set(searchResults.map(r => r.url))
-      googleLinks = googleLinks.filter(r => !openAIUrls.has(r.url))
 
-      console.log('Search complete — OpenAI sources:', searchResults.length, 'Google CSE links:', googleLinks.length)
+      // Always generate 3 supplemental pill links from the clean Groq query
+      if (cleanQuery) {
+        const rawTerms = cleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
+        const enc = encodeURIComponent(rawTerms)
+        googleLinks = [
+          {
+            title: `SAP Community: ${rawTerms.slice(0, 55)}`,
+            url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${enc}`,
+            snippet: 'Questions and answers from SAP consultants worldwide',
+            source: 'SAP Community',
+          },
+          {
+            title: `SAP Help: ${rawTerms.slice(0, 60)}`,
+            url: `https://help.sap.com/docs/search?q=${enc}`,
+            snippet: 'Official SAP documentation',
+            source: 'SAP Help',
+          },
+          {
+            title: `SAP Blogs: ${rawTerms.slice(0, 60)}`,
+            url: `https://blogs.sap.com/?s=${enc}`,
+            snippet: 'Expert blog posts from the SAP community',
+            source: 'SAP Blog',
+          },
+        ]
+      }
+
+      console.log('Search complete — OpenAI sources:', searchResults.length, 'supplemental pills:', googleLinks.length)
     } else if (!isCode && !isDeliverable && isConceptQuestion) {
-      // Even if OpenAI search was skipped, still run Google CSE for Further Reading links
-      googleLinks = await googleSAPSearch(lastMsg, intent).catch(() => [])
-      console.log('Google CSE only (concept question):', googleLinks.length)
+      const cleanQuery = await buildSAPSearchQuery(lastMsg).catch(() => null)
+      if (cleanQuery) {
+        const rawTerms = cleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
+        const enc = encodeURIComponent(rawTerms)
+        googleLinks = [
+          { title: `SAP Community: ${rawTerms.slice(0, 55)}`, url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${enc}`, snippet: 'Questions and answers from SAP consultants worldwide', source: 'SAP Community' },
+          { title: `SAP Help: ${rawTerms.slice(0, 60)}`, url: `https://help.sap.com/docs/search?q=${enc}`, snippet: 'Official SAP documentation', source: 'SAP Help' },
+          { title: `SAP Blogs: ${rawTerms.slice(0, 60)}`, url: `https://blogs.sap.com/?s=${enc}`, snippet: 'Expert blog posts from the SAP community', source: 'SAP Blog' },
+        ]
+      }
     }
 
     // Extract SAP Note numbers from search results — build direct login links
@@ -1106,25 +1134,9 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       send({ type: 'search_results', results: searchResults })
     }
 
-    // Build further_reading:
-    // 1. OpenAI sources = real pages with actual titles (always shown as full rows)
-    // 2. CSE supplemental pills = search-page links (shown as pills below)
-    // Separate them so the frontend can style them differently
-    const isCseSupplemental = r =>
-      /^(SAP Help:|SAP Community:|SAP Blogs?:|Google:)/i.test(r.title) ||
-      r.url.includes('searchpage/tab/message') ||
-      r.url.includes('blogs.sap.com/?s=') ||
-      r.url.includes('help.sap.com/docs/search') ||
-      r.url.includes('google.com/search')
-
-    const realPageLinks = [
-      ...searchResults,   // OpenAI sources — real pages, always first
-      ...googleLinks.filter(r => !isCseSupplemental(r) && !searchResults.find(s => s.url === r.url))
-    ].slice(0, 6)
-
-    const suppLinks = googleLinks.filter(r => isCseSupplemental(r))
-
-    const allFurtherReading = [...realPageLinks, ...suppLinks]
+    // further_reading = OpenAI real page links + supplemental search pills
+    // Frontend knows: titles starting "SAP Community:" etc = pills, rest = full rows
+    const allFurtherReading = [...searchResults, ...googleLinks].slice(0, 9)
     if (allFurtherReading.length > 0) {
       send({ type: 'further_reading', links: allFurtherReading })
     }
