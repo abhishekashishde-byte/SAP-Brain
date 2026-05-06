@@ -626,7 +626,51 @@ function topFor(slot){return slot===0?0:CARD_H+(slot-1)*PEEK}
 function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
-function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark }) {
+
+function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, attachedCode, isLoading, isStreaming }) {
+  return (
+    <div className="home-input-dock" style={{
+      position:'absolute',
+      left:'clamp(14px,4vw,34px)',
+      right:'clamp(14px,4vw,34px)',
+      bottom:'calc(env(safe-area-inset-bottom) + 10px)',
+      zIndex:20,
+      pointerEvents:'none',
+    }}>
+      <div style={{ maxWidth:720, margin:'0 auto', pointerEvents:'auto' }}>
+        <div style={{
+          display:'flex',gap:10,alignItems:'center',background:t.inputBg,
+          border:`1.5px solid ${t.border2}`,borderRadius:22,padding:'10px 12px',
+          boxShadow: dark?'0 14px 34px rgba(0,0,0,0.28)':'0 16px 34px rgba(15,23,42,0.10)',
+          backdropFilter:'blur(12px)'
+        }}
+          onFocusCapture={e=>{e.currentTarget.style.borderColor='#7C3AED';e.currentTarget.style.boxShadow='0 0 0 3px rgba(124,58,237,0.12), 0 16px 34px rgba(15,23,42,0.10)'}}
+          onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow=dark?'0 14px 34px rgba(0,0,0,0.28)':'0 16px 34px rgba(15,23,42,0.10)'}}
+        >
+          <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
+            title="Upload document"
+            style={{ width:42,height:42,borderRadius:12,border:`1px solid ${t.border}`,background:'transparent',color:t.text4,cursor:'pointer',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+            {docUploading ? '⏳' : '📎'}
+          </button>
+          <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
+          <textarea ref={inputRef} value={input}
+            onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,120)+'px'}}
+            onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
+            onPaste={handlePaste}
+            placeholder="Ask your SAP question..." rows={1}
+            style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.5,height:'24px',maxHeight:'120px',overflowY:'auto',padding:0,outline:'none' }}
+          />
+          <button onClick={handleSend} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+            style={{ width:44,height:44,borderRadius:13,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#111827':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+          >→</button>
+        </div>
+        <div style={{ fontSize:12,color:t.text4,textAlign:'center',marginTop:6 }}>Free mode · verify system-specific behaviour</div>
+      </div>
+    </div>
+  )
+}
+
+function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark, inputProps }) {
   const TILES = [
     { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',                   accent:'#F97316', soft:'#FFF7ED' },
     { action:'customizing', icon:'/icon-customizing.png', label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                         accent:'#E11D48', soft:'#FFF1F2' },
@@ -639,80 +683,70 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
   return (
     <div className="wani-home-exact" style={{
       flex:1,
-      overflowY:'auto',
+      height:'100%',
+      overflow:'hidden',
       background: dark
         ? 'radial-gradient(circle at 85% 8%, rgba(251,191,36,0.10), transparent 24%), #0D0D14'
         : 'radial-gradient(circle at 90% 10%, rgba(251,191,36,0.18), transparent 22%), linear-gradient(180deg,#FFFFFF 0%,#FFFDF9 70%,#FFF7ED 100%)',
       fontFamily:"'DM Sans','Inter',system-ui,sans-serif",
-      paddingBottom: '92px',
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-        .wani-home-inner{max-width:980px;margin:0 auto;padding:22px 34px 104px;}
-        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px;}
-        .wani-hero h1{font-size:34px;line-height:1.06;letter-spacing:-1.2px;margin:0 0 8px;font-weight:800;}
-        .wani-hero p{font-size:17px;line-height:1.3;margin:0;font-weight:500;color:#6B7280;}
-        .wani-sparkle{width:130px;height:76px;flex:0 0 130px;margin-top:0;}
-        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+        .wani-home-inner{max-width:1120px;margin:0 auto;padding:28px 34px 104px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;}
+        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px;flex-shrink:0;}
+        .wani-hero h1{font-size:clamp(26px,4.2vw,40px);line-height:1.06;letter-spacing:-1.4px;margin:0 0 8px;font-weight:800;}
+        .wani-hero p{font-size:clamp(14px,2vw,20px);line-height:1.3;margin:0;font-weight:500;color:#6B7280;}
+        .wani-sparkle{width:150px;height:82px;flex:0 0 150px;margin-top:0;}
+        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0;}
         .wani-tool-card{animation:exactTileIn .42s cubic-bezier(.16,1,.3,1) both;}
         .wani-tool-card:nth-child(1){animation-delay:.03s}.wani-tool-card:nth-child(2){animation-delay:.07s}.wani-tool-card:nth-child(3){animation-delay:.11s}
         .wani-tool-card:nth-child(4){animation-delay:.15s}.wani-tool-card:nth-child(5){animation-delay:.19s}.wani-tool-card:nth-child(6){animation-delay:.23s}
         .wani-tool-card:hover{transform:translateY(-5px)!important;box-shadow:0 22px 42px rgba(15,23,42,.12)!important;}
         .wani-tool-card:hover .wani-card-icon{animation:exactFloat .8s ease-in-out infinite;}
-        .wani-card-icon{width:96px;height:96px;object-fit:contain;display:block;margin:0 auto 16px;}
-        .wani-card-title{font-size:22px;line-height:1.04;font-weight:800;letter-spacing:-.7px;text-align:center;margin:0;color:#050505;}
-        .wani-under{width:42px;height:3px;border-radius:999px;margin:12px auto 12px;}
-        .wani-card-desc{font-size:15px;line-height:1.32;font-weight:500;color:#575757;text-align:center;margin:0 auto;max-width:220px;}
-        .wani-arrow{width:42px;height:42px;border-radius:999px;margin:auto auto 0;display:flex;align-items:center;justify-content:center;transition:transform .18s ease;}
+        .wani-card-icon{width:clamp(72px,13vh,130px);height:clamp(72px,13vh,130px);object-fit:contain;display:block;margin:0 auto clamp(10px,1.5vh,18px);flex-shrink:0;}
+        .wani-card-title{font-size:clamp(17px,2.4vh,25px);line-height:1.04;font-weight:800;letter-spacing:-.6px;text-align:center;margin:0;color:#050505;}
+        .wani-under{width:44px;height:3px;border-radius:999px;margin:clamp(8px,1.2vh,13px) auto clamp(8px,1.2vh,14px);flex-shrink:0;}
+        .wani-card-desc{font-size:clamp(12px,1.7vh,17px);line-height:1.32;font-weight:500;color:#575757;text-align:center;margin:0 auto;max-width:245px;overflow:hidden;}
+        .wani-arrow{width:clamp(38px,6vh,52px);height:clamp(38px,6vh,52px);border-radius:999px;margin:auto auto 0;display:flex;align-items:center;justify-content:center;transition:transform .18s ease;flex-shrink:0;}
         .wani-tool-card:hover .wani-arrow{transform:translateX(3px);}
-        .wani-bottom-pill{display:none;margin:24px 0 0;padding:15px 22px;border-radius:28px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:linear-gradient(90deg,rgba(255,255,255,.94),rgba(255,247,237,.94));border:1px solid rgba(217,119,6,.18);box-shadow:0 14px 34px rgba(15,23,42,.08);}
+        .wani-bottom-pill{display:none;}
         .wani-pill-left{display:flex;align-items:center;gap:18px;font-size:23px;line-height:1.2;font-weight:800;color:#090909;}
         .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
         .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
-
-        .home-input-fixed textarea{font-size:16px!important;}
-        @media (max-width:760px){.home-input-fixed{left:12px!important;right:12px!important;bottom:calc(env(safe-area-inset-bottom) + 6px)!important}.home-input-fixed textarea{font-size:15px!important}.home-input-fixed > div > div:last-of-type{padding:8px 10px!important;border-radius:14px!important}}
         @media (max-width:760px){
-          .wani-home-inner{padding:18px 18px 96px;}
-          .wani-hero{margin-bottom:12px;}
-          .wani-hero h1{font-size:25px;letter-spacing:-.8px;margin-bottom:6px;}
-          .wani-hero p{font-size:14px;line-height:1.25;}
-          .wani-sparkle{width:68px;height:48px;flex-basis:68px;margin-top:0;}
-          .wani-tool-grid{gap:10px 12px;grid-template-columns:repeat(3,minmax(0,1fr));}
-          .wani-tool-card{min-height:178px!important;height:178px!important;padding:14px 8px 10px!important;border-radius:22px!important;overflow:hidden;}
-          .wani-card-icon{width:58px;height:58px;margin-bottom:12px;}
-          .wani-card-title{font-size:14px;letter-spacing:-.45px;}
-          .wani-under{width:34px;height:3px;margin:8px auto 8px;}
-          .wani-card-desc{font-size:10.5px;line-height:1.2;max-width:112px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-          .wani-arrow{width:32px;height:32px;margin-top:auto;}
-          .wani-bottom-pill{display:none!important;}
+          .wani-home-inner{padding:24px 32px 104px;}
+          .wani-hero{margin-bottom:16px;}
+          .wani-hero h1{font-size:32px;letter-spacing:-1px;margin-bottom:8px;white-space:normal;}
+          .wani-hero p{font-size:17px;white-space:normal;}
+          .wani-sparkle{width:92px;height:62px;flex-basis:92px;margin-top:0;}
+          .wani-tool-grid{gap:14px 18px;grid-template-columns:repeat(3,minmax(0,1fr));}
+          .wani-tool-card{min-height:0!important;padding:20px 16px 14px!important;border-radius:24px!important;}
+          .wani-card-icon{width:92px;height:92px;margin-bottom:16px;}
+          .wani-card-title{font-size:20px;letter-spacing:-.5px;}
+          .wani-under{width:42px;height:3px;margin:10px auto 11px;}
+          .wani-card-desc{font-size:14px;line-height:1.3;max-width:210px;}
+          .wani-arrow{width:42px;height:42px;margin-top:auto;}
+          .wani-bottom-pill{margin-top:24px;padding:12px 14px 12px 18px;border-radius:26px;}
+          .wani-pill-left{font-size:18px;gap:12px;}
+          .wani-pill-icon{width:50px;height:50px;}
+          .wani-pill-action{width:66px;height:50px;border-radius:20px;}
         }
         @media (max-width:520px){
-          .wani-home-inner{padding:16px 14px 96px;}
-          .wani-hero{margin-bottom:10px;}
-          .wani-hero h1{font-size:23px;line-height:1.05;}
-          .wani-hero p{font-size:13px;line-height:1.25;}
-          .wani-sparkle{width:58px;height:42px;flex-basis:58px;}
-          .wani-tool-grid{gap:9px;}
-          .wani-tool-card{min-height:168px!important;height:168px!important;padding:12px 7px 9px!important;border-radius:20px!important;}
-          .wani-card-icon{width:52px;height:52px;margin-bottom:10px;}
-          .wani-card-title{font-size:13.5px;line-height:1.04;}
-          .wani-under{width:32px;height:3px;margin:7px auto 7px;}
-          .wani-card-desc{font-size:10px;line-height:1.18;max-width:96px;-webkit-line-clamp:2;}
-          .wani-arrow{width:31px;height:31px;}
-        }
-        @media (max-width:390px){
-          .wani-home-inner{padding:14px 12px 92px;}
-          .wani-hero h1{font-size:21px;}
-          .wani-hero p{font-size:12.5px;}
-          .wani-tool-grid{gap:8px;}
-          .wani-tool-card{height:158px!important;min-height:158px!important;padding:11px 6px 8px!important;}
-          .wani-card-icon{width:48px;height:48px;margin-bottom:9px;}
-          .wani-card-title{font-size:12.5px;}
-          .wani-card-desc{font-size:9.5px;max-width:88px;}
-          .wani-arrow{width:30px;height:30px;}
+          .wani-home-inner{padding:20px 18px 104px;}
+          .wani-hero h1{font-size:28px;}
+          .wani-hero p{font-size:15px;}
+          .wani-sparkle{width:66px;height:50px;flex-basis:66px;}
+          .wani-tool-grid{gap:12px;}
+          .wani-tool-card{min-height:0!important;padding:16px 10px 12px!important;border-radius:22px!important;}
+          .wani-card-icon{width:72px;height:72px;margin-bottom:12px;}
+          .wani-card-title{font-size:16px;}
+          .wani-card-desc{font-size:12px;line-height:1.25;}
+          .wani-arrow{width:38px;height:38px;}
+          .wani-pill-left{font-size:14px;}
+          .wani-pill-icon{width:42px;height:42px;}
+          .wani-pill-action{width:52px;height:42px;}
         }
       `}</style>
 
@@ -739,10 +773,10 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
               className="wani-tool-card"
               onClick={() => onQuickLaunch(tile.action)}
               style={{
-                minHeight:238,
-                height:238,
-                padding:'24px 24px 18px',
-                borderRadius:28,
+                minHeight:0,
+                height:'100%',
+                padding:'clamp(16px,2.2vh,28px) clamp(14px,2.3vw,26px) clamp(12px,1.8vh,22px)',
+                borderRadius:30,
                 border: dark?'1px solid rgba(255,255,255,0.08)':'1px solid #E8E8E8',
                 background: dark?'rgba(24,24,42,0.92)':'rgba(255,255,255,0.94)',
                 boxShadow: dark?'0 18px 38px rgba(0,0,0,0.34)':'0 14px 34px rgba(15,23,42,0.07)',
@@ -784,6 +818,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
             </svg>
           </div>
         </div>
+
+        {inputProps && <HomeInputDock {...inputProps} t={t} dark={dark} />}
       </div>
     </div>
   )
@@ -1231,7 +1267,6 @@ export default function Brain({ session }) {
     setInput('')
     setAttachedCode(null)
     if (inputRef.current) inputRef.current.style.height = '24px'
-    if (view !== 'chat') setView('chat')
     setIsLoading(true)
 
     let convId = activeConvId
@@ -1538,13 +1573,14 @@ export default function Brain({ session }) {
           .chat-input-wrap{padding:10px 14px 16px!important;margin-bottom:0!important;}
           .chat-messages{padding:16px 14px!important;}
           .tone-btn{padding:7px 14px!important;font-size:13px!important;}
+          .home-input-dock{left:18px!important;right:18px!important;bottom:calc(env(safe-area-inset-bottom) + 8px)!important;}
         }
       `}</style>
 
       {sidebarOpen&&isMobile&&(<div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:40,backdropFilter:'blur(2px)' }} onClick={()=>setSidebarOpen(false)}/>)}
 
       {/* Sidebar */}
-      <div style={{ width:264,minWidth:264,background:t.sidebar,borderRight:`1px solid ${t.border}`,display:'flex',flexDirection:'column',overflow:'hidden',transition:'transform 0.3s ease',transform:sidebarOpen?'translateX(0)':'translateX(-100%)',position:isMobile?'fixed':'relative',top:0,bottom:0,left:0,zIndex:50 }}>
+      <div style={{ width:isMobile?264:(sidebarOpen?264:0),minWidth:isMobile?264:(sidebarOpen?264:0),background:t.sidebar,borderRight:(!isMobile&&!sidebarOpen)?'none':`1px solid ${t.border}`,display:'flex',flexDirection:'column',overflow:'hidden',transition:'transform 0.3s ease, width 0.3s ease, min-width 0.3s ease',transform:(sidebarOpen||!isMobile)?'translateX(0)':'translateX(-100%)',position:isMobile?'fixed':'relative',top:0,bottom:0,left:0,zIndex:50 }}>
         <div style={{ padding:'16px 16px 12px',borderBottom:`1px solid ${t.border}` }}>
           <div onClick={goHome} style={{ display:'flex',alignItems:'center',gap:10,marginBottom:14,cursor:'pointer' }}>
             <WaniLogo size={30} dark={dark}/><WaniWordmark height={16} dark={dark}/>
@@ -1781,74 +1817,7 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {view==='home'&&(
-          <>
-            <HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch}/>
-
-            {/* Home input — same composer style as chat window, fixed to the real bottom */}
-            <div
-              className="chat-input-wrap home-input-fixed"
-              style={{
-                position:'fixed',
-                left:isMobile?'14px':'calc(260px + 18px)',
-                right:isMobile?'14px':'18px',
-                bottom:'calc(env(safe-area-inset-bottom) + 8px)',
-                zIndex:80,
-                background:'transparent',
-                borderTop:'none',
-                backdropFilter:'none',
-                pointerEvents:'auto',
-              }}
-            >
-              <div style={{ maxWidth:680,margin:'0 auto' }}>
-                {uploadedDoc && (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'rgba(79,70,229,0.1)', border:'1px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:12 }}>
-                    <span style={{ fontSize:14 }}>📄</span>
-                    <span style={{ flex:1, color:t.text, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uploadedDoc.name}</span>
-                    <span style={{ color:'#6366f1', fontSize:11, fontWeight:600, background:'rgba(99,102,241,0.15)', padding:'2px 7px', borderRadius:6 }}>{uploadedDoc.docType?.replace('_',' ')}</span>
-                    <button onClick={()=>setUploadedDoc(null)} style={{ background:'none', border:'none', color:t.text4, cursor:'pointer', fontSize:16, lineHeight:1, padding:0 }}>✕</button>
-                  </div>
-                )}
-
-                {uploadedDoc && DOC_ACTIONS[uploadedDoc.docType] && (
-                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
-                    {DOC_ACTIONS[uploadedDoc.docType].map(btn => (
-                      <button key={btn.label}
-                        onClick={() => handleSendText(btn.prompt)}
-                        style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:8, border:`1px solid ${t.border}`, background:t.surface2, color:t.text3, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif" }}>
-                        {btn.icon} {btn.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display:'flex',gap:10,alignItems:'flex-end',background:t.inputBg,border:`1.5px solid ${t.border2}`,borderRadius:14,padding:'10px 12px',transition:'border-color 0.2s, box-shadow 0.2s',boxShadow:dark?'0 16px 36px rgba(0,0,0,0.32)':'0 16px 36px rgba(15,23,42,0.10)' }}
-                  onFocusCapture={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1), 0 16px 36px rgba(15,23,42,0.10)'}}
-                  onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow=dark?'0 16px 36px rgba(0,0,0,0.32)':'0 16px 36px rgba(15,23,42,0.10)'}}
-                >
-                  <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
-                    title="Upload document (PDF, DOCX, TXT)"
-                    style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:uploadedDoc?'#6366f1':t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    {docUploading ? '⏳' : '📎'}
-                  </button>
-                  <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
-
-                  <textarea ref={inputRef} value={input}
-                    onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px'}}
-                    onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
-                    onPaste={handlePaste}
-                    placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
-                    style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
-                  />
-                  <button onClick={()=>handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
-                    style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
-                  >→</button>
-                </div>
-                <div style={{ fontSize:11,color:t.text4,textAlign:'right',marginTop:6,paddingRight:6 }}>{browseModule||'Free mode'} · verify system-specific behaviour</div>
-              </div>
-            </div>
-          </>
-        )}
+        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, attachedCode, isLoading, isStreaming }} />}
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat'&&(
