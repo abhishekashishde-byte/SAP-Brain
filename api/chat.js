@@ -319,24 +319,44 @@ async function streamGPTMini(systemPrompt, messages, onChunk) {
 // ── 5. GOOGLE CUSTOM SEARCH — real SAP links ─────────────────────────────────
 // ── BUILD CLEAN SAP SEARCH QUERY ─────────────────────────────────────────────
 // Extracts SAP-relevant keywords from a conversational question for CSE
-function buildSAPSearchQuery(question) {
-  // Strip conversational filler
-  let q = question
-    .replace(/\b(I have to|I need to|I want to|I am trying to|can you help me|help me|please|how do i|how to|what is|what are|tell me|explain|let me know|could you|would you|is it possible)\b/gi, '')
-    .replace(/\b(built|build|create|make|generate|write|develop|prepare|set up|setup)\b/gi, '')
-    .trim()
+async function buildSAPSearchQuery(question) {
+  try {
+    // Use Groq to fix typos and extract the real SAP concept to search for
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 40,
+        temperature: 0,
+        messages: [{ role: 'user', content: `Convert this SAP question into a short Google search query (4-6 words max). Fix any typos. Extract the core SAP concept — ignore conversational words. Return ONLY the search query, nothing else.
 
-  // Extract SAP-specific terms: T-codes, table names, module names, SAP objects
-  const tcodes  = (question.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || [])
-  const modules = (question.match(/\b(PP|PM|MM|SD|FI|CO|QM|CS|PS|WM|IM|HR|Fiori|S\/4HANA|ABAP|ALV|BOM|MRP|SPRO)\b/gi) || [])
-  const sapTerms= (question.match(/\b(production order|work center|capacity|maintenance order|purchase order|goods receipt|material master|equipment|functional location|routing|BOM|settlement|confirmation|goods issue|batch|vendor|customer|sales order|delivery|billing|cost center|profit center|plant|storage location|movement type)\b/gi) || [])
+Examples:
+"What is the correct table for chekcing Maiutnenace plan" → "SAP Maintenance Plan table MPLA"
+"how does equipment link to asset master" → "SAP equipment asset master integration"
+"I have to built a report for production order daily review" → "SAP production order daily review report"
+"where do I config order type for PM" → "SAP PM order type configuration"
+"explain badi for goods issue" → "SAP BAdI goods issue enhancement"
 
-  // Build query from extracted terms + cleaned question
-  const extracted = [...new Set([...tcodes, ...modules, ...sapTerms])].join(' ')
-  const cleanQ = extracted.length > 10 ? extracted : q.replace(/\s+/g, ' ').trim()
+Question: "${question.slice(0, 200)}"` }]
+      })
+    })
+    const data = await res.json()
+    const query = data.choices?.[0]?.message?.content?.trim() || ''
+    if (query && query.length > 3 && query.length < 100) {
+      console.log('Groq search query:', query)
+      return query
+    }
+  } catch (e) {
+    console.error('buildSAPSearchQuery Groq error:', e.message)
+  }
 
-  // Always prefix with SAP S/4HANA for better CSE targeting
-  return `SAP S/4HANA ${cleanQ}`.slice(0, 120)
+  // Fallback: simple keyword extraction if Groq fails
+  const sapTerms = (question.match(/\b(production order|maintenance plan|work center|capacity|purchase order|goods receipt|material master|equipment|functional location|routing|settlement|batch|sales order|delivery|billing|cost center|asset master|movement type|MPLA|AFKO|AUFK|AFIH|MARA|EQUI)\b/gi) || [])
+  const tcodes   = (question.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || [])
+  const modules  = (question.match(/\b(PP|PM|MM|SD|FI|CO|QM|CS|PS|WM)\b/g) || [])
+  const terms    = [...new Set([...sapTerms, ...tcodes, ...modules])].join(' ')
+  return terms.length > 5 ? `SAP ${terms}`.slice(0, 100) : `SAP S/4HANA ${question.slice(0, 60)}`
 }
 
 async function googleSAPSearch(question, intent = 'SAP_QA') {
@@ -347,6 +367,10 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     return []
   }
   console.log('Google CSE: searching for:', question.slice(0, 60), 'intent:', intent)
+
+  // Build clean query ONCE — fixes typos, extracts SAP concept — reused by all paths below
+  const globalCleanQuery = await buildSAPSearchQuery(question)
+  console.log('Google CSE clean query:', globalCleanQuery)
 
   // Helper — run a single CSE query and return mapped items
   async function runCSE(rawQuery, num = 3) {
@@ -403,50 +427,44 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     // ── NOTE questions: search for SAP Note numbers specifically ─────────────
     const isNoteQuestion = /\b(sap note|note \d{5,}|oss note|known issue|patch|correction)\b/i.test(question)
     if (isNoteQuestion) {
-      const cleanQ = buildSAPSearchQuery(question)
-      results = await runCSE(`SAP Note ${cleanQ} site:community.sap.com OR site:help.sap.com`, 5)
+      results = await runCSE(`SAP Note ${globalCleanQuery} site:community.sap.com OR site:help.sap.com`, 5)
       return results
     }
 
     // ── BAPI/FM questions: target SAP Help API docs ──────────────────────────
     const isBapiQuestion = /\b(bapi|function module|rfc)\b/i.test(question)
     if (isBapiQuestion) {
-      const cleanQ = buildSAPSearchQuery(question)
-      results = await runCSE(`${cleanQ} site:help.sap.com OR site:community.sap.com`, 4)
+      results = await runCSE(`${globalCleanQuery} site:help.sap.com OR site:community.sap.com`, 4)
       return results
     }
 
     // ── EXIT/BAdI questions: target SAP Help enhancement docs ────────────────
     const isExitQuestion = /\b(user exit|badi|enhancement spot|enhancement point)\b/i.test(question)
     if (isExitQuestion) {
-      const cleanQ = buildSAPSearchQuery(question)
-      results = await runCSE(`${cleanQ} enhancement site:help.sap.com OR site:community.sap.com`, 4)
+      results = await runCSE(`${globalCleanQuery} enhancement site:help.sap.com OR site:community.sap.com`, 4)
       return results
     }
 
     // ── DEFAULT: clean keyword query, multi-source SAP search ────────────────
-    const cleanQuery = buildSAPSearchQuery(question)
-    console.log('Google CSE query:', cleanQuery)
-
-    // Try targeted SAP sources first — split into two calls since OR is unreliable in CSE
+    // Try targeted SAP sources — split into two calls since OR is unreliable in CSE
     const [helpResults, communityResults] = await Promise.all([
-      runCSE(`${cleanQuery} site:help.sap.com`, 2),
-      runCSE(`${cleanQuery} site:community.sap.com OR site:blogs.sap.com`, 3),
+      runCSE(`${globalCleanQuery} site:help.sap.com`, 2),
+      runCSE(`${globalCleanQuery} site:community.sap.com OR site:blogs.sap.com`, 3),
     ])
     results = [...helpResults, ...communityResults]
     console.log('Google CSE targeted results:', results.length)
 
     // Fallback 1 — open web search with clean SAP query
     if (results.length === 0) {
-      results = await runCSE(cleanQuery, 4)
+      results = await runCSE(globalCleanQuery, 4)
       console.log('Google CSE open results:', results.length)
     }
 
     // Fallback 2 — guaranteed curated links (always topic-specific via URL params)
     if (results.length === 0) {
-      const rawTerms = cleanQuery.replace('SAP S/4HANA ', '').trim()
+      const rawTerms = globalCleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
       const encoded = encodeURIComponent(rawTerms)
-      const encodedFull = encodeURIComponent(cleanQuery)
+      const encodedFull = encodeURIComponent(globalCleanQuery)
       results = [
         {
           title: `SAP Help: ${rawTerms.slice(0, 60)}`,
@@ -467,7 +485,7 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
           source: 'Web',
         },
       ]
-      console.log('Google CSE fallback links generated for:', cleanQuery)
+      console.log('Google CSE fallback links generated for:', globalCleanQuery)
     }
     return results
 
