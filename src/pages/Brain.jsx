@@ -142,12 +142,10 @@ const SOURCE_META = {
 function FurtherReading({ links, t, dark }) {
   if (!links || links.length === 0) return null
 
-  // Detect fallback-generated links (no real CSE result behind them)
   const isFallback = l => /^(SAP Help:|SAP Community:|Google:|SAP Blogs?:)/i.test(l.title)
-  const realLinks     = links.filter(l => !isFallback(l)).slice(0, 5)
+  const realLinks     = links.filter(l => !isFallback(l)).slice(0, 6)
   const fallbackLinks = links.filter(l =>  isFallback(l))
 
-  // Deduplicate fallbacks by source label
   const seen = new Set()
   const dedupedFallback = fallbackLinks.filter(l => {
     const k = (SOURCE_META[l.source] || SOURCE_META['Web']).label
@@ -158,54 +156,43 @@ function FurtherReading({ links, t, dark }) {
 
   return (
     <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 11, color: t.text4, marginBottom: 6 }}>🔎 Further reading:</div>
 
-      {/* ── Real CSE results — SAP-style tag pills with actual page titles ── */}
+      {/* Real CSE results — full readable rows */}
       {realLinks.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: dedupedFallback.length > 0 ? 8 : 0 }}>
-          <span style={{ fontSize: 11, color: t.text4, width: '100%', marginBottom: 2 }}>🔎 Further reading:</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: dedupedFallback.length > 0 ? 10 : 0 }}>
           {realLinks.map((link, i) => {
-            const cleanTitle = link.title.replace(/ \| SAP Help Portal$| \| SAP Community$| \| SAP$/i, '').trim()
+            const meta = SOURCE_META[link.source] || SOURCE_META['SAP']
+            const cleanTitle = link.title.replace(/ [|] SAP Help Portal$| [|] SAP Community$| [|] SAP$/i, '').trim()
             return (
               <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
-                title={link.title}
-                style={{
-                  display: 'inline-block',
-                  fontSize: 12, fontWeight: 400, color: t.text2,
-                  textDecoration: 'none',
-                  padding: '3px 10px', borderRadius: 20,
-                  border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`,
-                  background: 'transparent',
-                  transition: 'all 0.15s',
-                  whiteSpace: 'nowrap', maxWidth: 300,
-                  overflow: 'hidden', textOverflow: 'ellipsis',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.color = '#4F46E5' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'; e.currentTarget.style.color = t.text2 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', transition: 'opacity 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
               >
-                {cleanTitle}
+                <span style={{ fontSize: 13, flexShrink: 0 }}>{meta.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: meta.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420 }}>
+                  {cleanTitle}
+                </span>
+                <span style={{ fontSize: 10, color: t.text4, flexShrink: 0 }}>↗</span>
               </a>
             )
           })}
         </div>
       )}
 
-      {/* ── Fallback generic search links — SAP-style tag pills ── */}
+      {/* Fallback links — pill shaped tags, only when no real CSE results */}
       {realLinks.length === 0 && dedupedFallback.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-          <span style={{ fontSize: 11, color: t.text4, width: '100%', marginBottom: 2 }}>🔎 Further reading:</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {dedupedFallback.map((link, i) => {
             const meta = SOURCE_META[link.source] || SOURCE_META['Web']
             return (
               <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
                 style={{
-                  display: 'inline-block',
-                  fontSize: 12, fontWeight: 400, color: t.text2,
-                  textDecoration: 'none',
-                  padding: '3px 10px', borderRadius: 20,
+                  display: 'inline-block', fontSize: 12, fontWeight: 400, color: t.text2,
+                  textDecoration: 'none', padding: '3px 10px', borderRadius: 20,
                   border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'}`,
-                  background: 'transparent',
-                  transition: 'all 0.15s',
-                  whiteSpace: 'nowrap',
+                  background: 'transparent', transition: 'all 0.15s', whiteSpace: 'nowrap',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = '#4F46E5'; e.currentTarget.style.color = '#4F46E5' }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'; e.currentTarget.style.color = t.text2 }}
