@@ -131,7 +131,7 @@ function TypingDots() {
 // ── FURTHER READING BLOCK ─────────────────────────────────────────────────────
 const SOURCE_META = {
   'SAP Help':         { icon: '📖', color: '#0070F2', label: 'SAP Help' },
-  'SAP Community':    { icon: '💬', color: '#F0AB00', label: 'SAP Community' },
+  'SAP Community':    { icon: '💬', color: '#E8A000', label: 'SAP Community' },
   'SAP Blog':         { icon: '✍️', color: '#E8A000', label: 'SAP Blog' },
   'SAP Fiori Library':{ icon: '◻️', color: '#0070F2', label: 'Fiori Library' },
   'SAP Support':      { icon: '🔧', color: '#C0392B', label: 'SAP Support' },
@@ -140,53 +140,73 @@ const SOURCE_META = {
 }
 
 function FurtherReading({ links, t, dark }) {
+  const [open, setOpen] = useState(false)
   if (!links || links.length === 0) return null
   return (
-    <div style={{
-      marginTop: 14,
-      padding: '12px 14px',
-      borderRadius: 12,
-      background: dark ? 'rgba(79,70,229,0.08)' : 'rgba(79,70,229,0.04)',
-      border: `1px solid ${dark ? 'rgba(79,70,229,0.22)' : 'rgba(79,70,229,0.15)'}`,
-    }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#6D5FD5', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 9 }}>
-        📚 Further Reading
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {links.map((link, i) => {
-          const meta = SOURCE_META[link.source] || SOURCE_META['Web']
-          return (
-            <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
-              style={{
-                display: 'flex', alignItems: 'flex-start', gap: 9,
-                textDecoration: 'none', padding: '7px 10px',
-                borderRadius: 8, transition: 'background 0.15s',
-                background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.7)',
-                border: `1px solid ${dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = dark ? 'rgba(79,70,229,0.15)' : 'rgba(79,70,229,0.07)'}
-              onMouseLeave={e => e.currentTarget.style.background = dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.7)'}
-            >
-              <span style={{ fontSize: 14, lineHeight: 1, marginTop: 2, flexShrink: 0 }}>{meta.icon}</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: meta.color, lineHeight: 1.35, wordBreak: 'break-word' }}>
-                  {link.title}
-                </div>
-                {link.snippet && (
-                  <div style={{ fontSize: 11, color: t.text4, marginTop: 2, lineHeight: 1.4,
-                    overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                    {link.snippet}
-                  </div>
-                )}
-                <div style={{ fontSize: 10, color: t.text4, marginTop: 3, fontWeight: 600, letterSpacing: 0.4 }}>
-                  {meta.label}
-                </div>
-              </div>
-              <span style={{ fontSize: 11, color: t.text4, flexShrink: 0, marginLeft: 'auto', marginTop: 2 }}>↗</span>
-            </a>
-          )
-        })}
-      </div>
+    <div style={{ marginTop: 10 }}>
+      {/* Compact trigger row — always visible */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '4px 0', color: t.text4, fontSize: 12,
+          fontFamily: "'Inter','DM Sans',sans-serif",
+        }}
+      >
+        <span style={{ fontSize: 13 }}>📚</span>
+        <span style={{ fontWeight: 500 }}>Further reading</span>
+        <span style={{ fontSize: 10, marginLeft: 2 }}>{open ? '▲' : '▼'}</span>
+        {!open && (
+          <span style={{ marginLeft: 4, display: 'flex', gap: 4 }}>
+            {links.slice(0, 3).map((l, i) => {
+              const meta = SOURCE_META[l.source] || SOURCE_META['Web']
+              return (
+                <span key={i} style={{
+                  fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                  background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
+                  color: meta.color, fontWeight: 600,
+                }}>{meta.label}</span>
+              )
+            })}
+          </span>
+        )}
+      </button>
+
+      {/* Expanded list */}
+      {open && (
+        <div style={{
+          marginTop: 6,
+          padding: '10px 12px',
+          borderRadius: 10,
+          background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+          border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'}`,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {links.map((link, i) => {
+              const meta = SOURCE_META[link.source] || SOURCE_META['Web']
+              return (
+                <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '6px 8px', borderRadius: 7,
+                    textDecoration: 'none', transition: 'background 0.12s',
+                    background: 'transparent',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = dark ? 'rgba(255,255,255,0.05)' : 'rgba(79,70,229,0.06)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{ fontSize: 13, flexShrink: 0 }}>{meta.icon}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: meta.color, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    {link.title}
+                  </span>
+                  <span style={{ fontSize: 10, color: t.text4, flexShrink: 0 }}>↗</span>
+                </a>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
