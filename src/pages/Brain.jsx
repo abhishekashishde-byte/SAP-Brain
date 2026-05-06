@@ -627,195 +627,133 @@ function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
 function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark }) {
+  const [inputVal, setInputVal] = React.useState('')
 
   const TILES = [
-    {
-      action: 'fs',
-      icon: '/icon-fs.png',
-      label: 'Build Specs',
-      desc: 'Turn discussions into structured FS documents',
-      accent: '#F97316',
-    },
-    {
-      action: 'customizing',
-      icon: '/icon-customizing.png',
-      label: 'Find & Configure',
-      desc: 'SPRO paths, T-codes and config guidance',
-      accent: '#EF4444',
-    },
-    {
-      action: 'code',
-      icon: '/icon-code.png',
-      label: 'Code Insight',
-      desc: 'Analyze ABAP logic, risks and dependencies',
-      accent: '#3B82F6',
-    },
-    {
-      action: 'workshop',
-      icon: '/icon-workshop.png',
-      label: 'Deck Generator',
-      desc: 'Generate polished SAP workshop presentations',
-      accent: '#F97316',
-    },
-    {
-      action: 'fiori',
-      icon: '/icon-fiori.png',
-      label: 'Explore Fiori',
-      desc: 'Find the right Fiori app for any process',
-      accent: '#EF4444',
-    },
-    {
-      action: 'bestpractice',
-      icon: '/icon-cloud.png',
-      label: 'Best Practices',
-      desc: 'SAP-standard flows, Activate guidance and process recommendations',
-      accent: '#8B5CF6',
-    },
+    { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',              accent:'#F97316' },
+    { action:'customizing', icon:'/icon-customizing.png',  label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                    accent:'#EF4444' },
+    { action:'code',        icon:'/icon-code.png',         label:'Code Insight',     desc:'Analyze ABAP logic, risks and dependencies',                 accent:'#3B82F6' },
+    { action:'workshop',    icon:'/icon-workshop.png',     label:'Deck Generator',   desc:'Generate polished SAP workshop presentations',               accent:'#F97316' },
+    { action:'fiori',       icon:'/icon-fiori.png',        label:'Explore Fiori',    desc:'Find the right Fiori app for any process',                   accent:'#EF4444' },
+    { action:'bestpractice',icon:'/icon-cloud.png',        label:'Best Practices',   desc:'SAP-standard flows, Activate guidance and process recommendations', accent:'#8B5CF6' },
   ]
+
+  const handleInputSend = () => {
+    if (!inputVal.trim()) return
+    onNewChat(null, null, inputVal.trim())
+  }
 
   return (
     <div style={{
-      flex:1, overflowY:'auto', position:'relative',
-      background: dark ? '#0F0F14' : '#FAFAFA',
+      flex:1, display:'flex', flexDirection:'column', overflow:'hidden',
+      background: dark ? '#0D0D14' : '#F7F8FA',
       fontFamily:"'DM Sans','Inter',system-ui,sans-serif",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-        @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes wiggle{0%{transform:rotate(0) scale(1)}20%{transform:rotate(-8deg) scale(1.05)}40%{transform:rotate(7deg) scale(1.05)}60%{transform:rotate(-4deg) scale(1.02)}80%{transform:rotate(3deg) scale(1.01)}100%{transform:rotate(0) scale(1)}}
-        .ql-tile{animation:fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) both}
-        .ql-tile:nth-child(1){animation-delay:0.05s}
-        .ql-tile:nth-child(2){animation-delay:0.1s}
-        .ql-tile:nth-child(3){animation-delay:0.15s}
-        .ql-tile:nth-child(4){animation-delay:0.2s}
-        .ql-tile:nth-child(5){animation-delay:0.25s}
-        .ql-tile:nth-child(6){animation-delay:0.3s}
-        .ql-icon{transition:transform 0.15s ease}
-        .ql-tile:hover .ql-icon{animation:wiggle 0.5s ease forwards}
-        .ql-arrow{transition:transform 0.2s ease, background 0.2s ease}
-        .ql-tile:hover .ql-arrow{transform:translateX(3px)}
+        @keyframes tileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes wiggle{0%,100%{transform:rotate(0) scale(1)}20%{transform:rotate(-9deg) scale(1.07)}45%{transform:rotate(8deg) scale(1.07)}65%{transform:rotate(-4deg) scale(1.03)}80%{transform:rotate(3deg) scale(1.01)}}
+        .ql2-tile{animation:tileIn 0.45s cubic-bezier(0.16,1,0.3,1) both;position:relative}
+        .ql2-tile:nth-child(1){animation-delay:0.04s}.ql2-tile:nth-child(2){animation-delay:0.09s}.ql2-tile:nth-child(3){animation-delay:0.14s}
+        .ql2-tile:nth-child(4){animation-delay:0.19s}.ql2-tile:nth-child(5){animation-delay:0.24s}.ql2-tile:nth-child(6){animation-delay:0.29s}
+        .ql2-icon{display:block;transition:transform 0.1s ease}
+        .ql2-tile:hover .ql2-icon{animation:wiggle 0.5s ease forwards}
+        .ql2-arrow{transition:transform 0.2s ease,background 0.2s ease}
+        .ql2-tile:hover .ql2-arrow{transform:translateX(2px)}
+        .ql2-input{transition:border-color 0.18s,box-shadow 0.18s}
+        .ql2-input:focus{outline:none;border-color:#4F46E5 !important;box-shadow:0 0 0 3px rgba(79,70,229,0.1) !important}
       `}</style>
 
-      {/* Main content */}
-      <div style={{ padding:'28px 20px 100px', maxWidth:520, margin:'0 auto' }}>
+      {/* Scrollable content area */}
+      <div style={{ flex:1, overflowY:'auto', padding:'20px 16px 12px' }}>
 
         {/* Header */}
-        <div style={{ marginBottom:28, animation:'fadeUp 0.4s ease both' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-            <div>
-              <h1 style={{
-                fontSize: 28, fontWeight:800, lineHeight:1.2,
-                color: dark ? '#F8FAFC' : '#0F172A',
-                margin:'0 0 8px',
-                fontFamily:"'DM Sans',sans-serif",
-              }}>
-                What would you like to do?
-              </h1>
-              <p style={{ fontSize:14, color: dark ? '#94A3B8' : '#64748B', margin:0, fontWeight:500 }}>
-                Pick a tool and get started — no typing needed.
-              </p>
-            </div>
-            {/* Sparkle decoration */}
-            <div style={{ flexShrink:0, marginTop:4 }}>
-              <svg width="52" height="40" viewBox="0 0 52 40" fill="none">
-                <path d="M40 4 L42 10 L48 12 L42 14 L40 20 L38 14 L32 12 L38 10 Z" fill="#FCD34D" opacity="0.9"/>
-                <path d="M16 18 L17.5 22 L22 23.5 L17.5 25 L16 29 L14.5 25 L10 23.5 L14.5 22 Z" fill="#FCD34D" opacity="0.6"/>
-                <path d="M32 28 L33 31 L36 32 L33 33 L32 36 L31 33 L28 32 L31 31 Z" fill="#FCD34D" opacity="0.5"/>
-              </svg>
-            </div>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20 }}>
+          <div>
+            <h1 style={{ fontSize:26, fontWeight:800, lineHeight:1.2, margin:'0 0 6px',
+              color: dark?'#F8FAFC':'#0F172A', fontFamily:"'DM Sans',sans-serif" }}>
+              What would you like<br/>to do?
+            </h1>
+            <p style={{ fontSize:13, color:dark?'#64748B':'#94A3B8', margin:0, fontWeight:500 }}>
+              Pick a tool and get started — no typing needed.
+            </p>
+          </div>
+          {/* Sparkle */}
+          <div style={{ flexShrink:0, paddingTop:2 }}>
+            <svg width="56" height="44" viewBox="0 0 56 44" fill="none">
+              <path d="M42 4L44 10L50 12L44 14L42 20L40 14L34 12L40 10Z" fill="#FCD34D" opacity="0.95"/>
+              <circle cx="32" cy="8" r="1.5" fill="#FCD34D" opacity="0.5"/>
+              <path d="M14 20L15.5 24.5L20 26L15.5 27.5L14 32L12.5 27.5L8 26L12.5 24.5Z" fill="#FCD34D" opacity="0.65"/>
+              <path d="M34 30L35 33L38 34L35 35L34 38L33 35L30 34L33 33Z" fill="#FCD34D" opacity="0.5"/>
+              {/* Curve */}
+              <path d="M22 6 Q36 2 48 16" stroke="#FCD34D" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.3"/>
+            </svg>
           </div>
         </div>
 
-        {/* Tiles grid */}
-        <div style={{
-          display:'grid',
-          gridTemplateColumns:'1fr 1fr 1fr',
-          gap:12,
-          marginBottom:24,
-        }}>
+        {/* 3x2 tile grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
           {TILES.map(tile => (
-            <button
-              key={tile.action}
-              className="ql-tile"
+            <button key={tile.action} className="ql2-tile"
               onClick={() => onQuickLaunch(tile.action)}
               style={{
-                background: dark ? '#1E1E2E' : '#FFFFFF',
-                border:`1.5px solid ${dark?'rgba(255,255,255,0.06)':'#F1F5F9'}`,
-                borderRadius:16,
-                padding:'16px 12px 14px',
-                cursor:'pointer',
-                textAlign:'left',
-                display:'flex',
-                flexDirection:'column',
-                alignItems:'flex-start',
-                gap:0,
-                boxShadow: dark
-                  ? '0 2px 12px rgba(0,0,0,0.3)'
-                  : '0 1px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)',
+                background: dark?'#18182A':'#FFFFFF',
+                border:`1.5px solid ${dark?'rgba(255,255,255,0.07)':'#EAECF0'}`,
+                borderRadius:18, padding:'16px 12px 14px',
+                cursor:'pointer', textAlign:'left',
+                display:'flex', flexDirection:'column', alignItems:'flex-start',
+                boxShadow: dark?'0 2px 12px rgba(0,0,0,0.35)':'0 1px 8px rgba(0,0,0,0.06)',
                 transition:'transform 0.18s ease, box-shadow 0.18s ease',
+                minHeight:0,
               }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-3px)'
-                e.currentTarget.style.boxShadow = dark
-                  ? `0 8px 24px rgba(0,0,0,0.4)`
-                  : `0 8px 24px rgba(0,0,0,0.1)`
+              onMouseEnter={e=>{
+                e.currentTarget.style.transform='translateY(-4px)'
+                e.currentTarget.style.boxShadow=`0 12px 28px ${tile.accent}28`
               }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = dark
-                  ? '0 2px 12px rgba(0,0,0,0.3)'
-                  : '0 1px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02)'
+              onMouseLeave={e=>{
+                e.currentTarget.style.transform='translateY(0)'
+                e.currentTarget.style.boxShadow=dark?'0 2px 12px rgba(0,0,0,0.35)':'0 1px 8px rgba(0,0,0,0.06)'
               }}
             >
               {/* Icon */}
-              <div className="ql-icon" style={{ width:64, height:64, marginBottom:10 }}>
-                <img
-                  src={tile.icon}
-                  alt={tile.label}
-                  style={{
-                    width:64, height:64, objectFit:'contain',
-                    mixBlendMode: dark ? 'screen' : 'multiply',
-                  }}
+              <div style={{ width:'100%', display:'flex', justifyContent:'center', marginBottom:12 }}>
+                <img className="ql2-icon" src={tile.icon} alt={tile.label}
+                  style={{ width:72, height:72, objectFit:'contain',
+                    mixBlendMode:dark?'screen':'multiply' }}
                 />
               </div>
 
               {/* Label */}
-              <div style={{
-                fontSize:13, fontWeight:700,
-                color: dark ? '#F1F5F9' : '#0F172A',
-                marginBottom:4,
-                fontFamily:"'DM Sans',sans-serif",
-                lineHeight:1.2,
-              }}>
+              <div style={{ fontSize:13, fontWeight:700,
+                color:dark?'#F1F5F9':'#0F172A',
+                marginBottom:5, fontFamily:"'DM Sans',sans-serif",
+                lineHeight:1.2 }}>
                 {tile.label}
               </div>
 
               {/* Accent underline */}
-              <div style={{
-                width:24, height:2.5, borderRadius:2,
-                background: tile.accent,
-                marginBottom:8,
-              }}/>
+              <div style={{ width:22, height:2.5, borderRadius:2,
+                background:tile.accent, marginBottom:8, flexShrink:0 }}/>
 
               {/* Description */}
-              <div style={{
-                fontSize:11, lineHeight:1.5,
-                color: dark ? '#64748B' : '#94A3B8',
-                marginBottom:12,
+              <div style={{ fontSize:10.5, lineHeight:1.55,
+                color:dark?'#64748B':'#94A3B8',
                 fontFamily:"'DM Sans',sans-serif",
-                flex:1,
-              }}>
+                flex:1, marginBottom:12 }}>
                 {tile.desc}
               </div>
 
               {/* Arrow button */}
-              <div className="ql-arrow" style={{
-                width:28, height:28, borderRadius:'50%',
-                background: `${tile.accent}18`,
+              <div className="ql2-arrow" style={{
+                width:30, height:30, borderRadius:'50%',
+                background:`${tile.accent}15`,
+                border:`1px solid ${tile.accent}30`,
                 display:'flex', alignItems:'center', justifyContent:'center',
               }}>
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                  <path d="M2.5 6.5H10.5M10.5 6.5L7 3M10.5 6.5L7 10" stroke={tile.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2.5 6.5H10.5M10.5 6.5L7 3M10.5 6.5L7 10"
+                    stroke={tile.accent} strokeWidth="1.7"
+                    strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
             </button>
@@ -823,45 +761,49 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         </div>
       </div>
 
-      {/* Bottom tagline bar — fixed */}
+      {/* Bottom — chat input bar (same as main chat) */}
       <div style={{
-        position:'fixed', bottom:0, left:0, right:0, zIndex:10,
-        background: dark
-          ? 'linear-gradient(135deg,#1E1E2E,#16162A)'
-          : 'linear-gradient(135deg,#FFF7ED,#FEF3E2)',
-        borderTop:`1px solid ${dark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}`,
-        padding:'12px 20px',
-        display:'flex', alignItems:'center', justifyContent:'space-between',
+        flexShrink:0,
+        padding:'8px 12px 12px',
+        background: dark?'#0D0D14':'#F7F8FA',
+        borderTop:`1px solid ${dark?'rgba(255,255,255,0.06)':'#E8ECF2'}`,
       }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{
-            width:28, height:28, borderRadius:8,
-            background:'linear-gradient(135deg,#F97316,#FBBF24)',
-            display:'flex', alignItems:'center', justifyContent:'center',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1L8.5 5H13L9.5 7.5L11 11.5L7 9L3 11.5L4.5 7.5L1 5H5.5Z" fill="white"/>
-            </svg>
-          </div>
-          <span style={{
-            fontSize:13, fontWeight:600,
-            color: dark ? '#CBD5E1' : '#78350F',
-            fontFamily:"'DM Sans',sans-serif",
-          }}>
-            Smart tools. SAP expertise. Better outcomes.
-          </span>
-        </div>
         <div style={{
-          width:32, height:32, borderRadius:8,
-          background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          cursor:'pointer',
-        }}
-          onClick={() => onNewChat(null, null)}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M7 2V12M2 7H12" stroke={dark?'#94A3B8':'#64748B'} strokeWidth="2" strokeLinecap="round"/>
-          </svg>
+          display:'flex', alignItems:'center', gap:8,
+          background: dark?'#1A1A2E':'#FFFFFF',
+          border:`1.5px solid ${dark?'rgba(255,255,255,0.1)':'#E2E8F0'}`,
+          borderRadius:14, padding:'8px 12px',
+          boxShadow:'0 2px 8px rgba(0,0,0,0.06)',
+        }}>
+          <input
+            className="ql2-input"
+            value={inputVal}
+            onChange={e=>setInputVal(e.target.value)}
+            onKeyDown={e=>{ if(e.key==='Enter'&&inputVal.trim()) { onNewChat(null,null); }}}
+            placeholder="Ask your SAP question..."
+            style={{
+              flex:1, border:'none', background:'transparent', outline:'none',
+              fontSize:14, color:dark?'#E2E8F0':'#1a1a2e',
+              fontFamily:"'DM Sans',sans-serif",
+            }}
+          />
+          <button
+            onClick={handleInputSend}
+            style={{
+              width:34, height:34, borderRadius:10, border:'none', flexShrink:0,
+              background: inputVal.trim() ? '#4F46E5' : dark?'rgba(255,255,255,0.06)':'#F1F5F9',
+              color: inputVal.trim() ? '#fff' : dark?'#475569':'#94A3B8',
+              cursor: inputVal.trim() ? 'pointer' : 'default',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              transition:'background 0.18s',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7H12M12 7L8 3M12 7L8 11"
+                stroke="currentColor" strokeWidth="1.8"
+                strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
