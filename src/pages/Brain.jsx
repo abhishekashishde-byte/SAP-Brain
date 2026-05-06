@@ -132,7 +132,7 @@ function TypingDots() {
 const SOURCE_META = {
   'SAP Help':         { icon: '📘', color: '#0070F2', label: 'SAP Help' },
   'SAP Community':    { icon: '💬', color: '#E8A000', label: 'SAP Community' },
-  'SAP Blog':         { icon: '✍️', color: '#D97706', label: 'SAP Blog' },
+  'SAP Blog':         { icon: '✍️', color: '#D97706', label: 'SAP Blogs' },
   'SAP Fiori Library':{ icon: '◻️', color: '#0070F2', label: 'Fiori Library' },
   'SAP Support':      { icon: '🔧', color: '#C0392B', label: 'SAP Support' },
   'SAP':              { icon: '📄', color: '#425B76', label: 'SAP Docs' },
