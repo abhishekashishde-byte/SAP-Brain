@@ -128,83 +128,91 @@ function TypingDots() {
   )
 }
 
-// ── FURTHER READING BLOCK ─────────────────────────────────────────────────────
+// ── FURTHER READING BLOCK — two-tier display ─────────────────────────────────
 const SOURCE_META = {
-  'SAP Help':         { icon: '📖', color: '#0070F2', label: 'SAP Help' },
+  'SAP Help':         { icon: '📘', color: '#0070F2', label: 'SAP Help' },
   'SAP Community':    { icon: '💬', color: '#E8A000', label: 'SAP Community' },
-  'SAP Blog':         { icon: '✍️', color: '#E8A000', label: 'SAP Blog' },
+  'SAP Blog':         { icon: '✍️', color: '#D97706', label: 'SAP Blog' },
   'SAP Fiori Library':{ icon: '◻️', color: '#0070F2', label: 'Fiori Library' },
   'SAP Support':      { icon: '🔧', color: '#C0392B', label: 'SAP Support' },
-  'SAP':              { icon: '🔗', color: '#425B76', label: 'SAP' },
-  'Web':              { icon: '🌐', color: '#555',    label: 'Web' },
+  'SAP':              { icon: '📄', color: '#425B76', label: 'SAP Docs' },
+  'Web':              { icon: '🌐', color: '#555',    label: 'Google Search' },
 }
 
 function FurtherReading({ links, t, dark }) {
-  const [open, setOpen] = useState(false)
   if (!links || links.length === 0) return null
+
+  // Detect fallback-generated links (no real CSE result behind them)
+  const isFallback = l => /^(SAP Help:|SAP Community:|Google:|SAP Blogs?:)/i.test(l.title)
+  const realLinks     = links.filter(l => !isFallback(l)).slice(0, 5)
+  const fallbackLinks = links.filter(l =>  isFallback(l))
+
+  // Deduplicate fallbacks by source label
+  const seen = new Set()
+  const dedupedFallback = fallbackLinks.filter(l => {
+    const k = (SOURCE_META[l.source] || SOURCE_META['Web']).label
+    if (seen.has(k)) return false; seen.add(k); return true
+  })
+
+  if (realLinks.length === 0 && dedupedFallback.length === 0) return null
+
   return (
     <div style={{ marginTop: 10 }}>
-      {/* Compact trigger row — always visible */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          background: 'none', border: 'none', cursor: 'pointer',
-          padding: '4px 0', color: t.text4, fontSize: 12,
-          fontFamily: "'Inter','DM Sans',sans-serif",
-        }}
-      >
-        <span style={{ fontSize: 13 }}>📚</span>
-        <span style={{ fontWeight: 500 }}>Further reading</span>
-        <span style={{ fontSize: 10, marginLeft: 2 }}>{open ? '▲' : '▼'}</span>
-        {!open && (
-          <span style={{ marginLeft: 4, display: 'flex', gap: 4 }}>
-            {links.slice(0, 3).map((l, i) => {
-              const meta = SOURCE_META[l.source] || SOURCE_META['Web']
-              return (
-                <span key={i} style={{
-                  fontSize: 10, padding: '1px 6px', borderRadius: 4,
-                  background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
-                  color: meta.color, fontWeight: 600,
-                }}>{meta.label}</span>
-              )
-            })}
-          </span>
-        )}
-      </button>
 
-      {/* Expanded list */}
-      {open && (
-        <div style={{
-          marginTop: 6,
-          padding: '10px 12px',
-          borderRadius: 10,
-          background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-          border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'}`,
-        }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {links.map((link, i) => {
-              const meta = SOURCE_META[link.source] || SOURCE_META['Web']
-              return (
-                <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+      {/* ── Real CSE results — full readable links, one per line ── */}
+      {realLinks.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: dedupedFallback.length > 0 ? 8 : 0 }}>
+          {realLinks.map((link, i) => {
+            const meta = SOURCE_META[link.source] || SOURCE_META['SAP']
+            const cleanTitle = link.title.replace(/ \| SAP Help Portal$| \| SAP Community$| \| SAP$/i, '').trim()
+            return (
+              <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  textDecoration: 'none', padding: '3px 0',
+                  transition: 'opacity 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                <span style={{ fontSize: 13, flexShrink: 0 }}>{meta.icon}</span>
+                <span style={{
+                  fontSize: 13, fontWeight: 500, color: meta.color,
+                  borderBottom: `1px solid ${meta.color}40`,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  maxWidth: 420,
+                }}>
+                  {cleanTitle}
+                </span>
+                <span style={{ fontSize: 10, color: t.text4, flexShrink: 0 }}>↗</span>
+              </a>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Fallback generic search links — compact inline row, only shown when no real results ── */}
+      {realLinks.length === 0 && dedupedFallback.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5 }}>
+          <span style={{ fontSize: 11, color: t.text4 }}>🔎 Search:</span>
+          {dedupedFallback.map((link, i) => {
+            const meta = SOURCE_META[link.source] || SOURCE_META['Web']
+            return (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                {i > 0 && <span style={{ color: t.text4, fontSize: 11 }}>·</span>}
+                <a href={link.url} target="_blank" rel="noopener noreferrer"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '6px 8px', borderRadius: 7,
-                    textDecoration: 'none', transition: 'background 0.12s',
-                    background: 'transparent',
+                    fontSize: 12, fontWeight: 500, color: meta.color,
+                    textDecoration: 'none', borderBottom: `1px solid ${meta.color}40`,
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = dark ? 'rgba(255,255,255,0.05)' : 'rgba(79,70,229,0.06)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  onMouseEnter={e => e.currentTarget.style.borderBottomColor = meta.color}
+                  onMouseLeave={e => e.currentTarget.style.borderBottomColor = `${meta.color}40`}
                 >
-                  <span style={{ fontSize: 13, flexShrink: 0 }}>{meta.icon}</span>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: meta.color, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                    {link.title}
-                  </span>
-                  <span style={{ fontSize: 10, color: t.text4, flexShrink: 0 }}>↗</span>
+                  {meta.icon} {meta.label}
                 </a>
-              )
-            })}
-          </div>
+              </span>
+            )
+          })}
         </div>
       )}
     </div>
