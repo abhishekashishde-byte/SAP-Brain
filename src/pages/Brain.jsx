@@ -1481,7 +1481,10 @@ export default function Brain({ session }) {
             } else if (evt.type === 'further_reading') {
               furtherReadingLinks = evt.links || []
             } else if (evt.type === 'done') {
-              fullReply = evt.full || accumulated
+              // For FS/PPT: always use evt.full (the clean card) — never accumulated raw content
+              fullReply = evt.full || (
+                (evt.fsComplete || evt.pptComplete) ? '' : accumulated
+              )
               modelUsed = evt.model
               deliverableType = evt.deliverableType || 'NONE'
 
