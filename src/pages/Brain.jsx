@@ -627,183 +627,150 @@ function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
 function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark }) {
-  const [inputVal, setInputVal] = useState('')
-
   const TILES = [
-    { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',              accent:'#F97316' },
-    { action:'customizing', icon:'/icon-customizing.png',  label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                    accent:'#EF4444' },
-    { action:'code',        icon:'/icon-code.png',         label:'Code Insight',     desc:'Analyze ABAP logic, risks and dependencies',                 accent:'#3B82F6' },
-    { action:'workshop',    icon:'/icon-workshop.png',     label:'Deck Generator',   desc:'Generate polished SAP workshop presentations',               accent:'#F97316' },
-    { action:'fiori',       icon:'/icon-fiori.png',        label:'Explore Fiori',    desc:'Find the right Fiori app for any process',                   accent:'#EF4444' },
-    { action:'bestpractice',icon:'/icon-cloud.png',        label:'Best Practices',   desc:'SAP-standard flows, Activate guidance and process recommendations', accent:'#8B5CF6' },
+    { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',                   accent:'#F97316', soft:'#FFF7ED' },
+    { action:'customizing', icon:'/icon-customizing.png', label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                         accent:'#E11D48', soft:'#FFF1F2' },
+    { action:'code',        icon:'/icon-code.png',        label:'Code Insight',     desc:'Analyze ABAP logic, risks and dependencies',                      accent:'#0A7DD8', soft:'#EFF6FF' },
+    { action:'workshop',    icon:'/icon-workshop.png',    label:'Deck Generator',   desc:'Generate polished SAP workshop presentations',                    accent:'#F97316', soft:'#FFF7ED' },
+    { action:'fiori',       icon:'/icon-fiori.png',       label:'Explore Fiori',    desc:'Find the right Fiori app for any process',                        accent:'#E11D48', soft:'#FFF1F2' },
+    { action:'bestpractice',icon:'/icon-cloud.png',       label:'Best Practices',   desc:'SAP-standard flows, Activate guidance and process recommendations', accent:'#7C3AED', soft:'#F5F3FF' },
   ]
 
-  const handleInputSend = () => {
-    if (!inputVal.trim()) return
-    onNewChat(null, null, inputVal.trim())
-  }
-
   return (
-    <div style={{
-      flex:1, display:'flex', flexDirection:'column', overflow:'hidden',
-      background: dark ? '#0D0D14' : '#F7F8FA',
+    <div className="wani-home-exact" style={{
+      flex:1,
+      overflowY:'auto',
+      background: dark
+        ? 'radial-gradient(circle at 85% 8%, rgba(251,191,36,0.10), transparent 24%), #0D0D14'
+        : 'radial-gradient(circle at 90% 10%, rgba(251,191,36,0.18), transparent 22%), linear-gradient(180deg,#FFFFFF 0%,#FFFDF9 70%,#FFF7ED 100%)',
       fontFamily:"'DM Sans','Inter',system-ui,sans-serif",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-        @keyframes tileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes wiggle{0%,100%{transform:rotate(0) scale(1)}20%{transform:rotate(-9deg) scale(1.07)}45%{transform:rotate(8deg) scale(1.07)}65%{transform:rotate(-4deg) scale(1.03)}80%{transform:rotate(3deg) scale(1.01)}}
-        .ql2-tile{animation:tileIn 0.45s cubic-bezier(0.16,1,0.3,1) both;position:relative}
-        .ql2-tile:nth-child(1){animation-delay:0.04s}.ql2-tile:nth-child(2){animation-delay:0.09s}.ql2-tile:nth-child(3){animation-delay:0.14s}
-        .ql2-tile:nth-child(4){animation-delay:0.19s}.ql2-tile:nth-child(5){animation-delay:0.24s}.ql2-tile:nth-child(6){animation-delay:0.29s}
-        .ql2-icon{display:block;transition:transform 0.1s ease}
-        .ql2-tile:hover .ql2-icon{animation:wiggle 0.5s ease forwards}
-        .ql2-arrow{transition:transform 0.2s ease,background 0.2s ease}
-        .ql2-tile:hover .ql2-arrow{transform:translateX(2px)}
-        .ql2-input{transition:border-color 0.18s,box-shadow 0.18s}
-        .ql2-input:focus{outline:none;border-color:#4F46E5 !important;box-shadow:0 0 0 3px rgba(79,70,229,0.1) !important}
+        @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+        .wani-home-inner{max-width:1120px;margin:0 auto;padding:56px 34px 24px;}
+        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:34px;}
+        .wani-hero h1{font-size:44px;line-height:1.08;letter-spacing:-1.6px;margin:0 0 14px;font-weight:800;}
+        .wani-hero p{font-size:22px;line-height:1.35;margin:0;font-weight:500;color:#6B7280;}
+        .wani-sparkle{width:188px;height:104px;flex:0 0 188px;margin-top:4px;}
+        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+        .wani-tool-card{animation:exactTileIn .42s cubic-bezier(.16,1,.3,1) both;}
+        .wani-tool-card:nth-child(1){animation-delay:.03s}.wani-tool-card:nth-child(2){animation-delay:.07s}.wani-tool-card:nth-child(3){animation-delay:.11s}
+        .wani-tool-card:nth-child(4){animation-delay:.15s}.wani-tool-card:nth-child(5){animation-delay:.19s}.wani-tool-card:nth-child(6){animation-delay:.23s}
+        .wani-tool-card:hover{transform:translateY(-5px)!important;box-shadow:0 22px 42px rgba(15,23,42,.12)!important;}
+        .wani-tool-card:hover .wani-card-icon{animation:exactFloat .8s ease-in-out infinite;}
+        .wani-card-icon{width:168px;height:168px;object-fit:contain;display:block;margin:0 auto 26px;}
+        .wani-card-title{font-size:29px;line-height:1.03;font-weight:800;letter-spacing:-.8px;text-align:center;margin:0;color:#050505;}
+        .wani-under{width:44px;height:3px;border-radius:999px;margin:18px auto 22px;}
+        .wani-card-desc{font-size:20px;line-height:1.42;font-weight:500;color:#575757;text-align:center;margin:0 auto;max-width:245px;}
+        .wani-arrow{width:58px;height:58px;border-radius:999px;margin:34px auto 0;display:flex;align-items:center;justify-content:center;transition:transform .18s ease;}
+        .wani-tool-card:hover .wani-arrow{transform:translateX(3px);}
+        .wani-bottom-pill{margin:24px 0 0;padding:15px 22px;border-radius:28px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:linear-gradient(90deg,rgba(255,255,255,.94),rgba(255,247,237,.94));border:1px solid rgba(217,119,6,.18);box-shadow:0 14px 34px rgba(15,23,42,.08);}
+        .wani-pill-left{display:flex;align-items:center;gap:18px;font-size:23px;line-height:1.2;font-weight:800;color:#090909;}
+        .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
+        .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
+        @media (max-width:760px){
+          .wani-home-inner{padding:56px 32px 16px;}
+          .wani-hero{margin-bottom:32px;}
+          .wani-hero h1{font-size:34px;letter-spacing:-1px;margin-bottom:10px;white-space:nowrap;}
+          .wani-hero p{font-size:18px;white-space:nowrap;}
+          .wani-sparkle{width:104px;height:70px;flex-basis:104px;margin-top:0;}
+          .wani-tool-grid{gap:18px 20px;grid-template-columns:repeat(3,minmax(0,1fr));}
+          .wani-tool-card{min-height:310px!important;padding:34px 24px 24px!important;border-radius:26px!important;}
+          .wani-card-icon{width:128px;height:128px;margin-bottom:30px;}
+          .wani-card-title{font-size:22px;letter-spacing:-.5px;}
+          .wani-under{width:42px;height:3px;margin:14px auto 20px;}
+          .wani-card-desc{font-size:17px;line-height:1.42;max-width:210px;}
+          .wani-arrow{width:54px;height:54px;margin-top:auto;}
+          .wani-bottom-pill{margin-top:24px;padding:12px 14px 12px 18px;border-radius:26px;}
+          .wani-pill-left{font-size:18px;gap:12px;}
+          .wani-pill-icon{width:50px;height:50px;}
+          .wani-pill-action{width:66px;height:50px;border-radius:20px;}
+        }
+        @media (max-width:520px){
+          .wani-home-inner{padding:50px 18px 14px;}
+          .wani-hero h1{font-size:28px;}
+          .wani-hero p{font-size:15px;}
+          .wani-sparkle{width:74px;height:56px;flex-basis:74px;}
+          .wani-tool-grid{gap:12px;}
+          .wani-tool-card{min-height:270px!important;padding:24px 14px 18px!important;border-radius:22px!important;}
+          .wani-card-icon{width:92px;height:92px;margin-bottom:24px;}
+          .wani-card-title{font-size:17px;}
+          .wani-card-desc{font-size:13px;line-height:1.42;}
+          .wani-arrow{width:44px;height:44px;}
+          .wani-pill-left{font-size:14px;}
+          .wani-pill-icon{width:42px;height:42px;}
+          .wani-pill-action{width:52px;height:42px;}
+        }
       `}</style>
 
-      {/* Scrollable content area */}
-      <div style={{ flex:1, overflowY:'auto', padding:'20px 16px 12px' }}>
-
-        {/* Header */}
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20 }}>
+      <div className="wani-home-inner">
+        <div className="wani-hero">
           <div>
-            <h1 style={{ fontSize:26, fontWeight:800, lineHeight:1.2, margin:'0 0 6px',
-              color: dark?'#F8FAFC':'#0F172A', fontFamily:"'DM Sans',sans-serif" }}>
-              What would you like<br/>to do?
-            </h1>
-            <p style={{ fontSize:13, color:dark?'#64748B':'#94A3B8', margin:0, fontWeight:500 }}>
-              Pick a tool and get started — no typing needed.
-            </p>
+            <h1 style={{ color:dark?'#F8FAFC':'#030303' }}>What would you like to do?</h1>
+            <p style={{ color:dark?'#A1A1AA':'#6B7280' }}>Pick a tool and get started — no typing needed.</p>
           </div>
-          {/* Sparkle */}
-          <div style={{ flexShrink:0, paddingTop:2 }}>
-            <svg width="56" height="44" viewBox="0 0 56 44" fill="none">
-              <path d="M42 4L44 10L50 12L44 14L42 20L40 14L34 12L40 10Z" fill="#FCD34D" opacity="0.95"/>
-              <circle cx="32" cy="8" r="1.5" fill="#FCD34D" opacity="0.5"/>
-              <path d="M14 20L15.5 24.5L20 26L15.5 27.5L14 32L12.5 27.5L8 26L12.5 24.5Z" fill="#FCD34D" opacity="0.65"/>
-              <path d="M34 30L35 33L38 34L35 35L34 38L33 35L30 34L33 33Z" fill="#FCD34D" opacity="0.5"/>
-              {/* Curve */}
-              <path d="M22 6 Q36 2 48 16" stroke="#FCD34D" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.3"/>
-            </svg>
-          </div>
+
+          <svg className="wani-sparkle" viewBox="0 0 188 104" fill="none" aria-hidden="true">
+            <path d="M151 0L155.8 14.2L170 19L155.8 23.8L151 38L146.2 23.8L132 19L146.2 14.2L151 0Z" fill="#F8C44F" opacity="0.92"/>
+            <path d="M122 31L126 43L138 47L126 51L122 63L118 51L106 47L118 43L122 31Z" fill="#F8C44F" opacity="0.72"/>
+            <path d="M153 71L156 80L165 83L156 86L153 95L150 86L141 83L150 80L153 71Z" fill="#F8C44F" opacity="0.70"/>
+            <path d="M16 84C52 80 99 58 151 20" stroke="#F8C44F" strokeWidth="3" strokeLinecap="round" opacity="0.34"/>
+            <path d="M55 78C89 68 119 49 145 25" stroke="#F8C44F" strokeWidth="2" strokeLinecap="round" opacity="0.20"/>
+          </svg>
         </div>
 
-        {/* 3x2 tile grid */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+        <div className="wani-tool-grid">
           {TILES.map(tile => (
-            <button key={tile.action} className="ql2-tile"
+            <button
+              key={tile.action}
+              className="wani-tool-card"
               onClick={() => onQuickLaunch(tile.action)}
               style={{
-                background: dark?'#18182A':'#FFFFFF',
-                border:`1.5px solid ${dark?'rgba(255,255,255,0.07)':'#EAECF0'}`,
-                borderRadius:18, padding:'16px 12px 14px',
-                cursor:'pointer', textAlign:'left',
-                display:'flex', flexDirection:'column', alignItems:'flex-start',
-                boxShadow: dark?'0 2px 12px rgba(0,0,0,0.35)':'0 1px 8px rgba(0,0,0,0.06)',
-                transition:'transform 0.18s ease, box-shadow 0.18s ease',
-                minHeight:0,
-              }}
-              onMouseEnter={e=>{
-                e.currentTarget.style.transform='translateY(-4px)'
-                e.currentTarget.style.boxShadow=`0 12px 28px ${tile.accent}28`
-              }}
-              onMouseLeave={e=>{
-                e.currentTarget.style.transform='translateY(0)'
-                e.currentTarget.style.boxShadow=dark?'0 2px 12px rgba(0,0,0,0.35)':'0 1px 8px rgba(0,0,0,0.06)'
+                minHeight:350,
+                padding:'42px 30px 28px',
+                borderRadius:30,
+                border: dark?'1px solid rgba(255,255,255,0.08)':'1px solid #E8E8E8',
+                background: dark?'rgba(24,24,42,0.92)':'rgba(255,255,255,0.94)',
+                boxShadow: dark?'0 18px 38px rgba(0,0,0,0.34)':'0 14px 34px rgba(15,23,42,0.07)',
+                cursor:'pointer',
+                display:'flex',
+                flexDirection:'column',
+                alignItems:'center',
+                textAlign:'center',
+                transition:'transform .18s ease, box-shadow .18s ease',
               }}
             >
-              {/* Icon */}
-              <div style={{ width:'100%', display:'flex', justifyContent:'center', marginBottom:12 }}>
-                <img className="ql2-icon" src={tile.icon} alt={tile.label}
-                  style={{ width:72, height:72, objectFit:'contain',
-                    mixBlendMode:dark?'screen':'multiply' }}
-                />
-              </div>
-
-              {/* Label */}
-              <div style={{ fontSize:13, fontWeight:700,
-                color:dark?'#F1F5F9':'#0F172A',
-                marginBottom:5, fontFamily:"'DM Sans',sans-serif",
-                lineHeight:1.2 }}>
-                {tile.label}
-              </div>
-
-              {/* Accent underline */}
-              <div style={{ width:22, height:2.5, borderRadius:2,
-                background:tile.accent, marginBottom:8, flexShrink:0 }}/>
-
-              {/* Description */}
-              <div style={{ fontSize:10.5, lineHeight:1.55,
-                color:dark?'#64748B':'#94A3B8',
-                fontFamily:"'DM Sans',sans-serif",
-                flex:1, marginBottom:12 }}>
-                {tile.desc}
-              </div>
-
-              {/* Arrow button */}
-              <div className="ql2-arrow" style={{
-                width:30, height:30, borderRadius:'50%',
-                background:`${tile.accent}15`,
-                border:`1px solid ${tile.accent}30`,
-                display:'flex', alignItems:'center', justifyContent:'center',
-              }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                  <path d="M2.5 6.5H10.5M10.5 6.5L7 3M10.5 6.5L7 10"
-                    stroke={tile.accent} strokeWidth="1.7"
-                    strokeLinecap="round" strokeLinejoin="round"/>
+              <img className="wani-card-icon" src={tile.icon} alt={tile.label} />
+              <h2 className="wani-card-title" style={{ color:dark?'#FFFFFF':'#050505' }}>{tile.label}</h2>
+              <div className="wani-under" style={{ background:tile.accent }} />
+              <p className="wani-card-desc" style={{ color:dark?'#A1A1AA':'#575757' }}>{tile.desc}</p>
+              <div className="wani-arrow" style={{ background:tile.soft, border:`1px solid ${tile.accent}18` }}>
+                <svg width="27" height="27" viewBox="0 0 27 27" fill="none">
+                  <path d="M5 13.5H21M21 13.5L14.5 7M21 13.5L14.5 20" stroke={tile.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Bottom — chat input bar (same as main chat) */}
-      <div style={{
-        flexShrink:0,
-        padding:'8px 12px 12px',
-        background: dark?'#0D0D14':'#F7F8FA',
-        borderTop:`1px solid ${dark?'rgba(255,255,255,0.06)':'#E8ECF2'}`,
-      }}>
-        <div style={{
-          display:'flex', alignItems:'center', gap:8,
-          background: dark?'#1A1A2E':'#FFFFFF',
-          border:`1.5px solid ${dark?'rgba(255,255,255,0.1)':'#E2E8F0'}`,
-          borderRadius:14, padding:'8px 12px',
-          boxShadow:'0 2px 8px rgba(0,0,0,0.06)',
-        }}>
-          <input
-            className="ql2-input"
-            value={inputVal}
-            onChange={e=>setInputVal(e.target.value)}
-            onKeyDown={e=>{ if(e.key==='Enter'&&inputVal.trim()) { onNewChat(null,null); }}}
-            placeholder="Ask your SAP question..."
-            style={{
-              flex:1, border:'none', background:'transparent', outline:'none',
-              fontSize:14, color:dark?'#E2E8F0':'#1a1a2e',
-              fontFamily:"'DM Sans',sans-serif",
-            }}
-          />
-          <button
-            onClick={handleInputSend}
-            style={{
-              width:34, height:34, borderRadius:10, border:'none', flexShrink:0,
-              background: inputVal.trim() ? '#4F46E5' : dark?'rgba(255,255,255,0.06)':'#F1F5F9',
-              color: inputVal.trim() ? '#fff' : dark?'#475569':'#94A3B8',
-              cursor: inputVal.trim() ? 'pointer' : 'default',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              transition:'background 0.18s',
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7H12M12 7L8 3M12 7L8 11"
-                stroke="currentColor" strokeWidth="1.8"
-                strokeLinecap="round" strokeLinejoin="round"/>
+        <div className="wani-bottom-pill">
+          <div className="wani-pill-left">
+            <div className="wani-pill-icon">
+              <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+                <path d="M15 2L18 11L27 15L18 19L15 28L12 19L3 15L12 11L15 2Z" stroke="#D97706" strokeWidth="2.4" strokeLinejoin="round"/>
+                <path d="M23 2L24.4 6.1L28.5 7.5L24.4 8.9L23 13L21.6 8.9L17.5 7.5L21.6 6.1L23 2Z" fill="#D97706"/>
+              </svg>
+            </div>
+            <span>Smart tools. SAP expertise. Better outcomes.</span>
+          </div>
+          <div className="wani-pill-action">
+            <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+              <path d="M5 25L13 17L19 21L29 9" stroke="#D97706" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M21 9H29V17" stroke="#D97706" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-          </button>
+          </div>
         </div>
       </div>
     </div>
