@@ -128,6 +128,69 @@ function TypingDots() {
   )
 }
 
+// ── FURTHER READING BLOCK ─────────────────────────────────────────────────────
+const SOURCE_META = {
+  'SAP Help':         { icon: '📖', color: '#0070F2', label: 'SAP Help' },
+  'SAP Community':    { icon: '💬', color: '#F0AB00', label: 'SAP Community' },
+  'SAP Blog':         { icon: '✍️', color: '#E8A000', label: 'SAP Blog' },
+  'SAP Fiori Library':{ icon: '◻️', color: '#0070F2', label: 'Fiori Library' },
+  'SAP Support':      { icon: '🔧', color: '#C0392B', label: 'SAP Support' },
+  'SAP':              { icon: '🔗', color: '#425B76', label: 'SAP' },
+  'Web':              { icon: '🌐', color: '#555',    label: 'Web' },
+}
+
+function FurtherReading({ links, t, dark }) {
+  if (!links || links.length === 0) return null
+  return (
+    <div style={{
+      marginTop: 14,
+      padding: '12px 14px',
+      borderRadius: 12,
+      background: dark ? 'rgba(79,70,229,0.08)' : 'rgba(79,70,229,0.04)',
+      border: `1px solid ${dark ? 'rgba(79,70,229,0.22)' : 'rgba(79,70,229,0.15)'}`,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#6D5FD5', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 9 }}>
+        📚 Further Reading
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {links.map((link, i) => {
+          const meta = SOURCE_META[link.source] || SOURCE_META['Web']
+          return (
+            <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: 9,
+                textDecoration: 'none', padding: '7px 10px',
+                borderRadius: 8, transition: 'background 0.15s',
+                background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.7)',
+                border: `1px solid ${dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'}`,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = dark ? 'rgba(79,70,229,0.15)' : 'rgba(79,70,229,0.07)'}
+              onMouseLeave={e => e.currentTarget.style.background = dark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.7)'}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1, marginTop: 2, flexShrink: 0 }}>{meta.icon}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: meta.color, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                  {link.title}
+                </div>
+                {link.snippet && (
+                  <div style={{ fontSize: 11, color: t.text4, marginTop: 2, lineHeight: 1.4,
+                    overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    {link.snippet}
+                  </div>
+                )}
+                <div style={{ fontSize: 10, color: t.text4, marginTop: 3, fontWeight: 600, letterSpacing: 0.4 }}>
+                  {meta.label}
+                </div>
+              </div>
+              <span style={{ fontSize: 11, color: t.text4, flexShrink: 0, marginLeft: 'auto', marginTop: 2 }}>↗</span>
+            </a>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── DELIVERABLE DOWNLOAD BUTTON ───────────────────────────────────────────────
 function DownloadDeliverableButton({ label, color, onClick, t }) {
   const [loading, setLoading] = useState(false)
@@ -389,6 +452,10 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
         </div>
         {!isStreaming && <ActionBar/>}
+        {/* Further Reading — topic-specific links from Google CSE */}
+        {!isStreaming && msg._links?.length > 0 && (
+          <FurtherReading links={msg._links} t={t} dark={dark} />
+        )}
         {/* Fallback download button for FS documents */}
         {!isStreaming && msg._deliverable === 'FS_SPEC' && msg._fsText && (
           <DownloadDeliverableButton
@@ -1390,6 +1457,7 @@ export default function Brain({ session }) {
       let buf = '', fullReply = '', modelUsed = '', deliverableType = 'NONE'
       let accumulated = ''
       let searchResults = []
+      let furtherReadingLinks = []
 
       while (true) {
         const { done, value } = await reader.read()
@@ -1407,6 +1475,8 @@ export default function Brain({ session }) {
               setStreamingText(accumulated)
             } else if (evt.type === 'search_results') {
               searchResults = evt.results || []
+            } else if (evt.type === 'further_reading') {
+              furtherReadingLinks = evt.links || []
             } else if (evt.type === 'done') {
               fullReply = evt.full || accumulated
               modelUsed = evt.model
@@ -1493,6 +1563,7 @@ export default function Brain({ session }) {
       const assistantMsg = {
         role: 'assistant',
         content: replyContent,
+        ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
         ...(deliverableType === 'FS_SPEC' && window.__lastFsText
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
         ...(deliverableType === 'WORKSHOP_PPT' && window.__lastPptText
