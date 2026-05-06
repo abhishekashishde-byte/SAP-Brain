@@ -446,17 +446,24 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     }
 
     // ── DEFAULT: clean keyword query, multi-source SAP search ────────────────
-    // Try targeted SAP sources — split into two calls since OR is unreliable in CSE
-    const [helpResults, communityResults] = await Promise.all([
-      runCSE(`${globalCleanQuery} site:help.sap.com`, 2),
-      runCSE(`${globalCleanQuery} site:community.sap.com OR site:blogs.sap.com`, 3),
+    // ── DEFAULT: three parallel targeted calls — no OR operator (unreliable in CSE) ─
+    const [helpResults, communityResults, blogResults] = await Promise.all([
+      runCSE(`${globalCleanQuery} site:help.sap.com`, 3),
+      runCSE(`${globalCleanQuery} site:community.sap.com`, 3),
+      runCSE(`${globalCleanQuery} site:blogs.sap.com`, 2),
     ])
-    results = [...helpResults, ...communityResults]
-    console.log('Google CSE targeted results:', results.length)
+    // Merge and deduplicate by URL
+    const seenUrls = new Set()
+    results = [...helpResults, ...communityResults, ...blogResults].filter(r => {
+      if (seenUrls.has(r.url)) return false
+      seenUrls.add(r.url)
+      return true
+    })
+    console.log(`Google CSE targeted — help:${helpResults.length} community:${communityResults.length} blogs:${blogResults.length} total:${results.length}`)
 
-    // Fallback 1 — open web search with clean SAP query
+    // Fallback 1 — open web if all targeted searches return nothing
     if (results.length === 0) {
-      results = await runCSE(globalCleanQuery, 4)
+      results = await runCSE(globalCleanQuery, 5)
       console.log('Google CSE open results:', results.length)
     }
 
