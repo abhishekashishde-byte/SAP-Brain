@@ -317,6 +317,28 @@ async function streamGPTMini(systemPrompt, messages, onChunk) {
 }
 
 // ── 5. GOOGLE CUSTOM SEARCH — real SAP links ─────────────────────────────────
+// ── BUILD CLEAN SAP SEARCH QUERY ─────────────────────────────────────────────
+// Extracts SAP-relevant keywords from a conversational question for CSE
+function buildSAPSearchQuery(question) {
+  // Strip conversational filler
+  let q = question
+    .replace(/\b(I have to|I need to|I want to|I am trying to|can you help me|help me|please|how do i|how to|what is|what are|tell me|explain|let me know|could you|would you|is it possible)\b/gi, '')
+    .replace(/\b(built|build|create|make|generate|write|develop|prepare|set up|setup)\b/gi, '')
+    .trim()
+
+  // Extract SAP-specific terms: T-codes, table names, module names, SAP objects
+  const tcodes  = (question.match(/\b[A-Z]{1,4}\d{2,3}N?\b/g) || [])
+  const modules = (question.match(/\b(PP|PM|MM|SD|FI|CO|QM|CS|PS|WM|IM|HR|Fiori|S\/4HANA|ABAP|ALV|BOM|MRP|SPRO)\b/gi) || [])
+  const sapTerms= (question.match(/\b(production order|work center|capacity|maintenance order|purchase order|goods receipt|material master|equipment|functional location|routing|BOM|settlement|confirmation|goods issue|batch|vendor|customer|sales order|delivery|billing|cost center|profit center|plant|storage location|movement type)\b/gi) || [])
+
+  // Build query from extracted terms + cleaned question
+  const extracted = [...new Set([...tcodes, ...modules, ...sapTerms])].join(' ')
+  const cleanQ = extracted.length > 10 ? extracted : q.replace(/\s+/g, ' ').trim()
+
+  // Always prefix with SAP S/4HANA for better CSE targeting
+  return `SAP S/4HANA ${cleanQ}`.slice(0, 120)
+}
+
 async function googleSAPSearch(question, intent = 'SAP_QA') {
   const key = process.env.GOOGLE_CSE_KEY
   const cx = process.env.GOOGLE_CSE_ID
@@ -381,52 +403,65 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     // ── NOTE questions: search for SAP Note numbers specifically ─────────────
     const isNoteQuestion = /\b(sap note|note \d{5,}|oss note|known issue|patch|correction)\b/i.test(question)
     if (isNoteQuestion) {
-      results = await runCSE(`SAP Note ${question} site:community.sap.com OR site:help.sap.com`, 5)
+      const cleanQ = buildSAPSearchQuery(question)
+      results = await runCSE(`SAP Note ${cleanQ} site:community.sap.com OR site:help.sap.com`, 5)
       return results
     }
 
     // ── BAPI/FM questions: target SAP Help API docs ──────────────────────────
     const isBapiQuestion = /\b(bapi|function module|rfc)\b/i.test(question)
     if (isBapiQuestion) {
-      results = await runCSE(`SAP ${question} site:help.sap.com OR site:community.sap.com`, 4)
+      const cleanQ = buildSAPSearchQuery(question)
+      results = await runCSE(`${cleanQ} site:help.sap.com OR site:community.sap.com`, 4)
       return results
     }
 
     // ── EXIT/BAdI questions: target SAP Help enhancement docs ────────────────
     const isExitQuestion = /\b(user exit|badi|enhancement spot|enhancement point)\b/i.test(question)
     if (isExitQuestion) {
-      results = await runCSE(`SAP ${question} enhancement site:help.sap.com OR site:community.sap.com`, 4)
+      const cleanQ = buildSAPSearchQuery(question)
+      results = await runCSE(`${cleanQ} enhancement site:help.sap.com OR site:community.sap.com`, 4)
       return results
     }
 
-    // ── DEFAULT: general SAP search ──────────────────────────────────────────
-    const shortQuery = question.replace(/what is|what are|how to|how do i|please explain/gi, '').trim()
-    results = await runCSE(shortQuery.slice(0, 100), 4)
-    console.log('Google CSE DEFAULT results:', results.length)
+    // ── DEFAULT: clean keyword query, multi-source SAP search ────────────────
+    const cleanQuery = buildSAPSearchQuery(question)
+    console.log('Google CSE query:', cleanQuery)
 
-    // ── FALLBACK: if CSE returns nothing, build curated manual links ─────────
+    // Try targeted SAP sources first
+    results = await runCSE(`${cleanQuery} site:help.sap.com OR site:community.sap.com OR site:blogs.sap.com`, 4)
+    console.log('Google CSE targeted results:', results.length)
+
+    // Fallback 1 — open web search with clean SAP query
     if (results.length === 0) {
-      const encoded = encodeURIComponent(`SAP S/4HANA ${shortQuery.slice(0, 80)}`)
+      results = await runCSE(cleanQuery, 4)
+      console.log('Google CSE open results:', results.length)
+    }
+
+    // Fallback 2 — guaranteed curated links (always topic-specific via URL params)
+    if (results.length === 0) {
+      const encoded = encodeURIComponent(cleanQuery)
       results = [
         {
-          title: `SAP Help Portal — Search: ${shortQuery.slice(0, 60)}`,
+          title: `SAP Help: ${cleanQuery.replace('SAP S/4HANA ', '').slice(0, 60)}`,
           url: `https://help.sap.com/search/?q=${encoded}`,
-          snippet: 'Official SAP documentation and help guides',
+          snippet: 'Official SAP documentation, configuration guides and release notes',
           source: 'SAP Help',
         },
         {
-          title: `SAP Community — ${shortQuery.slice(0, 60)}`,
+          title: `SAP Community: ${cleanQuery.replace('SAP S/4HANA ', '').slice(0, 60)}`,
           url: `https://community.sap.com/t5/forums/searchpage/tab/message?q=${encoded}`,
-          snippet: 'Questions and answers from SAP consultants worldwide',
+          snippet: 'Questions, answers and discussions from SAP consultants worldwide',
           source: 'SAP Community',
         },
         {
-          title: `SAP Blogs — ${shortQuery.slice(0, 60)}`,
+          title: `SAP Blogs: ${cleanQuery.replace('SAP S/4HANA ', '').slice(0, 60)}`,
           url: `https://blogs.sap.com/?s=${encoded}`,
-          snippet: 'Expert blog posts from the SAP community',
+          snippet: 'Expert blog posts and how-to guides from the SAP community',
           source: 'SAP Blog',
         },
       ]
+      console.log('Google CSE fallback links generated for:', cleanQuery)
     }
     return results
 
