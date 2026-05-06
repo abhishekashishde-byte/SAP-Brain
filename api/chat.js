@@ -479,7 +479,7 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     })
     if (!hasBlog) results.push({
       title: `SAP Blogs: ${rawTerms2.slice(0, 60)}`,
-      url: `https://blogs.sap.com/?s=${enc2}`,
+      url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&filter=location&location=category%3Aall-blogs&q=${enc2}`,
       snippet: 'Expert blog posts from the SAP community',
       source: 'SAP Blog',
     })
@@ -915,7 +915,7 @@ export default async function handler(req, res) {
           },
           {
             title: `SAP Blogs: ${rawTerms.slice(0, 60)}`,
-            url: `https://blogs.sap.com/?s=${enc}`,
+            url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&filter=location&location=category%3Aall-blogs&q=${enc}`,
             snippet: 'Expert blog posts from the SAP community',
             source: 'SAP Blog',
           },
@@ -931,7 +931,7 @@ export default async function handler(req, res) {
         googleLinks = [
           { title: `SAP Community: ${rawTerms.slice(0, 55)}`, url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${enc}`, snippet: 'Questions and answers from SAP consultants worldwide', source: 'SAP Community' },
           { title: `SAP Help: ${rawTerms.slice(0, 60)}`, url: `https://help.sap.com/docs/search?q=${enc}`, snippet: 'Official SAP documentation', source: 'SAP Help' },
-          { title: `SAP Blogs: ${rawTerms.slice(0, 60)}`, url: `https://blogs.sap.com/?s=${enc}`, snippet: 'Expert blog posts from the SAP community', source: 'SAP Blog' },
+          { title: `SAP Blogs: ${rawTerms.slice(0, 60)}`, url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&filter=location&location=category%3Aall-blogs&q=${enc}`, snippet: 'Expert blog posts from the SAP community', source: 'SAP Blog' },
         ]
       }
     }
