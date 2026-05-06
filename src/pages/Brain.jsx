@@ -385,7 +385,7 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
   const [error, setError] = useState('')
 
   const stripMeta = (text) =>
-    (text||'').replace(/\n\n_✦ Claude_$/,'').replace(/\n\n_✦ Claude.*$/,'').replace(/\n\n_⚡.*$/,'').trim()
+    (text||'').replace(/\n\n_✦ (GPT-4o mini|GPT-4o|Claude Haiku|Claude Sonnet|Claude  📚 Gemini|Claude).*_$/,'').replace(/\n\n_⚡.*$/,'').trim()
 
   const generateDocx = async (type) => {
     setLoading(true); setError('')
@@ -660,7 +660,7 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
             placeholder="Ask your SAP question..." rows={1}
             style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.5,height:'24px',maxHeight:'120px',overflowY:'auto',padding:0,outline:'none' }}
           />
-          <button onClick={()=>handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+          <button onClick={handleSend} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
             style={{ width:44,height:44,borderRadius:13,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#111827':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
           >→</button>
         </div>
@@ -1249,8 +1249,7 @@ export default function Brain({ session }) {
   }
 
   const handleSend = async (overrideText) => {
-    const safeOverride = typeof overrideText === 'string' ? overrideText : ''
-    const baseText = (safeOverride || input).trim()
+    const baseText = (overrideText || input).trim()
     if (!baseText && !attachedCode) return
     if (isLoading || isStreaming) return
 
@@ -1283,7 +1282,6 @@ export default function Brain({ session }) {
       convId = newConv.id; currentMsgs = [userMsg]
       setConversations(prev=>[newConv,...prev])
       setActiveConvId(newConv.id)
-      setView('chat')
     } else {
       await updateConversation(convId,{ messages:currentMsgs })
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:currentMsgs}:c))
@@ -1405,14 +1403,6 @@ export default function Brain({ session }) {
       setIsStreaming(false)
       setStreamingText('')
 
-      // Build model tag
-      const modelLabel = modelUsed === 'gpt4o-mini' ? '✦ GPT-4o mini'
-        : modelUsed === 'gpt4o' ? '✦ GPT-4o'
-        : modelUsed === 'claude-haiku' ? '✦ Claude Haiku'
-        : modelUsed === 'claude-sonnet' ? '✦ Claude Sonnet'
-        : modelUsed === 'claude+gemini' ? '✦ Claude  📚 Gemini'
-        : '✦ GPT-4o'
-
       // Build search links section as markdown
       let linksSection = ''
       if (searchResults.length > 0) {
@@ -1422,9 +1412,9 @@ export default function Brain({ session }) {
         ).join('\n')
       }
 
-      const replyWithTag = finalReply + linksSection + `\n\n_${modelLabel}_`
+      const replyContent = finalReply + linksSection
 
-      const finalMsgs = [...currentMsgs,{ role:'assistant',content:replyWithTag }]
+      const finalMsgs = [...currentMsgs,{ role:'assistant',content:replyContent }]
       const convUpdate = { messages:finalMsgs }
       if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
       await updateConversation(convId, convUpdate)
@@ -1940,7 +1930,7 @@ export default function Brain({ session }) {
                     placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
                     style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
-                  <button onClick={()=>handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+                  <button onClick={handleSend} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
                     style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
                   >→</button>
                 </div>
