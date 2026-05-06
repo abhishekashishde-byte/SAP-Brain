@@ -128,6 +128,39 @@ function TypingDots() {
   )
 }
 
+// ── DELIVERABLE DOWNLOAD BUTTON ───────────────────────────────────────────────
+function DownloadDeliverableButton({ label, color, onClick, t }) {
+  const [loading, setLoading] = useState(false)
+  const handle = async () => {
+    setLoading(true)
+    try { await onClick() } finally { setLoading(false) }
+  }
+  return (
+    <div style={{ marginTop: 12 }}>
+      <button
+        onClick={handle}
+        disabled={loading}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '9px 18px', borderRadius: 10,
+          border: `1.5px solid ${color}`,
+          background: `${color}14`,
+          color: color, fontSize: 13, fontWeight: 600,
+          fontFamily: "'Inter','DM Sans',sans-serif",
+          cursor: loading ? 'wait' : 'pointer',
+          transition: 'all 0.15s',
+          opacity: loading ? 0.7 : 1,
+        }}
+      >
+        {loading
+          ? <><div style={{ width:14,height:14,border:`2px solid ${color}40`,borderTopColor:color,borderRadius:'50%',animation:'spin 0.8s linear infinite' }}/> Generating…</>
+          : label
+        }
+      </button>
+    </div>
+  )
+}
+
 function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
@@ -356,6 +389,52 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
         </div>
         {!isStreaming && <ActionBar/>}
+        {/* Fallback download button for FS documents */}
+        {!isStreaming && msg._deliverable === 'FS_SPEC' && msg._fsText && (
+          <DownloadDeliverableButton
+            label="📄 Download Functional Spec (.docx)"
+            color="#365F91"
+            onClick={async () => {
+              try {
+                const r = await fetch('/api/generate-fs-doc', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ fsText: msg._fsText, fileName: `Wani_FS_${new Date().toISOString().slice(0,10)}` })
+                })
+                if (!r.ok) return
+                const blob = await r.blob()
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url; a.download = `Wani_FS_${new Date().toISOString().slice(0,10)}.docx`
+                document.body.appendChild(a); a.click(); document.body.removeChild(a)
+                URL.revokeObjectURL(url)
+              } catch(e) { console.error('FS download failed', e) }
+            }}
+            t={t}
+          />
+        )}
+        {/* Fallback download button for PPT */}
+        {!isStreaming && msg._deliverable === 'WORKSHOP_PPT' && msg._pptText && (
+          <DownloadDeliverableButton
+            label="📊 Download Workshop Slides (.pptx)"
+            color="#C0392B"
+            onClick={async () => {
+              try {
+                const r = await fetch('/api/generate-ppt', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ pptText: msg._pptText, fileName: `Wani_Workshop_${new Date().toISOString().slice(0,10)}` })
+                })
+                if (!r.ok) return
+                const blob = await r.blob()
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url; a.download = `Wani_Workshop_${new Date().toISOString().slice(0,10)}.pptx`
+                document.body.appendChild(a); a.click(); document.body.removeChild(a)
+                URL.revokeObjectURL(url)
+              } catch(e) { console.error('PPT download failed', e) }
+            }}
+            t={t}
+          />
+        )}
         {/* Code Analysis buttons — show when previous user message had code */}
         {!isStreaming && prevUserMsg && /METHOD |CLASS |LOOP AT |SELECT\s|DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION |REPORT |TYPES:|CONSTANTS:/i.test(prevUserMsg) && (
           <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
@@ -1333,6 +1412,8 @@ export default function Brain({ session }) {
 
               // FS Complete — auto-trigger Word document download
               if (evt.fsComplete && evt.fsText) {
+                // Store fsText on the message for fallback button
+                window.__lastFsText = evt.fsText
                 try {
                   const fsRes = await fetch('/api/generate-fs-doc', {
                     method: 'POST',
@@ -1354,11 +1435,9 @@ export default function Brain({ session }) {
                     URL.revokeObjectURL(url)
 
                     // Auto-mark this conversation as a project
-                    // Extract FS title from the text — look for FS_TITLE: line
                     const fsTitleMatch = evt.fsText.match(/FS_TITLE:\s*(.+)/i)
                     const fsTitle = fsTitleMatch?.[1]?.trim() || activeConv?.title || 'Functional Specification'
                     markAsProject(convId, fsTitle).then(() => {
-                      // Update local state — conversation becomes a project
                       const projectConv = { ...conversations.find(c=>c.id===convId), is_project: true, project_name: fsTitle, fs_title: fsTitle, fs_generated_at: new Date().toISOString() }
                       setProjects(prev => [projectConv, ...prev.filter(p=>p.id!==convId)])
                       setConversations(prev => prev.map(c => c.id===convId ? {...c, is_project:true, project_name:fsTitle} : c))
@@ -1369,6 +1448,8 @@ export default function Brain({ session }) {
 
               // PPT Complete — auto-trigger PowerPoint download
               if (evt.pptComplete && evt.pptText) {
+                // Store pptText on the message for fallback button
+                window.__lastPptText = evt.pptText
                 try {
                   const pptRes = await fetch('/api/generate-ppt', {
                     method: 'POST',
@@ -1403,19 +1484,21 @@ export default function Brain({ session }) {
       setIsStreaming(false)
       setStreamingText('')
 
-      // Build search links section as markdown
-      let linksSection = ''
-      if (searchResults.length > 0) {
-        const icons = { 'SAP Community': '💬', 'SAP Help': '📖', 'SAP Blog': '✍️', 'SAP': '🔗' }
-        linksSection = '\n\n---\n**📚 SAP Resources**\n' + searchResults.map(r =>
-          `${icons[r.source] || '🔗'} [${r.title}](${r.url})`
-        ).join('\n')
+      // No separate links section — sources are now cited inline in the answer
+      const replyContent = finalReply
+
+      // Attach deliverable text to message for fallback download button
+      const assistantMsg = {
+        role: 'assistant',
+        content: replyContent,
+        ...(deliverableType === 'FS_SPEC' && window.__lastFsText
+          ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
+        ...(deliverableType === 'WORKSHOP_PPT' && window.__lastPptText
+          ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
       }
 
-      const replyContent = finalReply + linksSection
-
-      const finalMsgs = [...currentMsgs,{ role:'assistant',content:replyContent }]
-      const convUpdate = { messages:finalMsgs }
+      const finalMsgs = [...currentMsgs, assistantMsg]
+      const convUpdate = { messages: finalMsgs }
       if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
       await updateConversation(convId, convUpdate)
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,updated_at:new Date().toISOString()}:c))
