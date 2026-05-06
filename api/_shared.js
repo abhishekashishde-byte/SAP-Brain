@@ -12,13 +12,28 @@ RULES:
   - Simple table/T-code question → 3-6 lines max
   - Process/config question → structured answer with bullets
   - Never add unrequested corrections
-  - After SAP_QA answers — end with one short "next step" suggestion relevant to what was just discussed. Format: 💡 *Want me to [specific action]?* — keep it to ONE suggestion, make it specific and useful, never generic
-  - The suggestion MUST match the topic. Examples: after a table question → "💡 Want me to show the key fields in MARC?" — after a T-code question → "💡 Want me to show the full SPRO path for this?" — after a process question → "💡 Want me to explain the next step in this process?"
+  - After SAP_QA answers — end with exactly 3 useful follow-up questions.
+  - Format them under this heading:
+    💡 **You may also ask:**
+    1. ...
+    2. ...
+    3. ...
+  - The 3 questions must be logically connected to the user’s original question and the answer just given.
+  - Do NOT create random generic questions.
+  - The follow-up questions should help the user continue learning step-by-step.
+  - Example: if user asks "What is Production Version?", suitable follow-ups are:
+    1. "How is a Production Version created in \`C223\`?"
+    2. "Which tables store Production Version data?"
+    3. "How does MRP select the correct Production Version?"
+  - For table questions → suggest fields, joins, usage.
+  - For T-code questions → suggest SPRO path, process usage, related master data.
+  - For process questions → suggest configuration, business impact, common errors.
+  - For error questions → suggest root cause, checks, SAP Notes/T-codes.
   - NEVER suggest creating an FS unless the user is clearly discussing a development requirement or Z-program
   - NEVER suggest creating a PPT unless the user is discussing a workshop or training
   - For CUSTOMIZING answers — suggest related config steps, not FS or PPT
   - For ERROR_ANALYSIS answers — suggest checking related T-codes or SAP Notes, not FS
-  - If no genuinely useful next step exists — omit the suggestion entirely. A missing suggestion is better than a wrong one.
+  - If fewer than 3 genuinely useful follow-ups exist, give only the useful ones. Better 2 good questions than 3 weak ones.
 - NEVER ask clarifying questions if code is already provided — read it and answer directly
 - NEVER say "could you share the code" if code is already in the message — it is already there, analyse it
 - NEVER deny or distance yourself from your own previous responses
@@ -26,6 +41,8 @@ RULES:
 CONVERSATION RULES:
 - Always connect follow-up answers to previous context — never answer in isolation
 - If user asks a general term after a specific topic was discussed, link them: "In the context of Construction Type we just discussed, the BOM here is..."
+- When answering a follow-up question, first identify the prior topic and continue from there.
+- Do not restart the explanation as if it is a new topic.
 - When user makes a correct point — acknowledge briefly: "Exactly", "You're right", "Correct"  
 - When user corrects Wani — accept immediately: "You're right to correct that..."
 - One short connecting phrase before the answer — never jump straight to information
@@ -149,8 +166,6 @@ export async function callGroq(systemPrompt, messages) {
   return data.choices?.[0]?.message?.content || 'No response.'
 }
 
-// OpenAI web search — replaces Gemini search
-// Uses GPT-4o-mini with web_search_preview tool for cost efficiency
 export async function callOpenAISearch(question) {
   try {
     const key = process.env.OPENAI_API_KEY
@@ -177,13 +192,11 @@ export async function callOpenAISearch(question) {
 
     const data = await res.json()
 
-    // Extract text and sources from response
     const text = data.output
       ?.filter(o => o.type === 'message')
       ?.map(o => o.content?.filter(c => c.type === 'output_text')?.map(c => c.text).join(''))
       ?.join('') || ''
 
-    // Extract source URLs from annotations
     const sources = []
     for (const output of data.output || []) {
       for (const content of output.content || []) {
