@@ -428,8 +428,12 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
     const cleanQuery = buildSAPSearchQuery(question)
     console.log('Google CSE query:', cleanQuery)
 
-    // Try targeted SAP sources first
-    results = await runCSE(`${cleanQuery} site:help.sap.com OR site:community.sap.com OR site:blogs.sap.com`, 4)
+    // Try targeted SAP sources first — split into two calls since OR is unreliable in CSE
+    const [helpResults, communityResults] = await Promise.all([
+      runCSE(`${cleanQuery} site:help.sap.com`, 2),
+      runCSE(`${cleanQuery} site:community.sap.com OR site:blogs.sap.com`, 3),
+    ])
+    results = [...helpResults, ...communityResults]
     console.log('Google CSE targeted results:', results.length)
 
     // Fallback 1 — open web search with clean SAP query
@@ -440,25 +444,27 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
 
     // Fallback 2 — guaranteed curated links (always topic-specific via URL params)
     if (results.length === 0) {
-      const encoded = encodeURIComponent(cleanQuery)
+      const rawTerms = cleanQuery.replace('SAP S/4HANA ', '').trim()
+      const encoded = encodeURIComponent(rawTerms)
+      const encodedFull = encodeURIComponent(cleanQuery)
       results = [
         {
-          title: `SAP Help: ${cleanQuery.replace('SAP S/4HANA ', '').slice(0, 60)}`,
-          url: `https://help.sap.com/search/?q=${encoded}`,
+          title: `SAP Help: ${rawTerms.slice(0, 60)}`,
+          url: `https://help.sap.com/docs/search?q=${encoded}&version=2023`,
           snippet: 'Official SAP documentation, configuration guides and release notes',
           source: 'SAP Help',
         },
         {
-          title: `SAP Community: ${cleanQuery.replace('SAP S/4HANA ', '').slice(0, 60)}`,
-          url: `https://community.sap.com/t5/forums/searchpage/tab/message?q=${encoded}`,
+          title: `SAP Community: ${rawTerms.slice(0, 60)}`,
+          url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${encoded}`,
           snippet: 'Questions, answers and discussions from SAP consultants worldwide',
           source: 'SAP Community',
         },
         {
-          title: `SAP Blogs: ${cleanQuery.replace('SAP S/4HANA ', '').slice(0, 60)}`,
-          url: `https://blogs.sap.com/?s=${encoded}`,
-          snippet: 'Expert blog posts and how-to guides from the SAP community',
-          source: 'SAP Blog',
+          title: `Google: ${rawTerms.slice(0, 60)} — SAP`,
+          url: `https://www.google.com/search?q=${encodedFull}+site%3Ahelp.sap.com+OR+site%3Acommunity.sap.com+OR+site%3Ablogs.sap.com`,
+          snippet: 'Search SAP Help, Community and Blogs via Google for the most relevant results',
+          source: 'Web',
         },
       ]
       console.log('Google CSE fallback links generated for:', cleanQuery)
