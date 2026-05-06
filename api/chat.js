@@ -859,10 +859,10 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       systemPrompt += `\n\nWEB SEARCH RESULTS (from Google via Gemini — use as primary source):\n${cleanedText.slice(0, 2000)}\n\nIMPORTANT: For any SAP Note numbers found above, present them as direct links in this format: https://me.sap.com/notes/NOTENUMBER — replace the Gemini redirect URLs with these direct SAP links. Tell user to log in with their S-user to read the full note.`
     }
 
-    // Source links — Joule-style clean Sources block with inline citation instructions
+    // Source links — inline citations only, no separate Sources block at the end
     if (searchResults.length > 0) {
       const sourceRef = searchResults.map((r, i) => `[${i+1}] ${r.title} — ${r.url}`).join('\n')
-      systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nIMPORTANT: Use inline citations [1] [2] [3] throughout your answer when referencing these sources. At the very end of your answer, add this exact block:\n\n---\n📚 **Sources**\n${sourceRef}`
+      systemPrompt += `\n\nSOURCE REFERENCES (for inline use only):\n${sourceRef}\n\nCITATION RULES — CRITICAL:\n- Weave citations INLINE into your answer using [1] [2] [3] notation right after the relevant sentence or fact.\n- Example: "You can find this configuration under SPRO → Plant Maintenance [1], which aligns with SAP's recommended approach [2]."\n- Do NOT add a separate "📚 Sources" or "References" section at the end of your answer.\n- Do NOT list URLs at the bottom. All links must appear inline as [N] references.\n- The user sees the source URLs via the inline citation numbers — no footer block needed.`
     }
 
     // SAP Note anti-hallucination — critical rule
@@ -960,19 +960,36 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       send({ type: 'search_results', results: searchResults })
     }
 
-    // Detect FS completion signal — triggers Word doc download on frontend
-    const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE')
-    const cleanAnswer = fsComplete ? fullAnswer.replace(/WANI_FS_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
+    // ── FS COMPLETION DETECTION ───────────────────────────────────────────────
+    // Primary: explicit signal. Fallback: has at least 8 ---SECTION N:--- markers
+    const fsSectionCount = (fullAnswer.match(/---SECTION \d+:/g) || []).length
+    const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE') ||
+      (intent === 'FS_SPEC' && fsSectionCount >= 8)
+    // Strip signal token + everything after it from the displayed/stored text
+    const cleanAnswer = fullAnswer
+      .replace(/WANI_FS_COMPLETE[\s\S]*$/, '')
+      .trim()
 
-    // Detect PPT completion — explicit signal OR fallback: 5+ slide blocks generated
+    // ── PPT COMPLETION DETECTION ──────────────────────────────────────────────
+    // Primary: explicit signal. Fallback: 5+ slide blocks generated for WORKSHOP_PPT
     const slideBlockCount = (fullAnswer.match(/---SLIDE \d+---/g) || []).length
     const pptComplete = fullAnswer.includes('WANI_PPT_COMPLETE') ||
       (intent === 'WORKSHOP_PPT' && slideBlockCount >= 5)
-    const cleanPPTAnswer = pptComplete ? fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim() : fullAnswer
+    const cleanPPTAnswer = fullAnswer
+      .replace(/WANI_PPT_COMPLETE[\s\S]*$/, '')
+      .trim()
 
-    send({ type: 'done', model: modelUsed, full: pptComplete ? cleanPPTAnswer : cleanAnswer, deliverableType,
-      ...(fsComplete ? { fsComplete: true, fsText: cleanAnswer } : {}),
-      ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}) })
+    // Which clean answer to show in chat
+    const chatAnswer = pptComplete ? cleanPPTAnswer : cleanAnswer
+
+    send({
+      type: 'done',
+      model: modelUsed,
+      full: chatAnswer,
+      deliverableType,
+      ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
+      ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
+    })
 
   } catch (err) {
     console.error('HANDLER ERROR:', err.message)
