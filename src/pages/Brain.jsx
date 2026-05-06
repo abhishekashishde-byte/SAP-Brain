@@ -644,72 +644,75 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         ? 'radial-gradient(circle at 85% 8%, rgba(251,191,36,0.10), transparent 24%), #0D0D14'
         : 'radial-gradient(circle at 90% 10%, rgba(251,191,36,0.18), transparent 22%), linear-gradient(180deg,#FFFFFF 0%,#FFFDF9 70%,#FFF7ED 100%)',
       fontFamily:"'DM Sans','Inter',system-ui,sans-serif",
-      paddingBottom: '110px',
+      paddingBottom: '92px',
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-        .wani-home-inner{max-width:1120px;margin:0 auto;padding:56px 34px 24px;}
-        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:34px;}
-        .wani-hero h1{font-size:44px;line-height:1.08;letter-spacing:-1.6px;margin:0 0 14px;font-weight:800;}
-        .wani-hero p{font-size:22px;line-height:1.35;margin:0;font-weight:500;color:#6B7280;}
-        .wani-sparkle{width:188px;height:104px;flex:0 0 188px;margin-top:4px;}
-        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+        .wani-home-inner{max-width:980px;margin:0 auto;padding:22px 34px 104px;}
+        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px;}
+        .wani-hero h1{font-size:34px;line-height:1.06;letter-spacing:-1.2px;margin:0 0 8px;font-weight:800;}
+        .wani-hero p{font-size:17px;line-height:1.3;margin:0;font-weight:500;color:#6B7280;}
+        .wani-sparkle{width:130px;height:76px;flex:0 0 130px;margin-top:0;}
+        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
         .wani-tool-card{animation:exactTileIn .42s cubic-bezier(.16,1,.3,1) both;}
         .wani-tool-card:nth-child(1){animation-delay:.03s}.wani-tool-card:nth-child(2){animation-delay:.07s}.wani-tool-card:nth-child(3){animation-delay:.11s}
         .wani-tool-card:nth-child(4){animation-delay:.15s}.wani-tool-card:nth-child(5){animation-delay:.19s}.wani-tool-card:nth-child(6){animation-delay:.23s}
         .wani-tool-card:hover{transform:translateY(-5px)!important;box-shadow:0 22px 42px rgba(15,23,42,.12)!important;}
         .wani-tool-card:hover .wani-card-icon{animation:exactFloat .8s ease-in-out infinite;}
-        .wani-card-icon{width:168px;height:168px;object-fit:contain;display:block;margin:0 auto 26px;}
-        .wani-card-title{font-size:29px;line-height:1.03;font-weight:800;letter-spacing:-.8px;text-align:center;margin:0;color:#050505;}
-        .wani-under{width:44px;height:3px;border-radius:999px;margin:18px auto 22px;}
-        .wani-card-desc{font-size:20px;line-height:1.42;font-weight:500;color:#575757;text-align:center;margin:0 auto;max-width:245px;}
-        .wani-arrow{width:58px;height:58px;border-radius:999px;margin:34px auto 0;display:flex;align-items:center;justify-content:center;transition:transform .18s ease;}
+        .wani-card-icon{width:96px;height:96px;object-fit:contain;display:block;margin:0 auto 16px;}
+        .wani-card-title{font-size:22px;line-height:1.04;font-weight:800;letter-spacing:-.7px;text-align:center;margin:0;color:#050505;}
+        .wani-under{width:42px;height:3px;border-radius:999px;margin:12px auto 12px;}
+        .wani-card-desc{font-size:15px;line-height:1.32;font-weight:500;color:#575757;text-align:center;margin:0 auto;max-width:220px;}
+        .wani-arrow{width:42px;height:42px;border-radius:999px;margin:auto auto 0;display:flex;align-items:center;justify-content:center;transition:transform .18s ease;}
         .wani-tool-card:hover .wani-arrow{transform:translateX(3px);}
         .wani-bottom-pill{display:none;margin:24px 0 0;padding:15px 22px;border-radius:28px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:linear-gradient(90deg,rgba(255,255,255,.94),rgba(255,247,237,.94));border:1px solid rgba(217,119,6,.18);box-shadow:0 14px 34px rgba(15,23,42,.08);}
         .wani-pill-left{display:flex;align-items:center;gap:18px;font-size:23px;line-height:1.2;font-weight:800;color:#090909;}
         .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
         .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
+
+        .home-input-fixed textarea{font-size:16px!important;}
+        @media (max-width:760px){.home-input-fixed{left:12px!important;right:12px!important;bottom:calc(env(safe-area-inset-bottom) + 6px)!important}.home-input-fixed textarea{font-size:15px!important}.home-input-fixed > div > div:last-of-type{padding:8px 10px!important;border-radius:14px!important}}
         @media (max-width:760px){
-          .wani-home-inner{padding:30px 32px 96px;}
-          .wani-hero{margin-bottom:18px;}
-          .wani-hero h1{font-size:31px;letter-spacing:-1px;margin-bottom:8px;}
-          .wani-hero p{font-size:17px;line-height:1.28;}
-          .wani-sparkle{width:96px;height:62px;flex-basis:96px;margin-top:0;}
-          .wani-tool-grid{gap:14px 18px;grid-template-columns:repeat(3,minmax(0,1fr));}
-          .wani-tool-card{min-height:238px!important;height:238px!important;padding:20px 14px 14px!important;border-radius:24px!important;overflow:hidden;}
-          .wani-card-icon{width:86px;height:86px;margin-bottom:18px;}
-          .wani-card-title{font-size:18px;letter-spacing:-.5px;}
-          .wani-under{width:42px;height:3px;margin:10px auto 12px;}
-          .wani-card-desc{font-size:13px;line-height:1.28;max-width:150px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
-          .wani-arrow{width:40px;height:40px;margin-top:auto;}
+          .wani-home-inner{padding:18px 18px 96px;}
+          .wani-hero{margin-bottom:12px;}
+          .wani-hero h1{font-size:25px;letter-spacing:-.8px;margin-bottom:6px;}
+          .wani-hero p{font-size:14px;line-height:1.25;}
+          .wani-sparkle{width:68px;height:48px;flex-basis:68px;margin-top:0;}
+          .wani-tool-grid{gap:10px 12px;grid-template-columns:repeat(3,minmax(0,1fr));}
+          .wani-tool-card{min-height:178px!important;height:178px!important;padding:14px 8px 10px!important;border-radius:22px!important;overflow:hidden;}
+          .wani-card-icon{width:58px;height:58px;margin-bottom:12px;}
+          .wani-card-title{font-size:14px;letter-spacing:-.45px;}
+          .wani-under{width:34px;height:3px;margin:8px auto 8px;}
+          .wani-card-desc{font-size:10.5px;line-height:1.2;max-width:112px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+          .wani-arrow{width:32px;height:32px;margin-top:auto;}
           .wani-bottom-pill{display:none!important;}
         }
         @media (max-width:520px){
-          .wani-home-inner{padding:26px 18px 96px;}
-          .wani-hero{margin-bottom:16px;}
-          .wani-hero h1{font-size:27px;line-height:1.08;}
-          .wani-hero p{font-size:15px;line-height:1.3;}
-          .wani-sparkle{width:70px;height:50px;flex-basis:70px;}
-          .wani-tool-grid{gap:12px;}
-          .wani-tool-card{min-height:218px!important;height:218px!important;padding:18px 10px 12px!important;border-radius:22px!important;}
-          .wani-card-icon{width:74px;height:74px;margin-bottom:16px;}
-          .wani-card-title{font-size:16px;line-height:1.05;}
-          .wani-under{width:38px;height:3px;margin:9px auto 10px;}
-          .wani-card-desc{font-size:12px;line-height:1.22;max-width:112px;-webkit-line-clamp:3;}
-          .wani-arrow{width:38px;height:38px;}
+          .wani-home-inner{padding:16px 14px 96px;}
+          .wani-hero{margin-bottom:10px;}
+          .wani-hero h1{font-size:23px;line-height:1.05;}
+          .wani-hero p{font-size:13px;line-height:1.25;}
+          .wani-sparkle{width:58px;height:42px;flex-basis:58px;}
+          .wani-tool-grid{gap:9px;}
+          .wani-tool-card{min-height:168px!important;height:168px!important;padding:12px 7px 9px!important;border-radius:20px!important;}
+          .wani-card-icon{width:52px;height:52px;margin-bottom:10px;}
+          .wani-card-title{font-size:13.5px;line-height:1.04;}
+          .wani-under{width:32px;height:3px;margin:7px auto 7px;}
+          .wani-card-desc{font-size:10px;line-height:1.18;max-width:96px;-webkit-line-clamp:2;}
+          .wani-arrow{width:31px;height:31px;}
         }
         @media (max-width:390px){
-          .wani-home-inner{padding:22px 14px 92px;}
-          .wani-hero h1{font-size:25px;}
-          .wani-hero p{font-size:14px;}
-          .wani-tool-grid{gap:10px;}
-          .wani-tool-card{height:206px!important;min-height:206px!important;padding:16px 8px 10px!important;}
-          .wani-card-icon{width:66px;height:66px;margin-bottom:14px;}
-          .wani-card-title{font-size:15px;}
-          .wani-card-desc{font-size:11px;max-width:100px;}
-          .wani-arrow{width:36px;height:36px;}
+          .wani-home-inner{padding:14px 12px 92px;}
+          .wani-hero h1{font-size:21px;}
+          .wani-hero p{font-size:12.5px;}
+          .wani-tool-grid{gap:8px;}
+          .wani-tool-card{height:158px!important;min-height:158px!important;padding:11px 6px 8px!important;}
+          .wani-card-icon{width:48px;height:48px;margin-bottom:9px;}
+          .wani-card-title{font-size:12.5px;}
+          .wani-card-desc{font-size:9.5px;max-width:88px;}
+          .wani-arrow{width:30px;height:30px;}
         }
       `}</style>
 
@@ -736,9 +739,10 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
               className="wani-tool-card"
               onClick={() => onQuickLaunch(tile.action)}
               style={{
-                minHeight:350,
-                padding:'42px 30px 28px',
-                borderRadius:30,
+                minHeight:238,
+                height:238,
+                padding:'24px 24px 18px',
+                borderRadius:28,
                 border: dark?'1px solid rgba(255,255,255,0.08)':'1px solid #E8E8E8',
                 background: dark?'rgba(24,24,42,0.92)':'rgba(255,255,255,0.94)',
                 boxShadow: dark?'0 18px 38px rgba(0,0,0,0.34)':'0 14px 34px rgba(15,23,42,0.07)',
@@ -1788,7 +1792,7 @@ export default function Brain({ session }) {
                 position:'fixed',
                 left:isMobile?'14px':'calc(260px + 18px)',
                 right:isMobile?'14px':'18px',
-                bottom:'calc(env(safe-area-inset-bottom) + 12px)',
+                bottom:'calc(env(safe-area-inset-bottom) + 8px)',
                 zIndex:80,
                 background:'transparent',
                 borderTop:'none',
@@ -1796,7 +1800,7 @@ export default function Brain({ session }) {
                 pointerEvents:'auto',
               }}
             >
-              <div style={{ maxWidth:720,margin:'0 auto' }}>
+              <div style={{ maxWidth:680,margin:'0 auto' }}>
                 {uploadedDoc && (
                   <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'rgba(79,70,229,0.1)', border:'1px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:12 }}>
                     <span style={{ fontSize:14 }}>📄</span>
