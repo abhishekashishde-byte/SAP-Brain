@@ -642,19 +642,19 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
       overflowY:'auto',
       background: dark
         ? 'radial-gradient(circle at 85% 8%, rgba(251,191,36,0.10), transparent 24%), #0D0D14'
-        : 'radial-gradient(circle at 90% 10%, rgba(251,191,36,0.18), transparent 22%), linear-gradient(180deg,#FFFFFF 0%,#FFFDF9 70%,#FFF7ED 100%)',
+        : 'radial-gradient(circle at 90% 8%, rgba(251,191,36,0.16), transparent 22%), linear-gradient(180deg,#FFFFFF 0%,#FFFFFF 54%,#FFF7ED 100%)',
       fontFamily:"'DM Sans','Inter',system-ui,sans-serif",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-        .wani-home-inner{max-width:1120px;margin:0 auto;padding:56px 34px 24px;}
-        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:34px;}
-        .wani-hero h1{font-size:44px;line-height:1.08;letter-spacing:-1.6px;margin:0 0 14px;font-weight:800;}
-        .wani-hero p{font-size:22px;line-height:1.35;margin:0;font-weight:500;color:#6B7280;}
+        .wani-home-inner{max-width:1120px;margin:0 auto;padding:46px 34px 24px;}
+        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:30px;position:relative;z-index:3;visibility:visible!important;}
+        .wani-hero h1{display:block!important;visibility:visible!important;font-size:44px;line-height:1.08;letter-spacing:-1.6px;margin:0 0 14px;font-weight:800;}
+        .wani-hero p{display:block!important;visibility:visible!important;font-size:22px;line-height:1.35;margin:0;font-weight:500;color:#6B7280;}
         .wani-sparkle{width:188px;height:104px;flex:0 0 188px;margin-top:4px;}
-        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;position:relative;z-index:2;}
         .wani-tool-card{animation:exactTileIn .42s cubic-bezier(.16,1,.3,1) both;}
         .wani-tool-card:nth-child(1){animation-delay:.03s}.wani-tool-card:nth-child(2){animation-delay:.07s}.wani-tool-card:nth-child(3){animation-delay:.11s}
         .wani-tool-card:nth-child(4){animation-delay:.15s}.wani-tool-card:nth-child(5){animation-delay:.19s}.wani-tool-card:nth-child(6){animation-delay:.23s}
@@ -671,37 +671,39 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
         .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
         @media (max-width:760px){
-          .wani-home-inner{padding:56px 32px 16px;}
-          .wani-hero{margin-bottom:32px;}
-          .wani-hero h1{font-size:34px;letter-spacing:-1px;margin-bottom:10px;white-space:nowrap;}
-          .wani-hero p{font-size:18px;white-space:nowrap;}
+          .wani-home-inner{padding:34px 24px 16px;}
+          .wani-hero{margin-bottom:26px;align-items:flex-start;}
+          .wani-hero h1{font-size:32px;letter-spacing:-1px;margin-bottom:8px;white-space:normal;color:#030303!important;}
+          .wani-hero p{font-size:17px;white-space:normal;color:#6B7280!important;}
           .wani-sparkle{width:104px;height:70px;flex-basis:104px;margin-top:0;}
-          .wani-tool-grid{gap:18px 20px;grid-template-columns:repeat(3,minmax(0,1fr));}
-          .wani-tool-card{min-height:310px!important;padding:34px 24px 24px!important;border-radius:26px!important;}
-          .wani-card-icon{width:128px;height:128px;margin-bottom:30px;}
-          .wani-card-title{font-size:22px;letter-spacing:-.5px;}
-          .wani-under{width:42px;height:3px;margin:14px auto 20px;}
-          .wani-card-desc{font-size:17px;line-height:1.42;max-width:210px;}
-          .wani-arrow{width:54px;height:54px;margin-top:auto;}
-          .wani-bottom-pill{margin-top:24px;padding:12px 14px 12px 18px;border-radius:26px;}
+          .wani-tool-grid{gap:16px 18px;grid-template-columns:repeat(3,minmax(0,1fr));}
+          .wani-tool-card{min-height:300px!important;padding:30px 18px 22px!important;border-radius:26px!important;}
+          .wani-card-icon{width:118px;height:118px;margin-bottom:24px;}
+          .wani-card-title{font-size:21px;letter-spacing:-.5px;}
+          .wani-under{width:42px;height:3px;margin:13px auto 18px;}
+          .wani-card-desc{font-size:16px;line-height:1.38;max-width:210px;}
+          .wani-arrow{width:52px;height:52px;margin-top:auto;}
+          .wani-bottom-pill{margin-top:22px;padding:12px 14px 12px 18px;border-radius:26px;}
           .wani-pill-left{font-size:18px;gap:12px;}
           .wani-pill-icon{width:50px;height:50px;}
           .wani-pill-action{width:66px;height:50px;border-radius:20px;}
         }
         @media (max-width:520px){
-          .wani-home-inner{padding:50px 18px 14px;}
-          .wani-hero h1{font-size:28px;}
-          .wani-hero p{font-size:15px;}
+          .wani-home-inner{padding:30px 18px 14px;}
+          .wani-hero{margin-bottom:22px;}
+          .wani-hero h1{font-size:26px;line-height:1.08;}
+          .wani-hero p{font-size:14px;line-height:1.25;}
           .wani-sparkle{width:74px;height:56px;flex-basis:74px;}
           .wani-tool-grid{gap:12px;}
-          .wani-tool-card{min-height:270px!important;padding:24px 14px 18px!important;border-radius:22px!important;}
-          .wani-card-icon{width:92px;height:92px;margin-bottom:24px;}
-          .wani-card-title{font-size:17px;}
-          .wani-card-desc{font-size:13px;line-height:1.42;}
-          .wani-arrow{width:44px;height:44px;}
-          .wani-pill-left{font-size:14px;}
-          .wani-pill-icon{width:42px;height:42px;}
-          .wani-pill-action{width:52px;height:42px;}
+          .wani-tool-card{min-height:250px!important;padding:22px 10px 16px!important;border-radius:22px!important;}
+          .wani-card-icon{width:84px;height:84px;margin-bottom:20px;}
+          .wani-card-title{font-size:16px;line-height:1.05;}
+          .wani-under{width:36px;margin:11px auto 15px;}
+          .wani-card-desc{font-size:12px;line-height:1.35;max-width:92px;}
+          .wani-arrow{width:42px;height:42px;}
+          .wani-pill-left{font-size:13px;}
+          .wani-pill-icon{width:40px;height:40px;}
+          .wani-pill-action{width:50px;height:40px;}
         }
       `}</style>
 
