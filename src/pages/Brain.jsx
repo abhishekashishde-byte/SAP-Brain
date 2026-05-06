@@ -502,8 +502,12 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
             t={t}
           />
         )}
-        {/* Code Analysis buttons — show when previous user message had code */}
-        {!isStreaming && prevUserMsg && /METHOD |CLASS |LOOP AT |SELECT\s|DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION |REPORT |TYPES:|CONSTANTS:/i.test(prevUserMsg) && (
+        {/* Code Analysis buttons — only show when previous user message contained real ABAP code block */}
+        {!isStreaming && prevUserMsg && (
+          /\[ATTACHED_CODE/i.test(prevUserMsg) ||
+          (/(?:METHOD\s+\w+|CLASS\s+\w+|LOOP\s+AT\s+\w+|FIELD-SYMBOL\s*\(|ENDLOOP\.|ENDMETHOD\.|DATA\s*:\s*\w|SELECT\s+\*?\s+FROM\s+\w|FORM\s+\w+\s*\.|FUNCTION\s+\w+\s*\.|REPORT\s+\w+\s*\.|TYPES:\s*BEGIN|CONSTANTS:\s*\w)/i.test(prevUserMsg) &&
+           prevUserMsg.trim().split(/\s+/).length > 15)  // must be substantial — not just a sentence mentioning ABAP keywords
+        ) && (
           <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
             <div style={{ width:'100%', fontSize:11, color:t.text4, marginBottom:2, fontWeight:500 }}>🔬 Analyse this code:</div>
             {[
