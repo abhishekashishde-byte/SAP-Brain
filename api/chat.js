@@ -101,8 +101,17 @@ Question: "${question.slice(0, 400)}"
     const isBapiSearch   = /\b(bapi|function module|rfc|which.*bapi|bapi.*for|what.*bapi|what.*function module)\b/i.test(question)
     const isExitSearch   = /\b(user exit|badi|ba[d]i|enhancement spot|enhancement point|which.*exit|exit.*for|badi.*for|userexit|include.*exit|implicit enhancement)\b/i.test(question)
 
+    // ── CONCEPT QUESTION DETECTOR — fires Google CSE for any substantive SAP question ──
+    // Triggers when the question involves relationships, configuration, processes, or
+    // integration — things a consultant would Google to find blogs, help docs, or Q&A
+    const isConceptQuestion = !isCode && !isError && (
+      /\b(how|why|what|when|where|which|difference|relation|link|connect|integrat|config|set up|setup|between|versus|vs\.?|compare|explain|understand|work|flow|trigger|impact|affect|depend)\b/i.test(question) &&
+      question.trim().split(/\s+/).length >= 5   // at least 5 words — not a one-liner lookup
+    )
+
     const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
       || isNoteSearch || isErrorSearch || isNewFeature || isSpecificTcode
+      || isConceptQuestion  // ← broadened: concept/relationship/config questions always search
 
     return {
       intent,
@@ -391,8 +400,33 @@ async function googleSAPSearch(question, intent = 'SAP_QA') {
 
     // ── DEFAULT: general SAP search ──────────────────────────────────────────
     const shortQuery = question.replace(/what is|what are|how to|how do i|please explain/gi, '').trim()
-    results = await runCSE(shortQuery.slice(0, 100), 3)
+    results = await runCSE(shortQuery.slice(0, 100), 4)
     console.log('Google CSE DEFAULT results:', results.length)
+
+    // ── FALLBACK: if CSE returns nothing, build curated manual links ─────────
+    if (results.length === 0) {
+      const encoded = encodeURIComponent(`SAP S/4HANA ${shortQuery.slice(0, 80)}`)
+      results = [
+        {
+          title: `SAP Help Portal — Search: ${shortQuery.slice(0, 60)}`,
+          url: `https://help.sap.com/search/?q=${encoded}`,
+          snippet: 'Official SAP documentation and help guides',
+          source: 'SAP Help',
+        },
+        {
+          title: `SAP Community — ${shortQuery.slice(0, 60)}`,
+          url: `https://community.sap.com/t5/forums/searchpage/tab/message?q=${encoded}`,
+          snippet: 'Questions and answers from SAP consultants worldwide',
+          source: 'SAP Community',
+        },
+        {
+          title: `SAP Blogs — ${shortQuery.slice(0, 60)}`,
+          url: `https://blogs.sap.com/?s=${encoded}`,
+          snippet: 'Expert blog posts from the SAP community',
+          source: 'SAP Blog',
+        },
+      ]
+    }
     return results
 
   } catch (err) {
@@ -753,16 +787,33 @@ export default async function handler(req, res) {
       ? lastMsg // keep code exactly as-is
       : await rewriteQuestion(lastMsg, messages || [])
 
-    // STEP 4 — Web search via OpenAI (full web access, consistent results)
+    // STEP 4 — Web search: OpenAI for content + Google CSE for real links (parallel)
     let searchResults = []
     let geminiSearchText = ''
+    let googleLinks = []   // always-on Google CSE links for Further Reading
+
     if (!isCode && needsSearch) {
-      const searchResult = await callOpenAISearch(lastMsg)
-      if (searchResult && typeof searchResult === 'object') {
-        searchResults = searchResult.sources || []
-        geminiSearchText = searchResult.text || ''
+      // Run OpenAI search (content) + Google CSE (links) in parallel
+      const [openAIResult, cseLinks] = await Promise.all([
+        callOpenAISearch(lastMsg).catch(() => null),
+        googleSAPSearch(lastMsg, intent).catch(() => []),
+      ])
+
+      if (openAIResult && typeof openAIResult === 'object') {
+        searchResults = openAIResult.sources || []
+        geminiSearchText = openAIResult.text || ''
       }
-      console.log('OpenAI search complete — sources:', searchResults.length, 'text:', geminiSearchText.length)
+      // Merge: prefer Google CSE links (topic-specific) + OpenAI sources as supplement
+      googleLinks = cseLinks || []
+      // Deduplicate: remove CSE links that are already in OpenAI sources
+      const openAIUrls = new Set(searchResults.map(r => r.url))
+      googleLinks = googleLinks.filter(r => !openAIUrls.has(r.url))
+
+      console.log('Search complete — OpenAI sources:', searchResults.length, 'Google CSE links:', googleLinks.length)
+    } else if (!isCode && isConceptQuestion) {
+      // Even if OpenAI search was skipped, still run Google CSE for Further Reading links
+      googleLinks = await googleSAPSearch(lastMsg, intent).catch(() => [])
+      console.log('Google CSE only (concept question):', googleLinks.length)
     }
 
     // Extract SAP Note numbers from search results — build direct login links
@@ -958,6 +1009,15 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     // STEP 6 — Send search links to frontend (already resolved above, just send)
     if (searchResults.length > 0) {
       send({ type: 'search_results', results: searchResults })
+    }
+    // Send Google CSE links as further_reading — displayed as a clean "Further Reading" block
+    const allFurtherReading = [
+      ...googleLinks,
+      // Also include any OpenAI sources not already in googleLinks
+      ...searchResults.filter(r => !googleLinks.find(g => g.url === r.url))
+    ].slice(0, 6)
+    if (allFurtherReading.length > 0) {
+      send({ type: 'further_reading', links: allFurtherReading })
     }
 
     // ── FS COMPLETION DETECTION ───────────────────────────────────────────────
