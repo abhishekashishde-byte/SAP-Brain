@@ -174,12 +174,12 @@ ${recentContext || 'No previous context'}`
 // ── 3. CLAUDE SONNET — code analysis only ────────────────────────────────────
 // Note: streamClaudeHaiku removed — all non-code SAP questions go to GPT-4o
 
-async function streamClaudeSonnet(systemPrompt, messages, onChunk) {
+async function streamClaudeSonnet(systemPrompt, messages, onChunk, maxTokens) {
   // claude-sonnet-4-5: latest stable Sonnet model
-  return streamClaude('claude-sonnet-4-5', systemPrompt, messages, onChunk)
+  return streamClaude('claude-sonnet-4-5', systemPrompt, messages, onChunk, maxTokens)
 }
 
-async function streamClaude(model, systemPrompt, messages, onChunk) {
+async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -189,7 +189,7 @@ async function streamClaude(model, systemPrompt, messages, onChunk) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: model.includes('sonnet') ? 4096 : 2048,
+      max_tokens: maxTokens || (model.includes('sonnet') ? 8000 : 2048),
       system: systemPrompt,
       messages,
       stream: true,
@@ -848,7 +848,7 @@ export default async function handler(req, res) {
       validMessages[validMessages.length - 1].content = rewrittenQuestion
     }
 
-    send({ type: 'start' })
+    send({ type: 'start', intent })
     let fullAnswer = ''
 
     // Resolve knowledge (was fetching in parallel)
@@ -976,15 +976,15 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
 
     let modelUsed
     if (isComplexAbap || isCode) {
-      // Complex ABAP or any code → Claude Sonnet
-      fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      // Complex ABAP or any code → Claude Sonnet (8k sufficient for code analysis)
+      fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
       modelUsed = 'claude-sonnet'
       console.log('MODEL: Claude Sonnet (ABAP/code)')
     } else if (isComplexDeliverable) {
-      // FS, Tech Spec, Workshop PPT → Claude Sonnet (best for long structured docs)
-      fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      // FS, Tech Spec, Workshop PPT → Claude Sonnet with max tokens (17 sections needs space)
+      fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
       modelUsed = 'claude-sonnet'
-      console.log('MODEL: Claude Sonnet (deliverable)')
+      console.log('MODEL: Claude Sonnet (deliverable, 16k tokens)')
     } else if (isSimpleQA) {
       // Simple SAP Q&A → GPT-4o-mini (cheap, fast, good enough)
       fullAnswer = await streamGPTMini(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
@@ -1025,7 +1025,7 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     // Primary: explicit signal. Fallback: has at least 8 ---SECTION N:--- markers
     const fsSectionCount = (fullAnswer.match(/---SECTION \d+:/g) || []).length
     const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE') ||
-      (intent === 'FS_SPEC' && fsSectionCount >= 8)
+      (intent === 'FS_SPEC' && fsSectionCount >= 6)
     // Strip signal token + everything after it from the displayed/stored text
     const cleanAnswer = fullAnswer
       .replace(/WANI_FS_COMPLETE[\s\S]*$/, '')
@@ -1041,7 +1041,19 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       .trim()
 
     // Which clean answer to show in chat
-    const chatAnswer = pptComplete ? cleanPPTAnswer : cleanAnswer
+    // For FS and PPT: show a brief confirmation card, not the full raw content
+    let chatAnswer
+    if (fsComplete) {
+      const fsTitleMatch = cleanAnswer.match(/FS_TITLE:\s*(.+)/i)
+      const fsTitle = fsTitleMatch?.[1]?.trim() || 'Functional Specification'
+      const sectionCount = (cleanAnswer.match(/---SECTION \d+:/g) || []).length
+      chatAnswer = `✅ **Functional Specification generated** — *${fsTitle}*\n\n📄 Your Word document has been downloaded automatically. It contains **${sectionCount} sections** covering all requirements discussed.\n\n_If the download didn't start, use the button below to download again._`
+    } else if (pptComplete) {
+      const slideCount = (cleanPPTAnswer.match(/---SLIDE \d+---/g) || []).length
+      chatAnswer = `✅ **Workshop Presentation generated** — **${slideCount} slides**\n\n📊 Your PowerPoint file has been downloaded automatically with speaker notes and SAP references on every slide.\n\n_If the download didn't start, use the button below to download again._`
+    } else {
+      chatAnswer = cleanAnswer
+    }
 
     send({
       type: 'done',
