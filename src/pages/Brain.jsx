@@ -626,7 +626,80 @@ function topFor(slot){return slot===0?0:CARD_H+(slot-1)*PEEK}
 function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
-function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark }) {
+function HomeInputDock({
+  t, uploadedDoc, setUploadedDoc, DOC_ACTIONS, handleSendText,
+  docInputRef, handleDocUpload, docUploading,
+  attachedCode, expandedCode, setExpandedCode, setAttachedCode,
+  inputRef, input, setInput, handlePaste, handleSend,
+  isLoading, isStreaming, activeConv, browseModule, dark
+}) {
+  return (
+    <div className="wani-home-input-dock">
+      <div style={{ maxWidth:720, margin:'0 auto' }}>
+        {uploadedDoc && (
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'rgba(79,70,229,0.1)', border:'1px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:12 }}>
+            <span style={{ fontSize:14 }}>📄</span>
+            <span style={{ flex:1, color:t.text, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uploadedDoc.name}</span>
+            <span style={{ color:'#6366f1', fontSize:11, fontWeight:600, background:'rgba(99,102,241,0.15)', padding:'2px 7px', borderRadius:6 }}>{uploadedDoc.docType?.replace('_',' ')}</span>
+            <button onClick={()=>setUploadedDoc(null)} style={{ background:'none', border:'none', color:t.text4, cursor:'pointer', fontSize:16, lineHeight:1, padding:0 }}>✕</button>
+          </div>
+        )}
+
+        {uploadedDoc && DOC_ACTIONS[uploadedDoc.docType] && (
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+            {DOC_ACTIONS[uploadedDoc.docType].map(btn => (
+              <button key={btn.label}
+                onClick={() => handleSendText(btn.prompt)}
+                style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:8, border:`1px solid ${t.border}`, background:t.surface2, color:t.text3, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif" }}>
+                {btn.icon} {btn.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="wani-home-composer" style={{ display:'flex', gap:10, alignItems:'flex-end', background:t.inputBg, border:`1.5px solid ${t.border2}`, borderRadius:14, padding:'10px 12px', transition:'border-color 0.2s, box-shadow 0.2s' }}
+          onFocusCapture={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)'}}
+          onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow='none'}}
+        >
+          <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
+            title="Upload document (PDF, DOCX, TXT)"
+            style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:uploadedDoc?'#6366f1':t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+            {docUploading ? '⏳' : '📎'}
+          </button>
+          <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
+
+          {attachedCode && (
+            <div style={{ width:'100%', marginBottom:6 }}>
+              <CodeCard
+                language={attachedCode.language}
+                lines={attachedCode.lines}
+                content={attachedCode.content}
+                expanded={expandedCode}
+                onToggle={() => setExpandedCode(p => !p)}
+                onRemove={() => { setAttachedCode(null); setExpandedCode(false) }}
+                t={t} dark={dark}
+              />
+            </div>
+          )}
+
+          <textarea ref={inputRef} value={input}
+            onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px'}}
+            onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
+            onPaste={handlePaste}
+            placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
+            style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
+          />
+          <button onClick={()=>handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+            style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+          >→</button>
+        </div>
+        <div style={{ fontSize:11,color:t.text4,textAlign:'right',marginTop:4 }}>{activeConv?.module||browseModule||'Free mode'} · verify system-specific behaviour</div>
+      </div>
+    </div>
+  )
+}
+
+function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark, inputProps }) {
   const TILES = [
     { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',                   accent:'#F97316', soft:'#FFF7ED' },
     { action:'customizing', icon:'/icon-customizing.png', label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                         accent:'#E11D48', soft:'#FFF1F2' },
@@ -670,6 +743,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         .wani-pill-left{display:flex;align-items:center;gap:18px;font-size:23px;line-height:1.2;font-weight:800;color:#090909;}
         .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
         .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
+        .wani-home-input-dock{margin:18px 0 0;padding:0 4px 2px;position:relative;z-index:5;}
+        .wani-home-composer{box-shadow:0 10px 26px rgba(15,23,42,.07);}
         @media (max-width:760px){
           .wani-home-inner{padding:34px 24px 16px;}
           .wani-hero{margin-bottom:26px;align-items:flex-start;}
@@ -703,7 +778,10 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
           .wani-card-desc{font-size:10.5px;line-height:1.22;max-width:92px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
           .wani-arrow{width:34px;height:34px;margin-top:auto;}
           .wani-arrow svg{width:20px;height:20px;}
-          .wani-bottom-pill{margin-top:10px;padding:9px 10px;border-radius:22px;}
+          .wani-bottom-pill{display:none;}
+          .wani-home-input-dock{margin-top:12px;padding:0 0 calc(env(safe-area-inset-bottom) + 2px);}
+          .wani-home-composer{border-radius:22px!important;padding:8px 10px!important;box-shadow:0 10px 28px rgba(79,70,229,.12);}
+          .wani-home-composer textarea{font-size:15px!important;}
           .wani-pill-left{font-size:12px;gap:8px;}
           .wani-pill-icon{width:34px;height:34px;}
           .wani-pill-icon svg{width:22px;height:22px;}
@@ -788,6 +866,8 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
             </svg>
           </div>
         </div>
+
+        <HomeInputDock {...inputProps} t={t} dark={dark} />
       </div>
     </div>
   )
@@ -1236,6 +1316,10 @@ export default function Brain({ session }) {
     setAttachedCode(null)
     if (inputRef.current) inputRef.current.style.height = '24px'
     setIsLoading(true)
+    if (view !== 'chat') {
+      setView('chat')
+      try { window.history.pushState({ view:'chat', mod:browseModule, topic:browseTopic },'',window.location.pathname) } catch(e) {}
+    }
 
     let convId = activeConvId
     let currentMod = activeConv?.module||browseModule
@@ -1784,7 +1868,7 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch}/>}
+        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ uploadedDoc, setUploadedDoc, DOC_ACTIONS, handleSendText, docInputRef, handleDocUpload, docUploading, attachedCode, expandedCode, setExpandedCode, setAttachedCode, inputRef, input, setInput, handlePaste, handleSend, isLoading, isStreaming, activeConv, browseModule }} />}
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat'&&(
