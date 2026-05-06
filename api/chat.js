@@ -1087,12 +1087,12 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
     let chatAnswer
     if (fsComplete) {
       const fsTitleMatch = cleanAnswer.match(/FS_TITLE:\s*(.+)/i)
-      const fsTitle = fsTitleMatch?.[1]?.trim() || 'Functional Specification'
+      const fsTitle = (fsTitleMatch?.[1]?.trim() || 'Functional Specification').replace(/\*/g, '').trim()
       const sectionCount = (cleanAnswer.match(/---SECTION \d+:/g) || []).length
-      chatAnswer = `✅ **Functional Specification generated** — *${fsTitle}*\n\n📄 Your Word document has been downloaded automatically. It contains **${sectionCount} sections** covering all requirements discussed.\n\n_If the download didn't start, use the button below to download again._`
+      chatAnswer = `✅ **Functional Specification generated — ${fsTitle}**\n\n📄 Your Word document has been downloaded automatically. It contains **${sectionCount} sections** covering all requirements discussed.\n\n_If the download didn't start, use the button below to download again._`
     } else if (pptComplete) {
       const slideCount = (cleanPPTAnswer.match(/---SLIDE \d+---/g) || []).length
-      chatAnswer = `✅ **Workshop Presentation generated** — **${slideCount} slides**\n\n📊 Your PowerPoint file has been downloaded automatically with speaker notes and SAP references on every slide.\n\n_If the download didn't start, use the button below to download again._`
+      chatAnswer = `✅ **Workshop Presentation generated — ${slideCount} slides**\n\n📊 Your PowerPoint file has been downloaded automatically with speaker notes and SAP references on every slide.\n\n_If the download didn't start, use the button below to download again._`
     } else {
       chatAnswer = cleanAnswer
     }
