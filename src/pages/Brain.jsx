@@ -1023,6 +1023,7 @@ export default function Brain({ session }) {
   const [isLoading, setIsLoading]         = useState(false)
   const [isStreaming, setIsStreaming]      = useState(false)
   const [streamingText, setStreamingText] = useState('')
+  const [streamingIntent, setStreamingIntent] = useState('SAP_QA')
   const [dbLoading, setDbLoading]         = useState(true)
   const [searchQuery, setSearchQuery]     = useState('')
   const [showProfile, setShowProfile]     = useState(false)
@@ -1458,7 +1459,6 @@ export default function Brain({ session }) {
       let accumulated = ''
       let searchResults = []
       let furtherReadingLinks = []
-      let streamingIntent = 'SAP_QA'
 
       while (true) {
         const { done, value } = await reader.read()
@@ -1475,7 +1475,7 @@ export default function Brain({ session }) {
               accumulated += evt.text
               setStreamingText(accumulated)
             } else if (evt.type === 'start') {
-              streamingIntent = evt.intent || 'SAP_QA'
+              setStreamingIntent(evt.intent || 'SAP_QA')
             } else if (evt.type === 'search_results') {
               searchResults = evt.results || []
             } else if (evt.type === 'further_reading') {
@@ -1558,6 +1558,7 @@ export default function Brain({ session }) {
 
       setIsStreaming(false)
       setStreamingText('')
+      setStreamingIntent('SAP_QA')
 
       // No separate links section — sources are now cited inline in the answer
       const replyContent = finalReply
@@ -1590,7 +1591,7 @@ export default function Brain({ session }) {
       checkForFindings(finalMsgs).catch(() => {})
 
     } catch(err) {
-      setIsLoading(false);setIsStreaming(false);setStreamingText('')
+      setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA')
       const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:errMsgs}:c))
     }
