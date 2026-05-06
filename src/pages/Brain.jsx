@@ -1458,6 +1458,7 @@ export default function Brain({ session }) {
       let accumulated = ''
       let searchResults = []
       let furtherReadingLinks = []
+      let streamingIntent = 'SAP_QA'
 
       while (true) {
         const { done, value } = await reader.read()
@@ -1473,6 +1474,8 @@ export default function Brain({ session }) {
             if (evt.type === 'chunk') {
               accumulated += evt.text
               setStreamingText(accumulated)
+            } else if (evt.type === 'start') {
+              streamingIntent = evt.intent || 'SAP_QA'
             } else if (evt.type === 'search_results') {
               searchResults = evt.results || []
             } else if (evt.type === 'further_reading') {
@@ -2018,7 +2021,40 @@ export default function Brain({ session }) {
                         <div style={{ background:t.msgAI,border:`1px solid ${t.msgAIBdr}`,borderRadius:'4px 16px 16px 16px' }}><TypingDots/></div>
                       </div>
                     )}
-                    {isStreaming&&<MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>}
+                    {isStreaming && (streamingIntent === 'FS_SPEC' || streamingIntent === 'WORKSHOP_PPT') ? (
+                      <div style={{ display:'flex',gap:10,alignItems:'flex-start',marginBottom:20 }}>
+                        <div style={{ width:32,height:32,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center' }}><WaniLogo size={28} dark={dark}/></div>
+                        <div style={{ background:t.msgAI,border:`1px solid ${t.msgAIBdr}`,borderRadius:'4px 16px 16px 16px',padding:'14px 18px',maxWidth:420 }}>
+                          <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:8 }}>
+                            <div style={{ width:14,height:14,border:'2px solid rgba(79,70,229,0.3)',borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',flexShrink:0 }}/>
+                            <span style={{ fontSize:14,fontWeight:600,color:t.text }}>
+                              {streamingIntent === 'FS_SPEC' ? '📄 Building Functional Specification…' : '📊 Building Workshop Presentation…'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize:12,color:t.text3,lineHeight:1.5 }}>
+                            {streamingIntent === 'FS_SPEC'
+                              ? `Writing all 17 sections from your requirements. This takes 30–60 seconds — your Word document will download automatically when complete.`
+                              : `Generating all slides with speaker notes and SAP references. Your PowerPoint will download automatically when complete.`
+                            }
+                          </div>
+                          {/* Live section counter */}
+                          {(() => {
+                            const sections = (streamingText.match(/---SECTION \d+:/g) || []).length
+                            const slides   = (streamingText.match(/---SLIDE \d+---/g) || []).length
+                            const count = streamingIntent === 'FS_SPEC' ? sections : slides
+                            const total = streamingIntent === 'FS_SPEC' ? 17 : '~15'
+                            if (count === 0) return null
+                            return (
+                              <div style={{ marginTop:10,fontSize:12,color:'#4F46E5',fontWeight:600 }}>
+                                {streamingIntent === 'FS_SPEC' ? `✓ ${count} of ${total} sections written` : `✓ ${count} slides written`}
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    ) : isStreaming ? (
+                      <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                    ) : null}
                     <div ref={bottomRef}/>
                   </>
                 )}
