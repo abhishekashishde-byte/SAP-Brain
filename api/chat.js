@@ -783,17 +783,18 @@ export default async function handler(req, res) {
       saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
     }
 
-    // STEP 3 — GPT-4o mini rewrites question for context (skip if code present)
-    const rewrittenQuestion = isCode
-      ? lastMsg // keep code exactly as-is
+    // STEP 3 — GPT-4o mini rewrites question for context (skip for code and deliverables)
+    const rewrittenQuestion = (isCode || isDeliverable)
+      ? lastMsg  // keep as-is — full conversation history already has context
       : await rewriteQuestion(lastMsg, messages || [])
 
     // STEP 4 — Web search: OpenAI for content + Google CSE for real links (parallel)
+    // Skip entirely for FS/PPT — search adds latency and is irrelevant for doc generation
     let searchResults = []
     let geminiSearchText = ''
-    let googleLinks = []   // always-on Google CSE links for Further Reading
+    let googleLinks = []
 
-    if (!isCode && needsSearch) {
+    if (!isCode && !isDeliverable && needsSearch) {
       // Run OpenAI search (content) + Google CSE (links) in parallel
       const [openAIResult, cseLinks] = await Promise.all([
         callOpenAISearch(lastMsg).catch(() => null),
@@ -811,7 +812,7 @@ export default async function handler(req, res) {
       googleLinks = googleLinks.filter(r => !openAIUrls.has(r.url))
 
       console.log('Search complete — OpenAI sources:', searchResults.length, 'Google CSE links:', googleLinks.length)
-    } else if (!isCode && isConceptQuestion) {
+    } else if (!isCode && !isDeliverable && isConceptQuestion) {
       // Even if OpenAI search was skipped, still run Google CSE for Further Reading links
       googleLinks = await googleSAPSearch(lastMsg, intent).catch(() => [])
       console.log('Google CSE only (concept question):', googleLinks.length)
@@ -843,8 +844,8 @@ export default async function handler(req, res) {
       }))
       .slice(hasCodeInHistory ? -12 : -8) // keep more history when code is present
 
-    // Replace last user message with rewritten version ONLY if no code present
-    if (!isCode && !hasCodeInHistory && validMessages.length > 0 && validMessages[validMessages.length - 1].role === 'user') {
+    // Replace last user message with rewritten version ONLY if no code and not a deliverable
+    if (!isCode && !isDeliverable && !hasCodeInHistory && validMessages.length > 0 && validMessages[validMessages.length - 1].role === 'user') {
       validMessages[validMessages.length - 1].content = rewrittenQuestion
     }
 
@@ -858,10 +859,14 @@ export default async function handler(req, res) {
     if (intent === 'GENERAL') intent = 'SAP_QA'
 
     // ── BUILD SYSTEM PROMPT — BASE rules + intent-specific template ──────────
-    // Fix 1: BASE_SYSTEM_PROMPT provides global SAP rules always applied
+    // For deliverables (FS/PPT) skip the large BASE_SYSTEM_PROMPT to save tokens & time.
+    // The intent prompt is self-contained and already has all the rules needed.
     const intentPrompt = INTENT_PROMPTS[intent] || INTENT_PROMPTS['SAP_QA']
     const toneAddition = TONE_ADDITIONS[tone] || ''
-    let systemPrompt = BASE_SYSTEM_PROMPT + '\n\n' + intentPrompt + toneAddition
+    const isDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
+    let systemPrompt = isDeliverable
+      ? intentPrompt + toneAddition   // lean: intent prompt only
+      : BASE_SYSTEM_PROMPT + '\n\n' + intentPrompt + toneAddition  // full: base + intent
 
     // ── FIX 3: Multi-intent — light secondary section, not full second template
     if (secondaryIntent && secondaryIntent !== intent && INTENT_PROMPTS[secondaryIntent]) {
