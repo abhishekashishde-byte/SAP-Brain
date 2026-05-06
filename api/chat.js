@@ -773,6 +773,9 @@ export default async function handler(req, res) {
 
     let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isConceptQuestion, isCode, isError, isBapiSearch, isExitSearch, isNoteSearch } = classification
 
+    // Declare early — used in STEP 3, 4, and system prompt building
+    const isDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
+
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, confidence, secondaryIntent, needsSearch,
       corrections: globalCorrections.length,
@@ -863,7 +866,6 @@ export default async function handler(req, res) {
     // The intent prompt is self-contained and already has all the rules needed.
     const intentPrompt = INTENT_PROMPTS[intent] || INTENT_PROMPTS['SAP_QA']
     const toneAddition = TONE_ADDITIONS[tone] || ''
-    const isDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
     let systemPrompt = isDeliverable
       ? intentPrompt + toneAddition   // lean: intent prompt only
       : BASE_SYSTEM_PROMPT + '\n\n' + intentPrompt + toneAddition  // full: base + intent
