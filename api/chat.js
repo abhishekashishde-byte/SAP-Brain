@@ -101,30 +101,48 @@ Question: "${question.slice(0, 400)}"
     const isBapiSearch   = /\b(bapi|function module|rfc|which.*bapi|bapi.*for|what.*bapi|what.*function module)\b/i.test(question)
     const isExitSearch   = /\b(user exit|badi|ba[d]i|enhancement spot|enhancement point|which.*exit|exit.*for|badi.*for|userexit|include.*exit|implicit enhancement)\b/i.test(question)
 
-    // ── CONCEPT QUESTION DETECTOR — fires Google CSE for any substantive SAP question ──
-    // Triggers when the question involves relationships, configuration, processes, or
-    // integration — things a consultant would Google to find blogs, help docs, or Q&A
-    const isConceptQuestion = !isCode && !isError && (
-      /\b(how|why|what|when|where|which|difference|relation|link|connect|integrat|config|set up|setup|between|versus|vs\.?|compare|explain|understand|work|flow|trigger|impact|affect|depend)\b/i.test(question) &&
-      question.trim().split(/\s+/).length >= 5   // at least 5 words — not a one-liner lookup
-    )
+    // ── TIGHTENED SEARCH TRIGGER ──────────────────────────────────────────────
+    // isConceptQuestion removed — too broad, fired on every "how do I configure X"
+    // Now only fire search when the answer genuinely needs live/specific data:
+    // errors, notes, Fiori apps, version-specific features, broken/missing behaviour
+    const isTroubleshoot = /\b(not working|doesn't work|does not work|missing|error|wrong|incorrect|failed|why is|why does|why can't|why won't|not found|not appearing|not showing|problem|issue|bug)\b/i.test(question)
+    const isVersionSpecific = /\b(s\/4hana \d|ecc|r\/3|vs\.|versus|difference between.*version|upgrade|migration|compatibility)\b/i.test(question)
+
+    const isConceptQuestion = false // disabled — replaced by tighter triggers below
 
     const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
-      || isNoteSearch || isErrorSearch || isNewFeature || isSpecificTcode
-      || isConceptQuestion  // ← broadened: concept/relationship/config questions always search
+      || isNoteSearch || isErrorSearch || isNewFeature
+      || isTroubleshoot || isVersionSpecific
+      // Removed: isSpecificTcode, isConceptQuestion — these fired too broadly
+
+    // ── SEARCH DECISION LOG — review after real usage to tune further ─────────
+    const searchDecisionLog = {
+      q: question.slice(0, 80),
+      searchFires: needsSearch,
+      triggers: {
+        groqSaidSearch: result.needsSearch === true,
+        fiori: intent === 'FIORI_REC' || isFioriKeyword,
+        note: isNoteSearch,
+        error: isErrorSearch,
+        newFeature: isNewFeature,
+        troubleshoot: isTroubleshoot,
+        versionSpecific: isVersionSpecific,
+      },
+      skippedTriggers: {
+        specificTcode: isSpecificTcode,   // was firing search, now skipped
+        conceptQuestion: /\b(how|why|what|when|where|which|difference|relation|integrat|config)\b/i.test(question),
+      }
+    }
+    console.log('SEARCH DECISION:', JSON.stringify(searchDecisionLog))
 
     return {
-      intent,
-      confidence,
-      secondaryIntent,
-      isCode,
-      isError,
+      intent, confidence, secondaryIntent,
+      isCode, isError,
       isCorrection: result.isCorrection === true,
       needsSearch,
-      isConceptQuestion,
-      isBapiSearch,
-      isExitSearch,
-      isNoteSearch,
+      isConceptQuestion: false,  // disabled — search now uses tighter triggers
+      isTroubleshoot, isVersionSpecific,
+      isBapiSearch, isExitSearch, isNoteSearch,
     }
   } catch {
     return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false, isConceptQuestion: false, isBapiSearch: false, isExitSearch: false, isNoteSearch: false }
@@ -929,7 +947,11 @@ export default async function handler(req, res) {
       }
 
       console.log('Search complete — OpenAI sources:', searchResults.length, 'supplemental pills:', googleLinks.length)
-    } else if (!isCode && !isDeliverable && isConceptQuestion) {
+    }
+
+    // ── ALWAYS generate supplemental pills (Part 1 links — zero API cost) ────
+    // Pills show on every answer regardless of whether web search fired
+    if (!isCode && !isDeliverable && googleLinks.length === 0) {
       const cleanQuery = await buildSAPSearchQuery(lastMsg).catch(() => null)
       if (cleanQuery) {
         const rawTerms = cleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
@@ -940,6 +962,7 @@ export default async function handler(req, res) {
           { title: `SAP Blogs: ${rawTerms.slice(0, 60)}`, url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&filter=location&location=category%3Aall-blogs&q=${enc}`, snippet: 'Expert blog posts from the SAP community', source: 'SAP Blog' },
           { title: `Google: ${rawTerms.slice(0, 60)}`, url: `https://www.google.com/search?q=${encodeURIComponent('SAP ' + rawTerms)}`, snippet: 'Google search for this SAP topic', source: 'Google' },
         ]
+        console.log('PILLS ONLY (no search fired) — query:', cleanQuery)
       }
     }
 
