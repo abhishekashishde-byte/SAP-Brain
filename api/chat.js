@@ -63,6 +63,10 @@ Question: "${question.slice(0, 400)}"
     // ── Hard regex overrides — always win over Groq classification ────────────
     const isCode  = result.isCode  === true || /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question)
     const isError = result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question)
+
+    // Hard regex for corrections — catches explicit user corrections Groq might miss
+    const isCorrectionRegex = /\b(actually|that('s| is) (wrong|incorrect|not right|not correct)|you('re| are) wrong|wrong answer|incorrect answer|that's not|this is not right|no,?\s+it (is|'s)|it should be|the correct|the right (answer|t-?code|table|path|tcode)|please (note|remember|correct)|i('m| am) correcting|let me correct|to clarify|to correct|actually it('s| is)|that is (incorrect|wrong|not))\b/i.test(question)
+    const isCorrection = result.isCorrection === true || isCorrectionRegex
     const isFsKeyword    = /\b(functional spec|FS|create.*spec|write.*spec|generate.*spec|specification for)\b/i.test(question)
     const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
     const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
@@ -138,14 +142,14 @@ Question: "${question.slice(0, 400)}"
     return {
       intent, confidence, secondaryIntent,
       isCode, isError,
-      isCorrection: result.isCorrection === true,
+      isCorrection,  // now includes hard regex override
       needsSearch,
-      isConceptQuestion: false,  // disabled — search now uses tighter triggers
+      isConceptQuestion: false,
       isTroubleshoot, isVersionSpecific,
       isBapiSearch, isExitSearch, isNoteSearch,
     }
   } catch {
-    return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false, isConceptQuestion: false, isBapiSearch: false, isExitSearch: false, isNoteSearch: false }
+    return { intent: 'SAP_QA', confidence: 0.5, secondaryIntent: null, isCode: false, isError: false, isCorrection: false, needsSearch: false, isConceptQuestion: false, isTroubleshoot: false, isVersionSpecific: false, isBapiSearch: false, isExitSearch: false, isNoteSearch: false }
   }
 }
 
@@ -852,6 +856,16 @@ export default async function handler(req, res) {
     } catch (err) { return res.status(500).json({ error: err.message }) }
   }
 
+  // Save correction — called when user confirms via UI button
+  if (body.action === 'save_correction') {
+    try {
+      const { userMsg, assistantMsg } = body
+      if (!userMsg || !assistantMsg) return res.status(400).json({ error: 'Missing messages' })
+      await saveGlobalCorrection(userMsg, assistantMsg, userId)
+      return res.status(200).json({ saved: true })
+    } catch (err) { return res.status(500).json({ error: err.message }) }
+  }
+
   // ── STREAMING HANDLER ────────────────────────────────────────────────────────
   const { messages, tone = 'balanced', userName, userRole, userModules = [] } = body
   const lastMsg = messages?.[messages.length - 1]?.content || ''
@@ -886,9 +900,10 @@ export default async function handler(req, res) {
       corrections: globalCorrections.length,
     }))
 
-    // STEP 2 — Save correction if detected (fire and forget)
+    // STEP 2 — If correction detected, send flag to frontend for user confirmation
+    // Do NOT auto-save — user must confirm to avoid saving noise
     if (isCorrection && prevAssistantMsg) {
-      saveGlobalCorrection(lastMsg, prevAssistantMsg, userId).catch(() => { })
+      console.log('CORRECTION DETECTED — awaiting user confirmation')
     }
 
     // STEP 3 — GPT-4o mini rewrites question for context (skip for code and deliverables)
@@ -1116,12 +1131,21 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       /\b(risk|vulnerabilit|why.*built|reverse engineer|impact|what.*break|performance|optimi[sz]e)\b/i.test(lastMsg)
     )
 
+    // MODEL ROUTING LOGIC:
+    // Claude Sonnet  → ABAP code, FS/PPT deliverables (long structured docs)
+    // GPT-4o-mini    → Simple SAP Q&A, table lookups, T-code questions, config steps
+    // GPT-4o         → Complex troubleshooting, error diagnosis WITH search results,
+    //                  impact analysis, cross-module integration questions
+
     const isSimpleQA = !isCode && !hasCodeInHistory && (
-      intent === 'SAP_QA' &&
-      confidence >= 0.9 &&
-      !needsSearch &&
-      lastMsg.length < 120 &&
-      !/\b(impact|what.*break|change.*affect|if.*change|complex|architecture|design|integration)\b/i.test(lastMsg)
+      // Simple intents — always mini
+      ['CUSTOMIZING', 'FIORI_REC', 'BAPI_SEARCH', 'EXIT_SEARCH'].includes(intent) ||
+      // SAP_QA with no search needed and no complexity signals
+      (
+        intent === 'SAP_QA' &&
+        !needsSearch &&
+        !/\b(impact|what.*break|change.*affect|if.*change|complex|architecture|design|integration|cross.*module|end.to.end|best practice|recommend|strategy|approach|compare|difference between|why does|root cause)\b/i.test(lastMsg)
+      )
     )
 
     const isComplexDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
@@ -1210,6 +1234,7 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       model: modelUsed,
       full: chatAnswer,
       deliverableType,
+      isCorrection,  // tells frontend to show save confirmation bar
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
     })
