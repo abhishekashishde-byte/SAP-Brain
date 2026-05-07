@@ -251,7 +251,7 @@ function DownloadDeliverableButton({ label, color, onClick, t }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse }) {
+function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse, session }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -479,7 +479,6 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
         </div>
         {!isStreaming && <ActionBar/>}
-        {/* Further Reading — topic-specific links from Google CSE */}
         {!isStreaming && msg._links?.length > 0 && (
           <FurtherReading links={msg._links} t={t} dark={dark} />
         )}
@@ -1075,7 +1074,8 @@ export default function Brain({ session }) {
   const [showKnowledge, setShowKnowledge]     = useState(false)
   const [knowledgeEntries, setKnowledgeEntries] = useState([])
   const [showCapabilities, setShowCapabilities] = useState(false)
-  const [pendingFinding, setPendingFinding]   = useState(null) // finding waiting for user confirmation
+  const [pendingFinding, setPendingFinding]   = useState(null)
+  const [pendingCorrection, setPendingCorrection] = useState(null)
   const [knowledgeToast, setKnowledgeToast]   = useState(null)
   const docInputRef = useRef(null)
   const chatScrollRef = useRef(null)
@@ -1518,6 +1518,12 @@ export default function Brain({ session }) {
               )
               modelUsed = evt.model
               deliverableType = evt.deliverableType || 'NONE'
+              if (evt.isCorrection) {
+                setPendingCorrection({
+                  userMsg: currentMsgs[currentMsgs.length - 1]?.content || '',
+                  assistantMsg: prevAssistantMsg,
+                })
+              }
 
               // FS Complete — auto-trigger Word document download
               if (evt.fsComplete && evt.fsText) {
@@ -2041,6 +2047,7 @@ export default function Brain({ session }) {
                       return <MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark}
                         userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}
                         prevUserMsg={prevUser}
+                        session={session}
                         onAnalyse={(prompt) => {
                           // Extract original code — strip any previously prepended prompt
                           // Original code starts from the ABAP keywords
@@ -2169,6 +2176,29 @@ export default function Brain({ session }) {
             {knowledgeToast && (
               <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:'rgba(79,70,229,0.95)', color:'white', padding:'8px 18px', borderRadius:10, fontSize:13, fontWeight:600, zIndex:100, boxShadow:'0 4px 20px rgba(79,70,229,0.4)' }}>
                 {knowledgeToast}
+              </div>
+            )}
+
+            {/* Pending correction confirmation — same style as finding popup */}
+            {pendingCorrection && (
+              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:`1px solid rgba(234,179,8,0.4)`, borderRadius:14, padding:'14px 18px', fontSize:13, zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:420, width:'90vw' }}>
+                <div style={{ fontWeight:700, color:t.text, marginBottom:8 }}>💡 Save this correction to Wani's memory?</div>
+                <div style={{ color:t.text2, marginBottom:12, fontSize:12, lineHeight:1.5 }}>Wani will remember this and use it in future answers.</div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={() => setPendingCorrection(null)} style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13 }}>Dismiss</button>
+                  <button onClick={async () => {
+                    try {
+                      await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                        body: JSON.stringify({ action: 'save_correction', userMsg: pendingCorrection.userMsg, assistantMsg: pendingCorrection.assistantMsg })
+                      })
+                      setPendingCorrection(null)
+                      setKnowledgeToast('✅ Correction saved to Wani\'s memory')
+                      setTimeout(() => setKnowledgeToast(null), 3000)
+                    } catch { setPendingCorrection(null) }
+                  }} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background:'#16a34a', color:'white', cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13, fontWeight:600 }}>✓ Yes, save it</button>
+                </div>
               </div>
             )}
 
