@@ -35,6 +35,20 @@ export default async function handler(req, res) {
     const eventAt = record?.last_sign_in_at || record?.created_at || new Date().toISOString()
 
     const isSignup = eventType === 'INSERT'
+
+    // For UPDATE events — only fire on actual login (last_sign_in_at just changed)
+    // Supabase fires multiple UPDATEs per login — deduplicate by checking
+    // last_sign_in_at is within the last 10 seconds
+    if (!isSignup) {
+      const lastSignIn = new Date(record?.last_sign_in_at || 0).getTime()
+      const now = Date.now()
+      const secondsSinceLogin = (now - lastSignIn) / 1000
+      if (secondsSinceLogin > 10) {
+        console.log(`NOTIFY: Skipping duplicate UPDATE — ${secondsSinceLogin.toFixed(0)}s since login`)
+        return res.status(200).json({ ok: true, skipped: true })
+      }
+    }
+
     const emoji    = isSignup ? '🎉' : '👋'
     const label    = isSignup ? 'New User Signed Up' : 'User Logged In'
 
