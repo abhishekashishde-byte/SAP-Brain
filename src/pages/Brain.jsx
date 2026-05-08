@@ -1074,9 +1074,10 @@ export default function Brain({ session }) {
   const [showKnowledge, setShowKnowledge]     = useState(false)
   const [knowledgeEntries, setKnowledgeEntries] = useState([])
   const [showCapabilities, setShowCapabilities] = useState(false)
-  const [pendingFinding, setPendingFinding]   = useState(null)
+  const [pendingFinding, setPendingFinding]       = useState(null)
   const [pendingCorrection, setPendingCorrection] = useState(null)
-  const [knowledgeToast, setKnowledgeToast]   = useState(null)
+  const [pendingMemorySave, setPendingMemorySave] = useState(null) // {summary, triggerMsgIndex}
+  const [knowledgeToast, setKnowledgeToast]       = useState(null)
   const docInputRef = useRef(null)
   const chatScrollRef = useRef(null)
   const bottomRef = useRef(null)
@@ -1505,6 +1506,18 @@ export default function Brain({ session }) {
             if (evt.type === 'chunk') {
               accumulated += evt.text
               setStreamingText(accumulated)
+            } else if (evt.type === 'save_to_memory_confirm') {
+              // User said "save this" — show popup with summary for confirmation
+              // Delete the trigger message from chat (last user message)
+              const msgsWithoutTrigger = currentMsgs.slice(0, -1)
+              await updateConversation(convId, { messages: msgsWithoutTrigger })
+              setConversations(prev => prev.map(c => c.id === convId
+                ? { ...c, messages: msgsWithoutTrigger, updated_at: new Date().toISOString() }
+                : c
+              ))
+              setPendingMemorySave({ summary: evt.summary })
+              setIsLoading(false)
+              return
             } else if (evt.type === 'start') {
               setStreamingIntent(evt.intent || 'SAP_QA')
             } else if (evt.type === 'search_results') {
@@ -2176,6 +2189,36 @@ export default function Brain({ session }) {
             {knowledgeToast && (
               <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:'rgba(79,70,229,0.95)', color:'white', padding:'8px 18px', borderRadius:10, fontSize:13, fontWeight:600, zIndex:100, boxShadow:'0 4px 20px rgba(79,70,229,0.4)' }}>
                 {knowledgeToast}
+              </div>
+            )}
+
+            {/* Save to Memory confirmation popup */}
+            {pendingMemorySave && (
+              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:'1px solid rgba(79,70,229,0.4)', borderRadius:14, padding:'16px 18px', zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:440, width:'90vw' }}>
+                <div style={{ fontWeight:700, color:t.text, marginBottom:6, fontSize:14 }}>🧠 Save to Wani's Memory?</div>
+                <div style={{ color:t.text2, fontSize:12, lineHeight:1.6, marginBottom:12, whiteSpace:'pre-wrap', maxHeight:180, overflowY:'auto', background:dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.03)', borderRadius:8, padding:'8px 10px' }}>
+                  {pendingMemorySave.summary}
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={() => setPendingMemorySave(null)}
+                    style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontSize:13, fontFamily:"'Inter',sans-serif" }}>
+                    Cancel
+                  </button>
+                  <button onClick={async () => {
+                    try {
+                      await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                        body: JSON.stringify({ action: 'save_memory', summary: pendingMemorySave.summary })
+                      })
+                      setPendingMemorySave(null)
+                      setKnowledgeToast("🧠 Saved to Wani's memory")
+                      setTimeout(() => setKnowledgeToast(null), 3000)
+                    } catch { setPendingMemorySave(null) }
+                  }} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background:'#4F46E5', color:'white', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:"'Inter',sans-serif" }}>
+                    ✓ Save to Memory
+                  </button>
+                </div>
               </div>
             )}
 
