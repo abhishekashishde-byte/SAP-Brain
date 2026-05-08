@@ -27,6 +27,7 @@ SAP_QA         = general SAP question, T-code, table, process, config explanatio
 CODE_ANALYSIS  = user pasted ABAP/code for analysis
 ERROR_ANALYSIS = user pasted SAP error, dump, SM21/ST22 log, short dump
 PROBLEM_ANALYSIS = user describes a complex scenario with unexpected system behaviour they have already analysed — they know WHAT is happening but need WHY and HOW TO SOLVE. Key signals: long detailed description, mentions wrong system output, priority conflicts, MRP/planning issues, incorrect combinations, unexpected standard SAP behaviour. They are NOT asking what something is — they already know. They need expert diagnosis and solution.
+SAVE_TO_MEMORY  = user wants to save this conversation or key findings to memory — any phrasing in any language meaning "remember this", "save this", "store this", "yeh save karo", "speicher das", "save it", "save to memory", "remember what we discussed"
 FS_SPEC        = generate functional specification document
 TECH_SPEC      = generate technical/developer specification
 TEST_CASES     = generate test cases or test script
@@ -356,7 +357,12 @@ async function streamGPTMini(systemPrompt, messages, onChunk) {
 // Extracts SAP-relevant keywords from a conversational question for CSE
 async function buildSAPSearchQuery(question) {
   try {
-    // Use Groq to fix typos and extract the real SAP concept to search for
+    // For long messages — extract a focused summary first
+    const isLong = question.trim().split(/\s+/).length > 60
+    const queryInput = isLong
+      ? `${question.slice(0, 400)}...` // give Groq more context for complex problems
+      : question.slice(0, 200)
+
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
@@ -364,16 +370,15 @@ async function buildSAPSearchQuery(question) {
         model: 'llama-3.3-70b-versatile',
         max_tokens: 40,
         temperature: 0,
-        messages: [{ role: 'user', content: `Convert this SAP question into a short Google search query (4-6 words max). Fix any typos. Extract the core SAP concept — ignore conversational words. Return ONLY the search query, nothing else.
+        messages: [{ role: 'user', content: `Extract the core SAP topic from this text as a Google search query (4-7 words). Fix typos. Focus on the SAP objects, T-codes, modules involved — ignore the problem description narrative. Return ONLY the search query.
 
 Examples:
+"We have MTO scenario with production version and sales order routing has wrong priority" → "SAP production version sales order routing priority MTO"
 "What is the correct table for chekcing Maiutnenace plan" → "SAP Maintenance Plan table MPLA"
-"how does equipment link to asset master" → "SAP equipment asset master integration"
-"I have to built a report for production order daily review" → "SAP production order daily review report"
-"where do I config order type for PM" → "SAP PM order type configuration"
-"explain badi for goods issue" → "SAP BAdI goods issue enhancement"
+"We found equipment asset master linkage not working in PM" → "SAP PM equipment asset master integration"
+"how does equipment link to asset master" → "SAP equipment asset master integration PM"
 
-Question: "${question.slice(0, 200)}"` }]
+Text: "${queryInput}"` }]
       })
     })
     const data = await res.json()
@@ -596,6 +601,29 @@ async function loadGlobalCorrections() {
     const data = await res.json()
     return Array.isArray(data) ? data.map(d => d.fact).filter(f => f && f.length > 10 && f.length < 300) : []
   } catch { return [] }
+}
+
+async function saveMemory(userId, fact) {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+  if (!url || !key || !userId || !fact) return
+  try {
+    await fetch(`${url}/rest/v1/memories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify([{
+        user_id: userId,
+        content: fact,
+        source: 'user_saved',
+        created_at: new Date().toISOString(),
+      }])
+    })
+  } catch(e) { console.error('saveMemory error:', e.message) }
 }
 
 async function saveGlobalCorrection(userMsg, assistantMsg, userId) {
@@ -869,7 +897,19 @@ export default async function handler(req, res) {
     } catch (err) { return res.status(500).json({ error: err.message }) }
   }
 
-  // Save correction — called when user confirms via UI button
+  // Save memory — called when user confirms save to memory via popup
+  if (body.action === 'save_memory') {
+    try {
+      const { summary } = body
+      if (!summary || !userId) return res.status(400).json({ error: 'Missing data' })
+      // Save each bullet point as a separate memory entry
+      const bullets = summary.split('\n').filter(l => l.trim().length > 10)
+      for (const bullet of bullets.slice(0, 8)) {
+        await saveMemory(userId, bullet.replace(/^[-•*]\s*/, '').trim(), userToken)
+      }
+      return res.status(200).json({ saved: true, count: bullets.length })
+    } catch (err) { return res.status(500).json({ error: err.message }) }
+  }
   if (body.action === 'save_correction') {
     try {
       const { userMsg, assistantMsg } = body
@@ -1001,24 +1041,50 @@ export default async function handler(req, res) {
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
-    // Check if any recent message contains code
-    const recentMessages = (messages || []).slice(-12)
-    const hasCodeInHistory = recentMessages.some(m =>
+    // ── TIERED CONTEXT WINDOW ─────────────────────────────────────────────────
+    // Recent messages (last 4) sent in full, older messages summarised by Groq
+    // Stored conversation is NEVER modified — user always sees full history
+    const allMessages = (messages || []).filter(m => m.role && m.content?.trim())
+    const hasCodeInHistory = allMessages.slice(-12).some(m =>
       /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(m.content || '')
     )
 
-    // Detect attached code block and its line count for complexity routing
     const codeBlockMatch = lastMsg.match(/\[ATTACHED_CODE[^\]]*lines=(\d+)\]/)
     const attachedCodeLines = codeBlockMatch ? parseInt(codeBlockMatch[1]) || 0 : 0
 
-    const validMessages = recentMessages
+    const RECENT_COUNT = hasCodeInHistory ? 8 : 4
+    const recentMsgs = allMessages.slice(-RECENT_COUNT)
+    const olderMsgs  = allMessages.slice(-(hasCodeInHistory ? 16 : 12), -RECENT_COUNT)
+
+    // Summarise older messages into a brief context block
+    let tieredContext = ''
+    if (olderMsgs.length > 0) {
+      try {
+        const olderText = olderMsgs
+          .map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}: ${m.content.slice(0, 400)}`)
+          .join('\n')
+        const summRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 250,
+            temperature: 0,
+            messages: [{ role: 'user', content: `Summarise this SAP conversation in max 150 words. Keep: T-codes, table names, decisions made, problems identified, key facts. Discard: greetings, filler, repetition.\n\n${olderText}\n\nSummary:` }]
+          })
+        })
+        const summData = await summRes.json()
+        tieredContext = summData.choices?.[0]?.message?.content?.trim() || ''
+        if (tieredContext) console.log('TIERED CONTEXT: summarised', olderMsgs.length, 'older messages')
+      } catch (e) { console.error('Tiered context error:', e.message) }
+    }
+
+    const validMessages = recentMsgs
       .filter(m => m.role && m.content?.trim())
       .map(m => ({
         role: m.role,
-        // Code messages and history with code get more space
-        content: String(m.content).trim().slice(0, hasCodeInHistory ? 6000 : 2000)
+        content: String(m.content).trim().slice(0, hasCodeInHistory ? 6000 : 3000)
       }))
-      .slice(hasCodeInHistory ? -12 : -8) // keep more history when code is present
 
     // Replace last user message with rewritten version ONLY if no code and not a deliverable
     if (!isCode && !isDeliverable && !hasCodeInHistory && validMessages.length > 0 && validMessages[validMessages.length - 1].role === 'user') {
@@ -1031,8 +1097,38 @@ export default async function handler(req, res) {
     // Resolve knowledge (was fetching in parallel)
     const relevantKnowledge = await knowledgePromise
 
-    // ── FIX 2: Normalise GENERAL to SAP_QA ───────────────────────────────────
-    if (intent === 'GENERAL') intent = 'SAP_QA'
+    // ── SAVE TO MEMORY ────────────────────────────────────────────────────────
+    // User said "save this", "remember this" etc. — Groq detected SAVE_TO_MEMORY
+    // Summarise the conversation, send to frontend for user confirmation
+    // The trigger message will be deleted from chat on frontend
+    if (intent === 'SAVE_TO_MEMORY') {
+      try {
+        const convText = (messages || []).slice(-20)
+          .filter(m => m.role && m.content?.trim())
+          .map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}: ${m.content.slice(0, 600)}`)
+          .join('\n')
+
+        const summRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 400,
+            temperature: 0,
+            messages: [{ role: 'user', content: `Extract the key SAP findings, decisions, and facts from this conversation to save as memory. Format as concise bullet points (max 8 bullets). Each bullet should be a standalone fact a consultant would want to remember. Include: T-codes, table names, config decisions, problems solved, workarounds found. Exclude: greetings, filler, questions without answers.\n\nConversation:\n${convText}\n\nKey findings to save:` }]
+          })
+        })
+        const summData = await summRes.json()
+        const summary = summData.choices?.[0]?.message?.content?.trim() || ''
+
+        send({ type: 'save_to_memory_confirm', summary })
+        return res.end()
+      } catch (e) {
+        console.error('SAVE_TO_MEMORY error:', e.message)
+        send({ type: 'error', error: 'Could not summarise conversation' })
+        return res.end()
+      }
+    }
 
     // ── BUILD SYSTEM PROMPT — BASE rules + intent-specific template ──────────
     // For deliverables (FS/PPT) skip the large BASE_SYSTEM_PROMPT to save tokens & time.
@@ -1091,7 +1187,10 @@ ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.obj
       systemPrompt += `\n\nWEB SEARCH RESULTS (from Google via Gemini — use as primary source):\n${cleanedText.slice(0, 2000)}\n\nIMPORTANT: For any SAP Note numbers found above, present them as direct links in this format: https://me.sap.com/notes/NOTENUMBER — replace the Gemini redirect URLs with these direct SAP links. Tell user to log in with their S-user to read the full note.`
     }
 
-    // Source links — inline citations only, no separate Sources block at the end
+    // Inject tiered context summary if older messages were summarised
+    if (tieredContext) {
+      systemPrompt += `\n\n📋 EARLIER CONVERSATION CONTEXT (summarised):\n${tieredContext}\n\nThe recent messages below are the full current conversation.`
+    }
     if (searchResults.length > 0) {
       const sourceRef = searchResults.map((r, i) => `[${i+1}] ${r.title} — ${r.url}`).join('\n')
       systemPrompt += `\n\nSOURCE REFERENCES (for inline use only):\n${sourceRef}\n\nCITATION RULES — CRITICAL:\n- Weave citations INLINE into your answer using [1] [2] [3] notation right after the relevant sentence or fact.\n- Example: "You can find this configuration under SPRO → Plant Maintenance [1], which aligns with SAP's recommended approach [2]."\n- Do NOT add a separate "📚 Sources" or "References" section at the end of your answer.\n- Do NOT list URLs at the bottom. All links must appear inline as [N] references.\n- The user sees the source URLs via the inline citation numbers — no footer block needed.`
