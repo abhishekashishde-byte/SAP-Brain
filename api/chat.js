@@ -23,9 +23,10 @@ async function groqClassify(question) {
           content: `Classify this SAP consultant request. Return ONLY valid JSON.
 
 intent options (pick the SINGLE best match):
-SAP_QA         = general SAP question, T-code, table, process, config
+SAP_QA         = general SAP question, T-code, table, process, config explanation
 CODE_ANALYSIS  = user pasted ABAP/code for analysis
-ERROR_ANALYSIS = user pasted SAP error, dump, SM21/ST22 log
+ERROR_ANALYSIS = user pasted SAP error, dump, SM21/ST22 log, short dump
+PROBLEM_ANALYSIS = user describes a complex scenario with unexpected system behaviour they have already analysed — they know WHAT is happening but need WHY and HOW TO SOLVE. Key signals: long detailed description, mentions wrong system output, priority conflicts, MRP/planning issues, incorrect combinations, unexpected standard SAP behaviour. They are NOT asking what something is — they already know. They need expert diagnosis and solution.
 FS_SPEC        = generate functional specification document
 TECH_SPEC      = generate technical/developer specification
 TEST_CASES     = generate test cases or test script
@@ -50,7 +51,15 @@ isError: true if message contains error text, dump, ST22, SM21, runtime error, m
 isCorrection: true if user is correcting a previous wrong answer
 needsSearch: true if question is about latest S/4HANA changes, deprecated objects, explicitly asks to search, mentions SAP Notes or known issues, asks about errors or patches, or asks about a specific T-code behaviour
 
-Question: "${question.slice(0, 400)}"
+Examples to guide classification:
+"What T-code is used for production orders?" → SAP_QA
+"How do I configure settlement profile in SPRO?" → CUSTOMIZING
+"We have a material with MTO scenario. When MRP runs it creates a planned order with wrong BOM/routing combination because production version routing takes priority over sales order routing. We need a solution." → PROBLEM_ANALYSIS
+"We found that when we post goods issue the system is picking the wrong movement type. We analysed and found it is related to the schedule line category but cannot find the root cause." → PROBLEM_ANALYSIS
+"The system is creating a planned order with sales order BOM but material routing instead of sales order routing. Production version seems to override the sales order routing." → PROBLEM_ANALYSIS
+"DUMP: SAPSQL_ARRAY_INSERT_DUPREC in program SAPMM07M" → ERROR_ANALYSIS
+
+Question: "${question.slice(0, 500)}"
 
 {"intent":"SAP_QA","confidence":0.9,"secondaryIntent":null,"isCode":false,"isError":false,"isCorrection":false,"needsSearch":false}`
         }]
@@ -77,9 +86,12 @@ Question: "${question.slice(0, 400)}"
     let confidence = typeof result.confidence === 'number' ? result.confidence : 0.7
     let secondaryIntent = result.secondaryIntent || null
 
-    // Hard overrides — regex is more reliable than LLM for these
+    // Hard overrides — regex is more reliable than LLM for these specific clear patterns
     if (isCode)        { intent = 'CODE_ANALYSIS';  confidence = 1.0 }
     if (isError)       { intent = 'ERROR_ANALYSIS'; confidence = 1.0 }
+    // PROBLEM_ANALYSIS — intentionally NO hard regex override
+    // Groq detects this from few-shot examples and intent description in the prompt
+    // Regex would be too fragile and miss nuanced problem descriptions
     if (isFsKeyword && !isCode && !isError)   { intent = 'FS_SPEC';       confidence = 0.95 }
     if (isTestKeyword && !isCode && !isError) { intent = 'TEST_CASES';    confidence = 0.95 }
     if (isFioriKeyword && !isCode && !isError){ intent = 'FIORI_REC';     confidence = 0.95 }
@@ -117,6 +129,7 @@ Question: "${question.slice(0, 400)}"
     const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
       || isNoteSearch || isErrorSearch || isNewFeature
       || isTroubleshoot || isVersionSpecific
+      || intent === 'PROBLEM_ANALYSIS'  // always search — complex problems need SAP Notes
       // Removed: isSpecificTcode, isConceptQuestion — these fired too broadly
 
     // ── SEARCH DECISION LOG — review after real usage to tune further ─────────
