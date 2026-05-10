@@ -140,6 +140,44 @@ const SOURCE_META = {
   'Google':           { icon: '🔍', color: '#4285F4', label: 'Google' },
 }
 
+// ── DAILY USAGE BAR ───────────────────────────────────────────────────────────
+function UsageBar({ count, limit, dark }) {
+  const [dismissed, setDismissed] = useState(false)
+  const pct = Math.min((count / limit) * 100, 100)
+  const remaining = Math.max(limit - count, 0)
+
+  if (dismissed || pct < 75) return null
+
+  const isRed    = pct >= 100
+  const isOrange = pct >= 90 && pct < 100
+  const barColor = isRed ? '#EF4444' : isOrange ? '#F97316' : '#4F46E5'
+  const bgColor  = isRed ? 'rgba(239,68,68,0.08)' : isOrange ? 'rgba(249,115,22,0.08)' : 'rgba(79,70,229,0.08)'
+  const borderColor = isRed ? 'rgba(239,68,68,0.25)' : isOrange ? 'rgba(249,115,22,0.25)' : 'rgba(79,70,229,0.2)'
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 16px',
+      background: bgColor,
+      borderTop: `1px solid ${borderColor}`,
+      fontSize: 12, fontFamily: "'Inter',sans-serif",
+    }}>
+      {/* Progress bar */}
+      <div style={{ flex: 1, height: 4, background: dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }}/>
+      </div>
+      {/* Text */}
+      <span style={{ color: barColor, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {isRed ? 'Daily limit reached' : `${remaining} message${remaining !== 1 ? 's' : ''} remaining today`}
+      </span>
+      {/* Dismiss */}
+      {!isRed && (
+        <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)', fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
+      )}
+    </div>
+  )
+}
+
 function FurtherReading({ links, t, dark }) {
   if (!links || links.length === 0) return null
 
@@ -1151,6 +1189,9 @@ export default function Brain({ session }) {
   const [isStreaming, setIsStreaming]      = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [streamingIntent, setStreamingIntent] = useState('SAP_QA')
+  const [messageCount, setMessageCount]   = useState(0)
+  const [isUnlimited, setIsUnlimited]     = useState(false)
+  const DAILY_LIMIT = 50
   const [dbLoading, setDbLoading]         = useState(true)
   const [searchQuery, setSearchQuery]     = useState('')
   const [showProfile, setShowProfile]     = useState(false)
@@ -1628,6 +1669,8 @@ export default function Brain({ session }) {
               )
               modelUsed = evt.model
               deliverableType = evt.deliverableType || 'NONE'
+              if (typeof evt.messageCount === 'number') setMessageCount(evt.messageCount)
+              if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
               if (evt.isCorrection) {
                 setPendingCorrection({
                   userMsg: currentMsgs[currentMsgs.length - 1]?.content || '',
@@ -2215,6 +2258,7 @@ export default function Brain({ session }) {
 
             {/* Input */}
             <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2 }}>
+              {!isUnlimited && <UsageBar count={messageCount} limit={DAILY_LIMIT} dark={dark} />}
               <div style={{ maxWidth:720,margin:'0 auto' }}>
 
                 {/* Document chip */}
