@@ -172,7 +172,8 @@ export default async function handler(req, res) {
       const approveUrl = `${BASE_URL}/api/Notify?action=approve&email=${encodeURIComponent(email)}&token=${token}`
       const rejectUrl  = `${BASE_URL}/api/Notify?action=reject&email=${encodeURIComponent(email)}&token=${token}`
 
-      // Send notification email to Abhishek
+      console.log(`NOTIFY: Sending waitlist email to ${NOTIFY_TO} for ${email}`)
+      console.log(`NOTIFY: Gmail user: ${GMAIL_USER}, pass length: ${GMAIL_PASS?.length}`)
       await sendEmail({
         to: NOTIFY_TO,
         subject: `🙋 New Wani Waitlist Application — ${email}`,
@@ -216,6 +217,7 @@ export default async function handler(req, res) {
       })
 
       console.log(`NOTIFY: Waitlist application received — ${email}`)
+      console.log(`NOTIFY: Waitlist email sent successfully to ${NOTIFY_TO}`)
       return res.status(200).json({ ok: true })
     }
 
