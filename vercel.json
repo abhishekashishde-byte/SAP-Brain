@@ -4,6 +4,7 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
+    "api/notify.js":           { "maxDuration": 15  },
     "api/chat.js":             { "maxDuration": 300 },
     "api/external-chat.js":    { "maxDuration": 60  },
     "api/extract.js":          { "maxDuration": 15  },
