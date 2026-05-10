@@ -242,8 +242,74 @@ export default async function handler(req, res) {
       }
     }
 
-    const emoji  = isSignup ? '🎉' : '👋'
-    const label  = isSignup ? 'New User Signed Up' : 'User Logged In'
+    // For new signups — generate token, save to waitlist, send Approve/Reject email
+    if (isSignup) {
+      const token = crypto.randomBytes(32).toString('hex')
+
+      // Save to waitlist table
+      await supabaseQuery('waitlist', 'POST', {
+        full_name: name,
+        email,
+        sap_experience: 'unknown',
+        sap_module: 'unknown',
+        status: 'pending',
+        token,
+        created_at: new Date().toISOString(),
+      }).catch(() => {}) // ignore if already exists
+
+      const approveUrl = `${BASE_URL}/api/Notify?action=approve&email=${encodeURIComponent(email)}&token=${token}`
+      const rejectUrl  = `${BASE_URL}/api/Notify?action=reject&email=${encodeURIComponent(email)}&token=${token}`
+
+      const time = new Date(eventAt).toLocaleString('en-DE', {
+        timeZone: 'Europe/Berlin',
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+
+      await sendEmail({
+        to: NOTIFY_TO,
+        subject: `🎉 New Signup — ${email}`,
+        html: `
+          <div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;background:#f9f9f9;border-radius:14px;overflow:hidden;">
+            <div style="background:#111827;padding:18px 24px;">
+              <span style="color:white;font-size:20px;font-weight:800;">𝕎 Wani</span>
+            </div>
+            <div style="padding:24px;">
+              <h2 style="margin:0 0 20px;color:#111;font-size:18px;">🎉 New Direct Signup</h2>
+              <table style="width:100%;border-collapse:collapse;">
+                <tr style="border-bottom:1px solid #eee;">
+                  <td style="padding:10px 0;color:#888;font-size:13px;width:80px;">Name</td>
+                  <td style="padding:10px 0;font-weight:600;font-size:14px;">${name}</td>
+                </tr>
+                <tr style="border-bottom:1px solid #eee;">
+                  <td style="padding:10px 0;color:#888;font-size:13px;">Email</td>
+                  <td style="padding:10px 0;font-weight:600;font-size:14px;">${email}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;color:#888;font-size:13px;">Time</td>
+                  <td style="padding:10px 0;font-size:13px;">${time} (Berlin)</td>
+                </tr>
+              </table>
+              <div style="margin-top:24px;display:flex;gap:12px;">
+                <a href="${approveUrl}" style="flex:1;display:block;text-align:center;background:#16a34a;color:white;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+                  ✅ Approve Access
+                </a>
+                <a href="${rejectUrl}" style="flex:1;display:block;text-align:center;background:#dc2626;color:white;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+                  ❌ Reject
+                </a>
+              </div>
+            </div>
+          </div>
+        `,
+      })
+
+      console.log(`NOTIFY: New signup email with approve/reject sent for ${email}`)
+      return res.status(200).json({ ok: true })
+    }
+
+    // Login notification — simple email, no approve/reject needed
+    const emoji  = '👋'
+    const label  = 'User Logged In'
 
     const time = new Date(eventAt).toLocaleString('en-DE', {
       timeZone: 'Europe/Berlin',
