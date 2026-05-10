@@ -1013,6 +1013,28 @@ export default async function handler(req, res) {
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
 
   try {
+    // ── DAILY LIMIT CHECK ───────────────────────────────────────────────────
+    const UNLIMITED_EMAILS_CHECK = ['abhishek.ashish.de@gmail.com', 'saathi.ashish@gmail.com']
+    if (userId && !UNLIMITED_EMAILS_CHECK.includes(session?.user?.email || '')) {
+      try {
+        const supaUrl = process.env.SUPABASE_URL
+        const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+        const berlinDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+        const countRes = await fetch(
+          `${supaUrl}/rest/v1/conversations?user_id=eq.${userId}&updated_at=gte.${berlinDate}T00:00:00&select=messages`,
+          { headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` } }
+        )
+        const convs = await countRes.json()
+        const todayCount = (convs || []).reduce((total, conv) => {
+          return total + (conv.messages || []).filter(m => m.role === 'user').length
+        }, 0)
+        if (todayCount >= 50) {
+          send({ type: 'done', full: "⏳ You've reached your daily limit of 50 messages. Your limit resets at midnight Berlin time.\n\nNeed more access? Contact abhishek.ashish.de@gmail.com", messageCount: 50, dailyLimit: 50, isUnlimited: false, deliverableType: 'NONE', model: 'limit' })
+          return res.end()
+        }
+      } catch(e) { console.error('Limit check error:', e.message) }
+    }
+
     // STEP 1 — Classify + load corrections in parallel
     const [classification, globalCorrections] = await Promise.all([
       groqClassify(lastMsg),
@@ -1429,12 +1451,39 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
       chatAnswer = cleanAnswer
     }
 
+    // ── DAILY MESSAGE COUNT ───────────────────────────────────────────────────
+    const UNLIMITED_EMAILS = ['abhishek.ashish.de@gmail.com', 'saathi.ashish@gmail.com']
+    const DAILY_LIMIT = 50
+    let messageCount = 0
+
+    if (userId && !UNLIMITED_EMAILS.includes(session?.user?.email || '')) {
+      try {
+        const supaUrl = process.env.SUPABASE_URL
+        const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+        // Count messages sent today (Berlin time)
+        const berlinDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+        const countRes = await fetch(
+          `${supaUrl}/rest/v1/conversations?user_id=eq.${userId}&updated_at=gte.${berlinDate}T00:00:00&select=messages`,
+          { headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` } }
+        )
+        const convs = await countRes.json()
+        // Count user messages across all today's conversations
+        messageCount = (convs || []).reduce((total, conv) => {
+          const msgs = conv.messages || []
+          return total + msgs.filter(m => m.role === 'user').length
+        }, 0)
+      } catch(e) { console.error('Message count error:', e.message) }
+    }
+
     send({
       type: 'done',
       model: modelUsed,
       full: chatAnswer,
       deliverableType,
-      isCorrection,  // tells frontend to show save confirmation bar
+      isCorrection,
+      messageCount,
+      dailyLimit: DAILY_LIMIT,
+      isUnlimited: UNLIMITED_EMAILS.includes(session?.user?.email || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
     })
