@@ -169,8 +169,8 @@ export default async function handler(req, res) {
       })
 
       // Build approve/reject URLs
-      const approveUrl = `${BASE_URL}/api/notify?action=approve&email=${encodeURIComponent(email)}&token=${token}`
-      const rejectUrl  = `${BASE_URL}/api/notify?action=reject&email=${encodeURIComponent(email)}&token=${token}`
+      const approveUrl = `${BASE_URL}/api/Notify?action=approve&email=${encodeURIComponent(email)}&token=${token}`
+      const rejectUrl  = `${BASE_URL}/api/Notify?action=reject&email=${encodeURIComponent(email)}&token=${token}`
 
       // Send notification email to Abhishek
       await sendEmail({
