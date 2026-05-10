@@ -680,6 +680,41 @@ function getSupabase() {
   return createClient(url, key)
 }
 
+// ── FETCH USER PERSONAL MEMORIES ─────────────────────────────────────────────
+async function fetchUserMemories(question, userId) {
+  try {
+    const url = process.env.SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    if (!url || !key || !userId) return []
+
+    // Extract keywords from question for matching
+    const words = question.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 3)
+      .slice(0, 5)
+
+    if (words.length === 0) return []
+
+    // Search memories for any keyword match
+    const filters = words.map(w => `content.ilike.*${w}*`).join(',')
+    const memUrl = `${url}/rest/v1/memories?user_id=eq.${userId}&or=(${filters})&order=created_at.desc&limit=5`
+
+    const res = await fetch(memUrl, {
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+      }
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return data || []
+  } catch (e) {
+    console.error('fetchUserMemories error:', e.message)
+    return []
+  }
+}
+
 // ── SEMANTIC KNOWLEDGE SEARCH ─────────────────────────────────────────────────
 async function fetchRelevantKnowledge(question, userId, userToken) {
   try {
@@ -897,17 +932,58 @@ export default async function handler(req, res) {
     } catch (err) { return res.status(500).json({ error: err.message }) }
   }
 
-  // Save memory — called when user confirms save to memory via popup
+  // Get all memories for user
+  if (body.action === 'get_memories') {
+    try {
+      const supaUrl = process.env.SUPABASE_URL
+      const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+      const res = await fetch(`${supaUrl}/rest/v1/memories?user_id=eq.${userId}&order=created_at.desc&limit=50`, {
+        headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
+      })
+      const memories = await res.json()
+      return res.status(200).json({ memories: memories || [] })
+    } catch (err) { return res.status(500).json({ error: err.message }) }
+  }
+
+  // Delete a memory
+  if (body.action === 'delete_memory') {
+    try {
+      const { memoryId } = body
+      if (!memoryId) return res.status(400).json({ error: 'Missing memoryId' })
+      const supaUrl = process.env.SUPABASE_URL
+      const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+      await fetch(`${supaUrl}/rest/v1/memories?id=eq.${memoryId}&user_id=eq.${userId}`, {
+        method: 'DELETE',
+        headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
+      })
+      return res.status(200).json({ deleted: true })
+    } catch (err) { return res.status(500).json({ error: err.message }) }
+  }
   if (body.action === 'save_memory') {
     try {
       const { summary } = body
       if (!summary || !userId) return res.status(400).json({ error: 'Missing data' })
-      // Save each bullet point as a separate memory entry
+      const supaUrl = process.env.SUPABASE_URL
+      const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
       const bullets = summary.split('\n').filter(l => l.trim().length > 10)
+      let savedCount = 0
       for (const bullet of bullets.slice(0, 8)) {
-        await saveMemory(userId, bullet.replace(/^[-•*]\s*/, '').trim(), userToken)
+        const fact = bullet.replace(/^[-•*]\s*/, '').trim()
+        if (!fact) continue
+        // Duplicate check — extract keywords and search existing memories
+        const keywords = fact.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 4).slice(0, 3)
+        if (keywords.length > 0) {
+          const filters = keywords.map(w => `content.ilike.*${w}*`).join(',')
+          const checkRes = await fetch(`${supaUrl}/rest/v1/memories?user_id=eq.${userId}&or=(${filters})&limit=1`, {
+            headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
+          })
+          const existing = await checkRes.json()
+          if (existing?.length > 0) { console.log('MEMORY: Skipping duplicate —', fact.slice(0, 50)); continue }
+        }
+        await saveMemory(userId, fact)
+        savedCount++
       }
-      return res.status(200).json({ saved: true, count: bullets.length })
+      return res.status(200).json({ saved: true, count: savedCount })
     } catch (err) { return res.status(500).json({ error: err.message }) }
   }
   if (body.action === 'save_correction') {
@@ -1017,9 +1093,11 @@ export default async function handler(req, res) {
       console.log('Search complete — OpenAI sources:', searchResults.length, 'supplemental pills:', googleLinks.length)
     }
 
-    // ── ALWAYS generate supplemental pills (Part 1 links — zero API cost) ────
-    // Pills show on every answer regardless of whether web search fired
-    if (!isCode && !isDeliverable && googleLinks.length === 0) {
+    // Pills show when Wani gave a real SAP answer — not on greetings/chitchat responses
+    // Check the answer content, not the question — short follow-ups deserve pills too
+    const isSubstantialAnswer = /\b(T-code|SPRO|table|BAdI|BAPI|T\.code|transaction|configuration|SAP|S\/4HANA|ABAP|Fiori|order|material|vendor|plant|routing|BOM|settlement|movement|posting|notification|equipment|functional location)\b/i.test(fullAnswer)
+
+    if (!isCode && !isDeliverable && googleLinks.length === 0 && isSubstantialAnswer) {
       const cleanQuery = await buildSAPSearchQuery(lastMsg).catch(() => null)
       if (cleanQuery) {
         const rawTerms = cleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
@@ -1039,6 +1117,9 @@ export default async function handler(req, res) {
 
     // STEP 5.5 — Semantic knowledge fetch (parallel already started above)
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
+
+    // Also fetch user's personal saved memories (from memories table)
+    const memoriesPromise = userId ? fetchUserMemories(lastMsg, userId).catch(() => []) : Promise.resolve([])
 
     // STEP 5 — Prepare messages with rewritten question
     // ── TIERED CONTEXT WINDOW ─────────────────────────────────────────────────
@@ -1096,6 +1177,7 @@ export default async function handler(req, res) {
 
     // Resolve knowledge (was fetching in parallel)
     const relevantKnowledge = await knowledgePromise
+    const userMemories = await memoriesPromise
 
     // ── SAVE TO MEMORY ────────────────────────────────────────────────────────
     // User said "save this", "remember this" etc. — Groq detected SAVE_TO_MEMORY
@@ -1172,6 +1254,12 @@ Base your output on this document. Reference specific sections.`
     if (relevantKnowledge.length > 0) {
       systemPrompt += `\n\n📌 VERIFIED FROM REAL PROJECTS (prioritise over generic docs):
 ${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}`
+    }
+
+    // User's personal saved memories — their own findings from past work
+    if (userMemories.length > 0) {
+      systemPrompt += `\n\n🧠 THIS CONSULTANT'S PERSONAL KNOWLEDGE (from their own saved experience — always prioritise):
+${userMemories.map(m => `- ${m.content}`).join('\n')}`
     }
 
     // Gemini search text — inject as primary web context
