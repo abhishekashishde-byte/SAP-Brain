@@ -699,66 +699,163 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
 }
 
 function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
+  const [activeTab, setActiveTab] = useState('profile') // 'profile' | 'memory'
   const [name, setName] = useState(profile?.name||'')
   const [modules, setModules] = useState(profile?.modules||[])
   const [role, setRole] = useState(profile?.role||'')
   const [saving, setSaving] = useState(false)
+  const [memories, setMemories] = useState([])
+  const [memoriesLoading, setMemoriesLoading] = useState(false)
+  const [newMemory, setNewMemory] = useState('')
+  const [addingMemory, setAddingMemory] = useState(false)
   const initials = getInitials(name||profile?.name, session.user.email)
-
   const SAP_MODULES = ['PP','PM','MM','SD','FI','CO','HR','Fiori','S/4HANA','WM/EWM','QM','PS']
+  const toggleModule = (m) => setModules(prev => prev.includes(m) ? prev.filter(x=>x!==m) : [...prev, m])
 
-  const toggleModule = (m) => setModules(prev =>
-    prev.includes(m) ? prev.filter(x=>x!==m) : [...prev, m]
-  )
+  // Load memories when tab switches to memory
+  const loadMemories = async () => {
+    setMemoriesLoading(true)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'get_memories' })
+      })
+      const data = await res.json()
+      setMemories(data.memories || [])
+    } catch { setMemories([]) }
+    setMemoriesLoading(false)
+  }
+
+  const deleteMemory = async (id) => {
+    try {
+      await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'delete_memory', memoryId: id })
+      })
+      setMemories(prev => prev.filter(m => m.id !== id))
+    } catch {}
+  }
+
+  const addMemory = async () => {
+    if (!newMemory.trim()) return
+    setAddingMemory(true)
+    try {
+      await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'save_memory', summary: newMemory.trim() })
+      })
+      setNewMemory('')
+      await loadMemories()
+    } catch {}
+    setAddingMemory(false)
+  }
+
+  useEffect(() => { if (activeTab === 'memory') loadMemories() }, [activeTab])
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:16 }} onClick={onClose}>
-      <div style={{ background:'linear-gradient(145deg,#1A1035,#0F0A2A)',border:'1px solid rgba(79,70,229,0.2)',borderRadius:24,padding:32,width:360,maxWidth:'100%',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards' }} onClick={e=>e.stopPropagation()}>
-        <div style={{ textAlign:'center',marginBottom:24 }}>
-          <div style={{ width:72,height:72,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:26,fontWeight:700,color:'#fff',margin:'0 auto 12px',boxShadow:'0 4px 20px rgba(79,70,229,0.25)' }}>{initials}</div>
-          <div style={{ fontSize:13,color:'rgba(255,255,255,0.5)' }}>{session.user.email}</div>
+      <div style={{ background:'linear-gradient(145deg,#1A1035,#0F0A2A)',border:'1px solid rgba(79,70,229,0.2)',borderRadius:24,padding:32,width:420,maxWidth:'100%',maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards' }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ textAlign:'center',marginBottom:20 }}>
+          <div style={{ width:64,height:64,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,fontWeight:700,color:'#fff',margin:'0 auto 10px',boxShadow:'0 4px 20px rgba(79,70,229,0.25)' }}>{initials}</div>
+          <div style={{ fontSize:12,color:'rgba(255,255,255,0.5)' }}>{session.user.email}</div>
         </div>
 
-        {/* Name */}
-        <div style={{ marginBottom:16 }}>
-          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Name</label>
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Enter your name"
-            style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
-          />
+        {/* Tabs */}
+        <div style={{ display:'flex',gap:4,marginBottom:20,background:'rgba(255,255,255,0.06)',borderRadius:10,padding:4 }}>
+          {['profile','memory'].map(tab => (
+            <button key={tab} onClick={()=>setActiveTab(tab)} style={{
+              flex:1, padding:'7px 0', borderRadius:8, border:'none', cursor:'pointer',
+              background: activeTab===tab ? 'rgba(79,70,229,0.5)' : 'transparent',
+              color: activeTab===tab ? '#fff' : 'rgba(255,255,255,0.4)',
+              fontSize:13, fontWeight:600, fontFamily:"'Inter',sans-serif", transition:'all 0.15s',
+              textTransform:'capitalize',
+            }}>{tab === 'memory' ? '🧠 Memory' : '👤 Profile'}</button>
+          ))}
         </div>
 
-        {/* Role */}
-        <div style={{ marginBottom:16 }}>
-          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Role</label>
-          <input value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g. SAP Consultant, Project Manager"
-            style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
-          />
-        </div>
-
-        {/* SAP Module Focus */}
-        <div style={{ marginBottom:20 }}>
-          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>SAP Module Focus</label>
-          <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
-            {SAP_MODULES.map(m => (
-              <button key={m} onClick={()=>toggleModule(m)} style={{
-                padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',
-                border:`1px solid ${modules.includes(m)?'#4F46E5':'rgba(255,255,255,0.15)'}`,
-                background:modules.includes(m)?'rgba(79,70,229,0.3)':'rgba(255,255,255,0.05)',
-                color:modules.includes(m)?'#a5b4fc':'rgba(255,255,255,0.5)',
-                transition:'all 0.15s',
-              }}>{m}</button>
-            ))}
+        {/* Profile Tab */}
+        {activeTab === 'profile' && (
+          <div style={{ flex:1, overflowY:'auto' }}>
+            <div style={{ marginBottom:16 }}>
+              <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Name</label>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="Enter your name"
+                style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
+              />
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Role</label>
+              <input value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g. SAP Consultant, Project Manager"
+                style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
+              />
+            </div>
+            <div style={{ marginBottom:20 }}>
+              <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>SAP Module Focus</label>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+                {SAP_MODULES.map(m => (
+                  <button key={m} onClick={()=>toggleModule(m)} style={{
+                    padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',
+                    border:`1px solid ${modules.includes(m)?'#4F46E5':'rgba(255,255,255,0.15)'}`,
+                    background:modules.includes(m)?'rgba(79,70,229,0.3)':'rgba(255,255,255,0.05)',
+                    color:modules.includes(m)?'#a5b4fc':'rgba(255,255,255,0.5)',
+                    transition:'all 0.15s',
+                  }}>{m}</button>
+                ))}
+              </div>
+            </div>
+            <button onClick={async()=>{ setSaving(true); await onSave({name, role, modules}); setSaving(false); onClose() }}
+              style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
+              {saving?'Saving...':'Save Profile'}
+            </button>
+            <button onClick={onSignOut} style={{ width:'100%',padding:12,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}
+              onMouseEnter={e=>e.currentTarget.style.background='rgba(239,68,68,0.15)'}
+              onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.06)'}
+            >Sign Out</button>
           </div>
-        </div>
+        )}
 
-        <button onClick={async()=>{ setSaving(true); await onSave({name, role, modules}); setSaving(false); onClose() }}
-          style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
-          {saving?'Saving...':'Save Profile'}
-        </button>
-        <button onClick={onSignOut} style={{ width:'100%',padding:12,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}
-          onMouseEnter={e=>e.currentTarget.style.background='rgba(239,68,68,0.15)'}
-          onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.06)'}
-        >Sign Out</button>
+        {/* Memory Tab */}
+        {activeTab === 'memory' && (
+          <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+            {/* Add new memory */}
+            <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+              <input value={newMemory} onChange={e=>setNewMemory(e.target.value)}
+                onKeyDown={e=>e.key==='Enter' && addMemory()}
+                placeholder="Add a new memory..."
+                style={{ flex:1, padding:'9px 12px', background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:13, color:'#fff', outline:'none', fontFamily:"'Inter',sans-serif" }}
+              />
+              <button onClick={addMemory} disabled={addingMemory || !newMemory.trim()}
+                style={{ padding:'9px 14px', borderRadius:10, border:'none', background:'#4F46E5', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', opacity: addingMemory||!newMemory.trim() ? 0.5 : 1 }}>
+                {addingMemory ? '...' : '+ Add'}
+              </button>
+            </div>
+
+            {/* Memory list */}
+            <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:8 }}>
+              {memoriesLoading ? (
+                <div style={{ textAlign:'center', color:'rgba(255,255,255,0.3)', fontSize:13, padding:20 }}>Loading...</div>
+              ) : memories.length === 0 ? (
+                <div style={{ textAlign:'center', color:'rgba(255,255,255,0.3)', fontSize:13, padding:20 }}>
+                  No memories saved yet. Wani will ask you to save important findings during conversations.
+                </div>
+              ) : memories.map(mem => (
+                <div key={mem.id} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'10px 12px', background:'rgba(255,255,255,0.05)', borderRadius:10, border:'1px solid rgba(255,255,255,0.08)' }}>
+                  <span style={{ fontSize:14, flexShrink:0 }}>🧠</span>
+                  <span style={{ flex:1, fontSize:12, color:'rgba(255,255,255,0.8)', lineHeight:1.5 }}>{mem.content}</span>
+                  <button onClick={()=>deleteMemory(mem.id)}
+                    style={{ flexShrink:0, background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.2)', fontSize:16, padding:'0 4px', lineHeight:1 }}
+                    onMouseEnter={e=>e.currentTarget.style.color='#EF4444'}
+                    onMouseLeave={e=>e.currentTarget.style.color='rgba(255,255,255,0.2)'}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
