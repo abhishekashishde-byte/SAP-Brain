@@ -1251,6 +1251,8 @@ export default async function handler(req, res) {
       : BASE_SYSTEM_PROMPT + '\n\n' + intentPrompt + toneAddition  // full: base + intent
 
     // ── FIX 3: Multi-intent — light secondary section, not full second template
+    // PROCESS_QA already covers T-codes/tables naturally — never append SAP_QA as secondary
+    if (intent === 'PROCESS_QA' && secondaryIntent === 'SAP_QA') secondaryIntent = null
     if (secondaryIntent && secondaryIntent !== intent && INTENT_PROMPTS[secondaryIntent]) {
       const secondaryLabel = secondaryIntent.replace(/_/g, ' ')
       systemPrompt += `\n\nADDITIONAL REQUEST: After completing the primary task above, also provide a ${secondaryLabel} section. Keep it focused and clearly separated with a "---" divider and heading.`
