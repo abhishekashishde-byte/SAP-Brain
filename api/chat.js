@@ -24,7 +24,7 @@ async function groqClassify(question) {
 
 intent options (pick the SINGLE best match):
 SAP_QA         = SAP customizing or configuration question — T-codes, SPRO paths, table fields, config steps, what settings to change, how to set something up. The user wants to know WHERE and HOW to configure.
-PROCESS_QA     = SAP business process question — how does a process work end to end, what steps happen, what is the sequence, what happens when I do X, how does calibration/GR/billing/MRP/service order process work. The user wants to UNDERSTAND a process or procedure, not configure it. Key signals: "how do I create X without Y", "what is the process for", "how does X work", "steps to do X", "can I do X without Z"
+PROCESS_QA     = SAP business process or behavioural question — how does a process work, what is the difference between X and Y in terms of behaviour, why does X behave differently from Y, what happens when I do X, how does a T-code or transaction actually work in practice. The user wants to UNDERSTAND behaviour, process, or differences — not configure. Key signals: "what is the difference between", "why does X do this but Y does not", "how does X work", "what happens when", "how do I do X without Y", "what is the process for", "steps to do X"
 CODE_ANALYSIS  = user pasted ABAP/code for analysis
 ERROR_ANALYSIS = user pasted SAP error, dump, SM21/ST22 log, short dump
 PROBLEM_ANALYSIS = user describes a complex scenario with unexpected system behaviour they have already analysed — they know WHAT is happening but need WHY and HOW TO SOLVE. Key signals: long detailed description, mentions wrong system output, priority conflicts, MRP/planning issues, incorrect combinations, unexpected standard SAP behaviour. They are NOT asking what something is — they already know. They need expert diagnosis and solution.
@@ -62,6 +62,10 @@ Examples to guide classification:
 "Can I do goods receipt without a purchase order?" → PROCESS_QA
 "What happens when I run MRP?" → PROCESS_QA
 "How do movement types work?" → SAP_QA
+"What is the difference between [any two SAP things] in terms of how they work?" → PROCESS_QA
+"Why does [action] work differently in [context A] vs [context B]?" → PROCESS_QA
+"How does [any SAP process or transaction] actually work?" → PROCESS_QA
+"What happens when [any SAP action is performed]?" → PROCESS_QA
 "We have a material with MTO scenario. When MRP runs it creates a planned order with wrong BOM/routing combination because production version routing takes priority over sales order routing. We need a solution." → PROBLEM_ANALYSIS
 "We found that when we post goods issue the system is picking the wrong movement type. We analysed and found it is related to the schedule line category but cannot find the root cause." → PROBLEM_ANALYSIS
 "The system is creating a planned order with sales order BOM but material routing instead of sales order routing. Production version seems to override the sales order routing." → PROBLEM_ANALYSIS
