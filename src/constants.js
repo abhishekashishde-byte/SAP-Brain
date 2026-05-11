@@ -8,7 +8,7 @@ export const TOPICS = {
     "Maintenance Orders","Maintenance Plans","Functional Locations",
     "Equipment Master","Notifications","Refurbishment Orders","Person Responsible",
   ],
-  "MM – Logistics": [
+  "MM – Materials Management": [
     "Purchase Orders","Goods Receipt","Stock Transfer","Subcontracting",
     "Inventory Management","Batch Management","MRP Areas",
   ],
@@ -24,7 +24,7 @@ export const TOPICS = {
 export const MODULE_META = {
   "PP – Production Planning": { color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0", label:"PP" },
   "PM – Plant Maintenance":   { color:"#4f46e5", bg:"#eef2ff", border:"#c7d2fe", label:"PM" },
-  "MM – Logistics":           { color:"#ea580c", bg:"#fff7ed", border:"#fed7aa", label:"MM" },
+  "MM – Materials Management":           { color:"#ea580c", bg:"#fff7ed", border:"#fed7aa", label:"MM" },
   "Fiori / UX":               { color:"#0284c7", bg:"#f0f9ff", border:"#bae6fd", label:"FI" },
   "S/4HANA General":          { color:"#B8960C", bg:"#fefce8", border:"#fde68a", label:"S4" },
 }
