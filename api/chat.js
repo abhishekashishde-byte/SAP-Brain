@@ -1115,11 +1115,7 @@ export default async function handler(req, res) {
       console.log('Search complete — OpenAI sources:', searchResults.length, 'supplemental pills:', googleLinks.length)
     }
 
-    // Pills show when Wani gave a real SAP answer — not on greetings/chitchat responses
-    // Check the answer content, not the question — short follow-ups deserve pills too
-    const isSubstantialAnswer = /\b(T-code|SPRO|table|BAdI|BAPI|T\.code|transaction|configuration|SAP|S\/4HANA|ABAP|Fiori|order|material|vendor|plant|routing|BOM|settlement|movement|posting|notification|equipment|functional location)\b/i.test(fullAnswer)
-
-    if (!isCode && !isDeliverable && googleLinks.length === 0 && isSubstantialAnswer) {
+    if (!isCode && !isDeliverable && googleLinks.length === 0) {
       const cleanQuery = await buildSAPSearchQuery(lastMsg).catch(() => null)
       if (cleanQuery) {
         const rawTerms = cleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
@@ -1411,8 +1407,9 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
     }
 
     // further_reading = OpenAI real page links + supplemental search pills
-    // Frontend knows: titles starting "SAP Community:" etc = pills, rest = full rows
-    const allFurtherReading = [...searchResults, ...googleLinks].slice(0, 9)
+    // Only show for real SAP answers — not greetings or chitchat
+    const isSubstantialAnswer = /\b(T-code|SPRO|table|BAdI|BAPI|T\.code|transaction|configuration|SAP|S\/4HANA|ABAP|Fiori|order|material|vendor|plant|routing|BOM|settlement|movement|posting|notification|equipment|functional location)\b/i.test(fullAnswer || '')
+    const allFurtherReading = isSubstantialAnswer ? [...searchResults, ...googleLinks].slice(0, 9) : []
     if (allFurtherReading.length > 0) {
       send({ type: 'further_reading', links: allFurtherReading })
     }
