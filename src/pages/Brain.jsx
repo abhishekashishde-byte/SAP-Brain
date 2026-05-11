@@ -39,7 +39,7 @@ const T = {
 const MODULE_COLORS = {
   "PP – Production Planning":{ from:'#16a34a',to:'#059669',emoji:'⚙️' },
   "PM – Plant Maintenance":  { from:'#4f46e5',to:'#7c3aed',emoji:'🔧' },
-  "MM – Logistics":          { from:'#ea580c',to:'#dc2626',emoji:'📦' },
+  "MM – Materials Management":          { from:'#ea580c',to:'#dc2626',emoji:'📦' },
   "Fiori / UX":              { from:'#0284c7',to:'#0369a1',emoji:'◻️' },
   "S/4HANA General":         { from:'#b45309',to:'#92400e',emoji:'◈'  },
 }
@@ -927,7 +927,7 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
 const MODULE_STACK = [
   { key:'PP – Production Planning',mod:'PP',sub:'Production Planning',emoji:'⚙️',gradDark:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#60A5FA 100%)',gradLight:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#93C5FD 100%)' },
   { key:'PM – Plant Maintenance',mod:'PM',sub:'Plant Maintenance',emoji:'🔧',gradDark:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)',gradLight:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)' },
-  { key:'MM – Logistics',mod:'MM',sub:'Logistics',emoji:'📦',gradDark:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)',gradLight:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)' },
+  { key:'MM – Materials Management',mod:'MM',sub:'Materials Management',emoji:'📦',gradDark:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)',gradLight:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)' },
   { key:'Fiori / UX',mod:'Fiori',sub:'User Experience',emoji:'◻',gradDark:'linear-gradient(140deg,#1E3A5F 0%,#1D4ED8 55%,#93C5FD 100%)',gradLight:'linear-gradient(140deg,#1E3A5F 0%,#1D4ED8 55%,#93C5FD 100%)' },
   { key:'S/4HANA General',mod:'S/4HANA',sub:'General',emoji:'◈',gradDark:'linear-gradient(140deg,#3B0764 0%,#7C3AED 55%,#DDD6FE 100%)',gradLight:'linear-gradient(140deg,#3B0764 0%,#7C3AED 55%,#DDD6FE 100%)' },
 ]
@@ -1861,7 +1861,7 @@ export default function Brain({ session }) {
       clearInterval(progressInterval)
       setCompactProgress(95)
 
-      if (summary) {
+      if (summary && summary.length > 20) {
         // Store summary silently as a system role message — never shown in UI
         // The backend reads is_summarised + the summary content for context injection
         const summaryMsg = { role:'system', content:summary }
