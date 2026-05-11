@@ -51,7 +51,7 @@ flags:
 isCode: true if message contains ABAP keywords (METHOD, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, ENDLOOP, FORM, FUNCTION)
 isError: true if message contains error text, dump, ST22, SM21, runtime error, message class number
 isCorrection: true if user is correcting a previous wrong answer
-needsSearch: true if question is about latest S/4HANA changes, deprecated objects, explicitly asks to search, mentions SAP Notes or known issues, asks about errors or patches, or asks about a specific T-code behaviour
+needsSearch: true if question is about latest S/4HANA changes, deprecated objects, explicitly asks to search, mentions SAP Notes or known issues, asks about errors or patches, asks about a specific T-code behaviour, OR is a PROCESS_QA question asking about behavioural differences between transactions or why something works a certain way — these need verified SAP knowledge not model memory
 
 Examples to guide classification:
 "What T-code is used for production orders?" → SAP_QA
