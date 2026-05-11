@@ -791,7 +791,7 @@ async function getAuthenticatedUser(req) {
   })
   const { data, error } = await client.auth.getUser()
   if (error || !data?.user?.id) throw new Error('Invalid auth token')
-  return { userId: data.user.id, token }
+  return { userId: data.user.id, token, userEmail: data.user.email || '' }
 }
 
 // ── MAIN HANDLER ─────────────────────────────────────────────────────────────
@@ -827,7 +827,7 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(401).json({ error: e.message })
   }
-  const { userId, token: userToken } = authUser
+  const { userId, token: userToken, userEmail } = authUser
 
   // Store document chunks with embeddings
   if (body.action === 'store_chunks') {
@@ -1014,8 +1014,8 @@ export default async function handler(req, res) {
 
   try {
     // ── DAILY LIMIT CHECK ───────────────────────────────────────────────────
-    const UNLIMITED_EMAILS_CHECK = ['abhishek.ashish.de@gmail.com', 'saathi.ashish@gmail.com']
-    if (userId && !UNLIMITED_EMAILS_CHECK.includes(session?.user?.email || '')) {
+    const UNLIMITED_EMAILS_CHECK = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2].filter(Boolean)
+    if (userId && !UNLIMITED_EMAILS_CHECK.includes(userEmail || '')) {
       try {
         const supaUrl = process.env.SUPABASE_URL
         const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
@@ -1029,7 +1029,7 @@ export default async function handler(req, res) {
           return total + (conv.messages || []).filter(m => m.role === 'user').length
         }, 0)
         if (todayCount >= 50) {
-          send({ type: 'done', full: "⏳ You've reached your daily limit of 50 messages. Your limit resets at midnight Berlin time.\n\nNeed more access? Contact abhishek.ashish.de@gmail.com", messageCount: 50, dailyLimit: 50, isUnlimited: false, deliverableType: 'NONE', model: 'limit' })
+          send({ type: 'done', full: "⏳ You've reached your daily limit of 50 messages. Your limit resets at midnight Berlin time.\n\nNeed more access? Contact ${process.env.ADMIN_EMAIL_1||'the Wani team'}", messageCount: 50, dailyLimit: 50, isUnlimited: false, deliverableType: 'NONE', model: 'limit' })
           return res.end()
         }
       } catch(e) { console.error('Limit check error:', e.message) }
@@ -1452,11 +1452,11 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
     }
 
     // ── DAILY MESSAGE COUNT ───────────────────────────────────────────────────
-    const UNLIMITED_EMAILS = ['abhishek.ashish.de@gmail.com', 'saathi.ashish@gmail.com']
+    const UNLIMITED_EMAILS = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2].filter(Boolean)
     const DAILY_LIMIT = 50
     let messageCount = 0
 
-    if (userId && !UNLIMITED_EMAILS.includes(session?.user?.email || '')) {
+    if (userId && !UNLIMITED_EMAILS.includes(userEmail || '')) {
       try {
         const supaUrl = process.env.SUPABASE_URL
         const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
@@ -1483,7 +1483,7 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
       isCorrection,
       messageCount,
       dailyLimit: DAILY_LIMIT,
-      isUnlimited: UNLIMITED_EMAILS.includes(session?.user?.email || ''),
+      isUnlimited: UNLIMITED_EMAILS.includes(userEmail || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
     })
