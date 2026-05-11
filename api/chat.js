@@ -1186,7 +1186,7 @@ export default async function handler(req, res) {
     }
 
     const validMessages = recentMsgs
-      .filter(m => m.role && m.content?.trim())
+      .filter(m => m.role && m.role !== 'system' && m.content?.trim())
       .map(m => ({
         role: m.role,
         content: String(m.content).trim().slice(0, hasCodeInHistory ? 6000 : 3000)
