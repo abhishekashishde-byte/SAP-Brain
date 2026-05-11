@@ -1862,7 +1862,9 @@ export default function Brain({ session }) {
       setCompactProgress(95)
 
       if (summary) {
-        const summaryMsg = { role:'assistant', content:`📋 **Conversation Compacted**\n\n${summary}\n\n---\n_Earlier messages summarised to save context. Continuing from here._` }
+        // Store summary silently as a system role message — never shown in UI
+        // The backend reads is_summarised + the summary content for context injection
+        const summaryMsg = { role:'system', content:summary }
         const newMsgs = [summaryMsg]
         await updateConversation(activeConvId, { messages:newMsgs, is_summarised:true })
         setConversations(prev=>prev.map(c=>c.id===activeConvId?{...c,messages:newMsgs,is_summarised:true}:c))
@@ -2193,7 +2195,7 @@ export default function Brain({ session }) {
                   )
                 ):(
                   <>
-                    {messages.map((msg,i)=>{
+                    {messages.filter(m=>m.role!=='system').map((msg,i)=>{
                       const prevUser = msg.role === 'assistant'
                         ? messages.slice(0,i).filter(m=>m.role==='user').slice(-1)[0]?.content || ''
                         : ''
