@@ -1655,6 +1655,8 @@ export default function Brain({ session }) {
               ))
               setPendingMemorySave({ summary: evt.summary })
               setIsLoading(false)
+              setIsStreaming(false)
+              setStreamingText('')
               return
             } else if (evt.type === 'start') {
               setStreamingIntent(evt.intent || 'SAP_QA')
@@ -1812,7 +1814,11 @@ export default function Brain({ session }) {
     if (xmlSignals.some(r => r.test(text.trim()))) return { content: text, lines: lines.length, language: 'XML' }
     if (jsonSignals.some(r => r.test(text.trim()))) return { content: text, lines: lines.length, language: 'JSON' }
     if (sqlSignals.some(r => r.test(text))) return { content: text, lines: lines.length, language: 'SQL' }
-    if (lines.length >= 15) return { content: text, lines: lines.length, language: 'Code' }
+    // Only treat as generic code if it has code-like structure — short lines, symbols, indentation
+    // Avoid treating pasted SAP replies, emails, or documents as code
+    const avgLineLen = text.length / lines.length
+    const hasCodeStructure = avgLineLen < 60 && lines.filter(l => /^\s{2,}|[{};()=>]/.test(l)).length > lines.length * 0.3
+    if (lines.length >= 20 && hasCodeStructure) return { content: text, lines: lines.length, language: 'Code' }
     return null
   }
 
@@ -1871,7 +1877,7 @@ export default function Brain({ session }) {
       }
 
       setCompactProgress(100)
-      setTimeout(()=>{ setAutoCompacting(false); setCompactProgress(0) }, 600)
+      setTimeout(()=>{ setAutoCompacting(false); setCompactProgress(0); bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, 600)
     } catch {
       clearInterval(progressInterval)
       setAutoCompacting(false)
