@@ -366,13 +366,27 @@ async function streamGPTMini(systemPrompt, messages, onChunk) {
 // ── 5. GOOGLE CUSTOM SEARCH — real SAP links ─────────────────────────────────
 // ── BUILD CLEAN SAP SEARCH QUERY ─────────────────────────────────────────────
 // Extracts SAP-relevant keywords from a conversational question for CSE
-async function buildSAPSearchQuery(question) {
+async function buildSAPSearchQuery(question, allMessages) {
   try {
-    // For long messages — extract a focused summary first
-    const isLong = question.trim().split(/\s+/).length > 60
-    const queryInput = isLong
-      ? `${question.slice(0, 400)}...` // give Groq more context for complex problems
-      : question.slice(0, 200)
+    // Strip only conversational filler phrases — keep SAP terms, T-codes, object names intact
+    const stripFiller = (text) => text
+      .replace(/\b(I am|I was|I have|I had|I think|I feel|I know|I told|I asked|I need|I want|I would|I could|he told|she told|they told|we have|we are|we were|we need|can you|could you|please help|thank you|sorry but|to be honest|the problem is|the issue is|the question is|as you know|as I know|in this case|in my case|in our case|for example|for instance|this is|that is|it is|there is|there are|which is|which are|that was|this was|at the end|at the start|on the other hand|first of all|most of the time|some of the|a lot of|based on|related to|due to|because of|in order to|so that|such as|as well as|rather than|instead of|apart from|in addition to)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    let input = ''
+    if (allMessages && allMessages.length > 1) {
+      const stripped = allMessages
+        .filter(m => m.role === 'user')
+        .slice(0, 6)
+        .map(m => stripFiller(m.content.slice(0, 200)))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 300)
+      if (stripped.length > 20) input = stripped
+    }
+    if (!input) input = stripFiller(question).slice(0, 200)
 
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -381,15 +395,22 @@ async function buildSAPSearchQuery(question) {
         model: 'llama-3.3-70b-versatile',
         max_tokens: 40,
         temperature: 0,
-        messages: [{ role: 'user', content: `Extract the core SAP topic from this text as a Google search query (4-7 words). Fix typos. Focus on the SAP objects, T-codes, modules involved — ignore the problem description narrative. Return ONLY the search query.
+        messages: [{ role: 'user', content: `You are building a search query for SAP documentation links.
+
+Read the full conversation below and extract the 2-3 CORE SAP concepts being discussed. Rules:
+- Focus on the main subject — the topic the conversation started with and keeps returning to
+- Include related concepts only if they are central to the main topic
+- Ignore subtopics that appear only once at the end
+- Fix typos
+- Return ONLY a 4-7 word search query, nothing else
 
 Examples:
-"We have MTO scenario with production version and sales order routing has wrong priority" → "SAP production version sales order routing priority MTO"
-"What is the correct table for chekcing Maiutnenace plan" → "SAP Maintenance Plan table MPLA"
-"We found equipment asset master linkage not working in PM" → "SAP PM equipment asset master integration"
-"how does equipment link to asset master" → "SAP equipment asset master integration PM"
+Conversation about production version selection, MTO, SO routing → "SAP production version sales order routing"
+Conversation about maintenance order TECO, IW32 vs IW42, notifications → "SAP maintenance order TECO notification update"
+Conversation about equipment master, controlling area, Fiori error → "SAP equipment controlling area Fiori PM"
+Conversation about settlement profile, cost center, CO01 → "SAP production order settlement profile cost center"
 
-Text: "${queryInput}"` }]
+Conversation: "${input}"` }]
       })
     })
     const data = await res.json()
@@ -1083,7 +1104,7 @@ export default async function handler(req, res) {
       // Run OpenAI search + Groq query cleaning in parallel
       const [openAIResult, cleanQuery] = await Promise.all([
         callOpenAISearch(lastMsg).catch(() => null),
-        buildSAPSearchQuery(lastMsg).catch(() => null),
+        buildSAPSearchQuery(lastMsg, allMessages).catch(() => null),
       ])
 
       if (openAIResult && typeof openAIResult === 'object') {
@@ -1127,7 +1148,7 @@ export default async function handler(req, res) {
     }
 
     if (!isCode && !isDeliverable && googleLinks.length === 0) {
-      const cleanQuery = await buildSAPSearchQuery(lastMsg).catch(() => null)
+      const cleanQuery = await buildSAPSearchQuery(lastMsg, allMessages).catch(() => null)
       if (cleanQuery) {
         const rawTerms = cleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
         const enc = encodeURIComponent(rawTerms)
