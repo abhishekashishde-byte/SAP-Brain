@@ -54,7 +54,26 @@ Example: ["PM02 orders do not auto-populate Person Responsible from IP10","BAdI 
       return res.status(200).json({ stored: 0, note: 'service key missing' })
     }
 
-    const rows = facts.map(fact => ({
+    // Dedup check — skip facts already stored for this user
+    const newFacts = []
+    for (const fact of facts) {
+      const keywords = fact.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 4).slice(0, 3)
+      if (keywords.length > 0) {
+        const filters = keywords.map(w => `content.ilike.*${w}*`).join(',')
+        try {
+          const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&or=(${filters})&limit=1`, {
+            headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
+          })
+          const existing = await checkRes.json()
+          if (existing?.length > 0) { console.log('[extract] Skipping duplicate:', fact.slice(0, 50)); continue }
+        } catch { /* if check fails, still insert */ }
+      }
+      newFacts.push(fact)
+    }
+
+    if (newFacts.length === 0) return res.status(200).json({ stored: 0, note: 'all duplicates' })
+
+    const rows = newFacts.map(fact => ({
       user_id:    userId,
       content:    fact,
       created_at: new Date().toISOString(),
