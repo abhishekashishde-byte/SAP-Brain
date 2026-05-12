@@ -91,7 +91,7 @@ Question: "${question.slice(0, 500)}"
     const isFsKeyword    = /\b(functional spec|FS|create.*spec|write.*spec|generate.*spec|specification for)\b/i.test(question)
     const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
     const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
-    const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop|presentation.*workshop|create.*ppt|make.*ppt|generate.*ppt|build.*ppt)\b/i.test(question)
+    const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop|presentation.*workshop)\b/i.test(question)
     const isCustomizing  = /\b(spro|customiz|IMG|where.*config|config.*where|how.*config|configure.*path|customising|t-code.*config|configuration.*path|where.*set up|where.*setup|where.*maintain|where can i|where do i.*config)\b/i.test(question)
 
     let intent = result.intent || 'SAP_QA'
