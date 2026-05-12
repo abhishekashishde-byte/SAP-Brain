@@ -1801,7 +1801,7 @@ export default function Brain({ session }) {
     const abapSignals = [
       /^REPORT\s+/im, /^FUNCTION\s+/im, /^CLASS\s+/im, /^METHOD\s+/im,
       /^DATA\s*:/im, /^TYPES\s*:/im, /^CONSTANTS\s*:/im, /^TABLES\s*:/im,
-      /^SELECT\s+/im, /^LOOP\s+AT\s+/im, /^IF\s+/im, /^ENDLOOP\./im,
+      /^SELECT\s+(\*|\w+\s+FROM)/im, /^LOOP\s+AT\s+/im, /^IF\s+(sy-|l_|lv_|lt_|ls_|\w+\s*(=|<>|IS))/im, /^ENDLOOP\./im,
       /^ENDIF\./im, /^ENDFUNCTION\./im, /^ENDCLASS\./im,
       /CALL\s+FUNCTION/im, /PERFORM\s+/im, /^WRITE\s*:/im,
     ]
@@ -1877,7 +1877,7 @@ export default function Brain({ session }) {
       }
 
       setCompactProgress(100)
-      setTimeout(()=>{ setAutoCompacting(false); setCompactProgress(0); bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, 600)
+      setTimeout(()=>{ setAutoCompacting(false); setCompactProgress(0); if(chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight }, 600)
     } catch {
       clearInterval(progressInterval)
       setAutoCompacting(false)
