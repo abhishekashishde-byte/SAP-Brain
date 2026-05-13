@@ -512,16 +512,17 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         <WaniLogo size={26} dark={dark}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
+        {!isStreaming && (msg._primaryLabel || msg._model) && (
+          <div style={{ marginBottom:6, fontSize:10, color:'#6366F1', opacity:0.7, fontFamily:"'Inter',sans-serif", letterSpacing:'0.03em' }}>
+            {msg._primaryLabel || (msg._model?.includes('claude') ? '⚡ Claude Sonnet' : msg._model === 'gpt4o' ? '✦ GPT-4o' : msg._model === 'gpt4o-mini' ? '✦ GPT-4o mini' : '')}
+          </div>
+        )}
         <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
           {renderMarkdown(content)}
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
         </div>
         {!isStreaming && <ActionBar/>}
-        {!isStreaming && (msg._primaryLabel || msg._model) && (
-          <div style={{ marginTop:4, fontSize:10, color:'#6366F1', opacity:0.7, fontFamily:"'Inter',sans-serif" }}>
-            {msg._primaryLabel || (msg._model?.includes('claude') ? '⚡ Claude Sonnet' : msg._model === 'gpt4o' ? '✦ GPT-4o' : msg._model === 'gpt4o-mini' ? '✦ GPT-4o mini' : '')}
-          </div>
-        )}
+
         {!isStreaming && msg._dualText && (
           <div style={{ marginTop:16, borderTop:`1px solid rgba(255,255,255,0.08)`, paddingTop:14 }}>
             <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:6, fontFamily:"'Inter',sans-serif" }}>
