@@ -7,7 +7,7 @@
 import nodemailer from 'nodemailer'
 import crypto from 'crypto'
 
-export const config = { maxDuration: 15 }
+export const config = { maxDuration: 30 }
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
