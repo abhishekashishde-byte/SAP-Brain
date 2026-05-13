@@ -1282,33 +1282,51 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
       modelUsed = 'claude-sonnet'
       console.log('MODEL: Claude Sonnet (deliverable, 16k tokens)')
     } else if (isSimpleQA) {
-      // Simple SAP Q&A → GPT-4o-mini + Claude Haiku in PARALLEL
-      send({ type: 'model_label', label: 'by GPT-4o mini' })
-      send({ type: 'dual_start', label: 'by Claude Haiku' })
-      modelUsed = 'gpt4o-mini'
-      console.log('MODEL: GPT-4o-mini + Claude Haiku (parallel)')
-      const [miniAnswer] = await Promise.all([
-        streamGPTMini(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
-          .catch(e => { console.error('Mini error:', e.message); return '' }),
-        streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }))
-          .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
-          .catch(e => { console.error('Haiku error:', e.message); return '' }),
-      ])
-      fullAnswer = miniAnswer
+      // Only fire dual if message has real SAP content — not greetings or single words
+      const isMeaningfulQuery = lastMsg.trim().split(/\s+/).length >= 4
+      if (isMeaningfulQuery) {
+        // Simple SAP Q&A → GPT-4o-mini + Claude Haiku in PARALLEL
+        send({ type: 'model_label', label: 'by GPT-4o mini' })
+        send({ type: 'dual_start', label: 'by Claude Haiku' })
+        modelUsed = 'gpt4o-mini'
+        console.log('MODEL: GPT-4o-mini + Claude Haiku (parallel)')
+        const [miniAnswer] = await Promise.all([
+          streamGPTMini(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+            .catch(e => { console.error('Mini error:', e.message); return '' }),
+          streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }))
+            .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
+            .catch(e => { console.error('Haiku error:', e.message); return '' }),
+        ])
+        fullAnswer = miniAnswer
+      } else {
+        // Short/greeting — single model only
+        send({ type: 'model_label', label: 'by GPT-4o mini' })
+        fullAnswer = await streamGPTMini(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+        modelUsed = 'gpt4o-mini'
+      }
     } else {
-      // Complex Q&A → GPT-4o + Claude Sonnet in PARALLEL
-      send({ type: 'model_label', label: 'by GPT-4o' })
-      send({ type: 'dual_start', label: 'by Claude Sonnet' })
-      modelUsed = 'gpt4o'
-      console.log('MODEL: GPT-4o + Claude Sonnet (parallel)')
-      const [gptAnswer] = await Promise.all([
-        streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
-          .catch(e => { console.error('GPT error:', e.message); return '' }),
-        streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }), 4000)
-          .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
-          .catch(e => { console.error('Sonnet error:', e.message); return '' }),
-      ])
-      fullAnswer = gptAnswer
+      // Only fire dual if message has real SAP content
+      const isMeaningfulQuery = lastMsg.trim().split(/\s+/).length >= 4
+      if (isMeaningfulQuery) {
+        // Complex Q&A → GPT-4o + Claude Sonnet in PARALLEL
+        send({ type: 'model_label', label: 'by GPT-4o' })
+        send({ type: 'dual_start', label: 'by Claude Sonnet' })
+        modelUsed = 'gpt4o'
+        console.log('MODEL: GPT-4o + Claude Sonnet (parallel)')
+        const [gptAnswer] = await Promise.all([
+          streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+            .catch(e => { console.error('GPT error:', e.message); return '' }),
+          streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }), 4000)
+            .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
+            .catch(e => { console.error('Sonnet error:', e.message); return '' }),
+        ])
+        fullAnswer = gptAnswer
+      } else {
+        // Short/greeting — single model only
+        send({ type: 'model_label', label: 'by GPT-4o' })
+        fullAnswer = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+        modelUsed = 'gpt4o'
+      }
     }
 
     // Deliverable type — stored on conversation for UI filtering
