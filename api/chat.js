@@ -51,7 +51,7 @@ flags:
 isCode: true if message contains ABAP keywords (METHOD, LOOP AT, SELECT, DATA:, FIELD-SYMBOL, ENDLOOP, FORM, FUNCTION)
 isError: true if message contains error text, dump, ST22, SM21, runtime error, message class number
 isCorrection: true if user is correcting a previous wrong answer
-needsSearch: true if question is about latest S/4HANA changes, deprecated objects, explicitly asks to search, mentions SAP Notes or known issues, asks about errors or patches, asks about a specific T-code behaviour, OR is a PROCESS_QA question asking about behavioural differences between transactions or why something works a certain way — these need verified SAP knowledge not model memory
+needsSearch: true if question is about latest S/4HANA changes, deprecated objects, explicitly asks to search, mentions SAP Notes or known issues, asks about errors or patches, asks about a specific T-code behaviour, OR is a PROCESS_QA question asking about behavioural differences between transactions or why something works a certain way, OR the question asks whether something CAN or CANNOT be done at a specific SAP level (planned order, production order, document level etc) — these behavioural claims MUST be verified before answering, never answered from model memory alone
 
 Examples to guide classification:
 "What T-code is used for production orders?" → SAP_QA
@@ -892,8 +892,15 @@ export default async function handler(req, res) {
           { headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` } }
         )
         const convs = await countRes.json()
+        // Count only user messages sent today — use message timestamp if available
+        // Fixes bug where old messages in today-updated conversations counted against today's limit
+        const todayStr = berlinDate
         const todayCount = (convs || []).reduce((total, conv) => {
-          return total + (conv.messages || []).filter(m => m.role === 'user').length
+          return total + (conv.messages || []).filter(m => {
+            if (m.role !== 'user') return false
+            if (m.created_at) return m.created_at.startsWith(todayStr)
+            return true // no timestamp — count it (safe fallback)
+          }).length
         }, 0)
         if (todayCount >= 50) {
           send({ type: 'done', full: "⏳ You've reached your daily limit of 50 messages. Your limit resets at midnight Berlin time.\n\nNeed more access? Contact ${process.env.ADMIN_EMAIL_1||'the Wani team'}", messageCount: 50, dailyLimit: 50, isUnlimited: false, deliverableType: 'NONE', model: 'limit' })
