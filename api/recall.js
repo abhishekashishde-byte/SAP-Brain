@@ -24,10 +24,10 @@ export default async function handler(req, res) {
     if (terms.length === 0) return res.status(200).json({ memories: [] })
 
     // Build OR filter for ILIKE across fact text
-    const filters = terms.map(t => `fact.ilike.*${encodeURIComponent(t)}*`).join(',')
+    const filters = terms.map(t => `content.ilike.*${encodeURIComponent(t)}*`).join(',')
     const moduleFilter = mod ? `&module=eq.${encodeURIComponent(mod)}` : ''
 
-    const url = `${SUPABASE_URL}/rest/v1/sap_memories?user_id=eq.${userId}${moduleFilter}&or=(${filters})&order=created_at.desc&limit=${limit}`
+    const url = `${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&or=(${filters})&order=created_at.desc&limit=${limit}`
 
     const memRes = await fetch(url, {
       headers: {
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     if (!memRes.ok) return res.status(200).json({ memories: [] })
 
     const rows = await memRes.json()
-    const memories = Array.isArray(rows) ? rows.map(r => r.fact).filter(Boolean) : []
+    const memories = Array.isArray(rows) ? rows.map(r => r.content).filter(Boolean) : []
 
     return res.status(200).json({ memories })
 
