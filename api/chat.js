@@ -1295,7 +1295,7 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
             .catch(e => { console.error('Mini error:', e.message); return '' }),
           streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }))
             .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
-            .catch(e => { console.error('Haiku error:', e.message); return '' }),
+            .catch(e => { console.error('Haiku dual error:', e.message); send({ type: 'dual_done', text: `⚠️ Claude Haiku error: ${e.message.slice(0,80)}` }); return '' }),
         ])
         fullAnswer = miniAnswer
       } else {
@@ -1318,7 +1318,7 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
             .catch(e => { console.error('GPT error:', e.message); return '' }),
           streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }), 4000)
             .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
-            .catch(e => { console.error('Sonnet error:', e.message); return '' }),
+            .catch(e => { console.error('Sonnet dual error:', e.message); send({ type: 'dual_done', text: `⚠️ Claude Sonnet error: ${e.message.slice(0,80)}` }); return '' }),
         ])
         fullAnswer = gptAnswer
       } else {
