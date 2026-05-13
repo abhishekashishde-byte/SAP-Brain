@@ -517,17 +517,19 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
         </div>
         {!isStreaming && <ActionBar/>}
-        {!isStreaming && msg._model && (
-          <div style={{ marginTop:6, display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{
-              fontSize:10, color: msg._model.includes('claude') ? '#D97706' : '#6366F1',
-              opacity:0.7, fontFamily:"'Inter',sans-serif", letterSpacing:'0.03em'
-            }}>
-              {msg._model.includes('claude') ? '⚡ Claude' :
-               msg._model === 'gpt4o' ? '✦ GPT-4o' :
-               msg._model === 'gpt4o-mini' ? '✦ GPT-4o mini' :
-               msg._model === 'groq' ? '⚡ Groq' : ''}
-            </span>
+        {!isStreaming && (msg._primaryLabel || msg._model) && (
+          <div style={{ marginTop:4, fontSize:10, color:'#6366F1', opacity:0.7, fontFamily:"'Inter',sans-serif" }}>
+            {msg._primaryLabel || (msg._model?.includes('claude') ? '⚡ Claude Sonnet' : msg._model === 'gpt4o' ? '✦ GPT-4o' : msg._model === 'gpt4o-mini' ? '✦ GPT-4o mini' : '')}
+          </div>
+        )}
+        {!isStreaming && msg._dualText && (
+          <div style={{ marginTop:16, borderTop:`1px solid rgba(255,255,255,0.08)`, paddingTop:14 }}>
+            <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:6, fontFamily:"'Inter',sans-serif" }}>
+              {msg._dualLabel}
+            </div>
+            <div style={{ fontSize:16, lineHeight:1.8, wordBreak:'break-word' }}>
+              {renderMarkdown(msg._dualText)}
+            </div>
           </div>
         )}
         {!isStreaming && msg._links?.length > 0 && (
@@ -1202,6 +1204,10 @@ export default function Brain({ session }) {
   const [isStreaming, setIsStreaming]      = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [streamingIntent, setStreamingIntent] = useState('SAP_QA')
+  const [dualStreaming, setDualStreaming] = useState(false)
+  const [dualText, setDualText] = useState('')
+  const [dualLabel, setDualLabel] = useState('')
+  const [primaryLabel, setPrimaryLabel] = useState('')
   const [messageCount, setMessageCount]   = useState(0)
   const [isUnlimited, setIsUnlimited]     = useState(false)
   const DAILY_LIMIT = 50
@@ -1671,6 +1677,16 @@ export default function Brain({ session }) {
               setIsStreaming(false)
               setStreamingText('')
               return
+            } else if (evt.type === 'model_label') {
+              setPrimaryLabel(evt.label || '')
+            } else if (evt.type === 'dual_start') {
+              setDualLabel(evt.label || '')
+              setDualStreaming(true)
+              setDualText('')
+            } else if (evt.type === 'dual_chunk') {
+              setDualText(prev => prev + evt.text)
+            } else if (evt.type === 'dual_done') {
+              setDualStreaming(false)
             } else if (evt.type === 'start') {
               setStreamingIntent(evt.intent || 'SAP_QA')
             } else if (evt.type === 'search_results') {
@@ -1776,6 +1792,8 @@ export default function Brain({ session }) {
         role: 'assistant',
         content: replyContent,
         _model: modelUsed,
+        ...(primaryLabel ? { _primaryLabel: primaryLabel } : {}),
+        ...(dualText ? { _dualText: dualText, _dualLabel: dualLabel } : {}),
         ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
         ...(deliverableType === 'FS_SPEC' && window.__lastFsText
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
@@ -1800,7 +1818,7 @@ export default function Brain({ session }) {
       checkForFindings(finalMsgs).catch(() => {})
 
     } catch(err) {
-      setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA')
+      setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setDualText('');setDualLabel('');setPrimaryLabel('')
       const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:errMsgs}:c))
     }
@@ -2270,7 +2288,22 @@ export default function Brain({ session }) {
                         </div>
                       </div>
                     ) : isStreaming ? (
-                      <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                      <>
+                        {primaryLabel && (
+                          <div style={{ fontSize:10, color:'#6366F1', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
+                            {primaryLabel}
+                          </div>
+                        )}
+                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                        {(dualStreaming || dualText) && (
+                          <div style={{ marginTop:16 }}>
+                            <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
+                              {dualLabel}
+                            </div>
+                            <MessageBubble msg={{role:'assistant',content:dualText}} isStreaming={dualStreaming} streamingText={dualStreaming ? dualText : ''} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                          </div>
+                        )}
+                      </>
                     ) : null}
                     <div ref={bottomRef}/>
                   </>
