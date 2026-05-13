@@ -53,6 +53,7 @@ const MODULES = {
     "Table Lookups","BAdIs & User Exits","SPRO Configuration",
     "Error Messages","Z-Programs","Migration Topics",
   ],
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
