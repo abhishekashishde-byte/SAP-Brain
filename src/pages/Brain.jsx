@@ -517,6 +517,19 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
         </div>
         {!isStreaming && <ActionBar/>}
+        {!isStreaming && msg._model && (
+          <div style={{ marginTop:6, display:'flex', alignItems:'center', gap:4 }}>
+            <span style={{
+              fontSize:10, color: msg._model.includes('claude') ? '#D97706' : '#6366F1',
+              opacity:0.7, fontFamily:"'Inter',sans-serif", letterSpacing:'0.03em'
+            }}>
+              {msg._model.includes('claude') ? '⚡ Claude' :
+               msg._model === 'gpt4o' ? '✦ GPT-4o' :
+               msg._model === 'gpt4o-mini' ? '✦ GPT-4o mini' :
+               msg._model === 'groq' ? '⚡ Groq' : ''}
+            </span>
+          </div>
+        )}
         {!isStreaming && msg._links?.length > 0 && (
           <FurtherReading links={msg._links} t={t} dark={dark} />
         )}
@@ -1762,6 +1775,7 @@ export default function Brain({ session }) {
       const assistantMsg = {
         role: 'assistant',
         content: replyContent,
+        _model: modelUsed,
         ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
         ...(deliverableType === 'FS_SPEC' && window.__lastFsText
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
