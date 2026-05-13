@@ -597,10 +597,16 @@ Once the user confirms the scope, generate the full slide deck using this EXACT 
 TITLE: [Plain language title — no SAP jargon unless audience is IT]
 LAYOUT: [TITLE_SLIDE / CONTENT / CONTENT_WITH_IMAGE / TABLE / SECTION_BREAK]
 BULLETS:
-• [First bullet — max 8 words, plain language]
-• [Second bullet — max 8 words]
-• [Third bullet — max 8 words]
-MAX 3 BULLETS PER SLIDE. Never more.
+• [First bullet — clear action or concept, plain language]
+  - [Sub-bullet: explain what this means, which field to use, what options exist, what to watch out for]
+  - [Sub-bullet: example value or common mistake]
+• [Second bullet — next step or concept]
+  - [Sub-bullet: field name, where to find it, what it controls]
+  - [Sub-bullet: tip or dependency]
+• [Third bullet — final step or key point]
+  - [Sub-bullet: what happens after this, or what to verify]
+MAX 3 MAIN BULLETS PER SLIDE, each with 2 sub-bullets.
+The slide must be detailed enough that a user who has never seen SAP can follow the process step by step without a trainer explaining it.
 IMAGE_PLACEHOLDER: [📸 INSERT SCREENSHOT: describe exactly what to show — which Fiori tile, which screen, which field highlighted]
 SAP_REFERENCE: [T-code or Fiori App ID — shown small at bottom, for IT reference only]
 SPEAKER_NOTE: [What the presenter should say in plain language — 2-3 sentences. This is not on the slide.]
