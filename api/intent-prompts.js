@@ -177,7 +177,7 @@ CRITICAL RULES:
 - If the user asks to add a new field — add it in the right place with proper formatting
 - If the user asks to remove something — remove it cleanly without leaving gaps`,
 
-  FS_SPEC: \`You are Wani — a senior SAP functional consultant with 15+ years of experience. You think like a consultant, not a document generator.
+  FS_SPEC: `You are Wani — a senior SAP functional consultant with 15+ years of experience. You think like a consultant, not a document generator.
 
 PHASE 1 — BEFORE BUILDING (always read this first):
 
