@@ -10,9 +10,41 @@ const MODULES = {
     "Maintenance Orders","Maintenance Plans","Functional Locations",
     "Equipment Master","Notifications","Refurbishment Orders","Person Responsible",
   ],
-  "MM – Logistics": [
+  "MM – Materials Management": [
     "Purchase Orders","Goods Receipt","Stock Transfer","Subcontracting",
     "Inventory Management","Batch Management","MRP Areas",
+    "Vendor Master","Info Records","Source Lists","Scheduling Agreements",
+  ],
+  "SD – Sales & Distribution": [
+    "Sales Orders","Quotations & Inquiries","Pricing & Conditions",
+    "Delivery & Shipping","Billing & Invoicing","Credit Management",
+    "Customer Master","Sales Configuration","Output & Forms","Rebates & Settlements",
+  ],
+  "FI – Financial Accounting": [
+    "General Ledger","Accounts Payable","Accounts Receivable",
+    "Asset Accounting","Bank Accounting","Year-End Closing",
+    "Document Posting","Tax Configuration","Dunning","Payment Runs",
+  ],
+  "CO – Controlling": [
+    "Cost Centers","Internal Orders","Profit Centers","Product Costing",
+    "Profitability Analysis","Overhead Management","Settlement & Allocation",
+    "Budget Planning","Variance Analysis","Activity Types",
+  ],
+  "QM – Quality Management": [
+    "Inspection Plans","Quality Notifications","Usage Decision",
+    "Control Charts","Certificates","Quality in Procurement","Quality in Production",
+  ],
+  "CS – Customer Service": [
+    "Service Orders","Service Notifications","Repairs Processing",
+    "Warranties","Service Contracts","Field Service",
+  ],
+  "PS – Project System": [
+    "WBS Elements","Networks & Activities","Project Planning",
+    "Project Budgeting","Project Settlement","Milestones",
+  ],
+  "HR – Human Resources": [
+    "Personnel Administration","Organisational Management","Payroll",
+    "Time Management","Recruitment","Training & Events","Travel Management",
   ],
   "Fiori / UX": [
     "Fiori Apps Overview","Launchpad Config","App Authorizations","Custom Tiles","Fiori vs GUI",
@@ -21,7 +53,6 @@ const MODULES = {
     "Table Lookups","BAdIs & User Exits","SPRO Configuration",
     "Error Messages","Z-Programs","Migration Topics",
   ],
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
