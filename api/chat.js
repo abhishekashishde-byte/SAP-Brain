@@ -136,8 +136,6 @@ Question: "${question.slice(0, 500)}"
     const isTroubleshoot = /\b(not working|doesn't work|does not work|missing|error|wrong|incorrect|failed|why is|why does|why can't|why won't|not found|not appearing|not showing|problem|issue|bug)\b/i.test(question)
     const isVersionSpecific = /\b(s\/4hana \d|ecc|r\/3|vs\.|versus|difference between.*version|upgrade|migration|compatibility)\b/i.test(question)
 
-    const isConceptQuestion = false // disabled — replaced by tighter triggers below
-
     const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
       || isNoteSearch || isErrorSearch || isNewFeature
       || isTroubleshoot || isVersionSpecific
@@ -431,170 +429,7 @@ Conversation: "${input}"` }]
   return terms.length > 5 ? `SAP ${terms}`.slice(0, 100) : `SAP S/4HANA ${question.slice(0, 60)}`
 }
 
-async function googleSAPSearch(question, intent = 'SAP_QA') {
-  const key = process.env.GOOGLE_CSE_KEY
-  const cx = process.env.GOOGLE_CSE_ID
-  if (!key || !cx) {
-    console.error('Google CSE: missing key or cx. GOOGLE_CSE_KEY:', !!key, 'GOOGLE_CSE_ID:', !!cx)
-    return []
-  }
-  console.log('Google CSE: searching for:', question.slice(0, 60), 'intent:', intent)
 
-  // Build clean query ONCE — fixes typos, extracts SAP concept — reused by all paths below
-  const globalCleanQuery = await buildSAPSearchQuery(question)
-  console.log('Google CSE clean query:', globalCleanQuery)
-
-  // Helper — run a single CSE query and return mapped items
-  async function runCSE(rawQuery, num = 3) {
-    try {
-      const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${encodeURIComponent(rawQuery)}&num=${num}`
-      const res = await fetch(url)
-      if (!res.ok) return []
-      const data = await res.json()
-      return (data.items || []).map(item => ({
-        title: item.title,
-        url: item.link,
-        snippet: item.snippet?.slice(0, 150),
-        source: item.displayLink?.includes('fioriappslibrary') ? 'SAP Fiori Library'
-          : item.displayLink?.includes('community.sap.com') ? 'SAP Community'
-          : item.displayLink?.includes('help.sap.com') ? 'SAP Help'
-          : item.displayLink?.includes('blogs.sap.com') ? 'SAP Blog'
-          : item.displayLink?.includes('launchpad.support.sap.com') ? 'SAP Support'
-          : 'SAP',
-      }))
-    } catch (e) {
-      console.error('runCSE error:', e.message)
-      return []
-    }
-  }
-
-  try {
-    let results = []
-
-    // ── FIORI: target Fiori Apps Library specifically ────────────────────────
-    if (intent === 'FIORI_REC') {
-      results = await runCSE(`site:fioriappslibrary.hana.ondemand.com SAP Fiori ${question}`)
-      if (results.length === 0) {
-        results = await runCSE(`site:help.sap.com SAP Fiori ${question}`)
-      }
-      return results
-    }
-
-    // ── ERROR: simplified query with fallback ────────────────────────────────
-    if (intent === 'ERROR_ANALYSIS') {
-      const coreQuery = question
-        .replace(/what sap notes are available for/i, '')
-        .replace(/how to fix|how do i|what is|what are/i, '')
-        .trim()
-      results = await runCSE(coreQuery, 5)
-      // Fallback — try even shorter query if no results
-      if (results.length === 0) {
-        const keywords = coreQuery.split(' ').slice(0, 4).join(' ')
-        results = await runCSE(keywords, 5)
-      }
-      console.log('Google CSE ERROR_ANALYSIS results:', results.length, 'query:', coreQuery.slice(0,50))
-      return results
-    }
-
-    // ── NOTE questions: search for SAP Note numbers specifically ─────────────
-    const isNoteQuestion = /\b(sap note|note \d{5,}|oss note|known issue|patch|correction)\b/i.test(question)
-    if (isNoteQuestion) {
-      results = await runCSE(`SAP Note ${globalCleanQuery} site:community.sap.com OR site:help.sap.com`, 5)
-      return results
-    }
-
-    // ── BAPI/FM questions: target SAP Help API docs ──────────────────────────
-    const isBapiQuestion = /\b(bapi|function module|rfc)\b/i.test(question)
-    if (isBapiQuestion) {
-      results = await runCSE(`${globalCleanQuery} site:help.sap.com OR site:community.sap.com`, 4)
-      return results
-    }
-
-    // ── EXIT/BAdI questions: target SAP Help enhancement docs ────────────────
-    const isExitQuestion = /\b(user exit|badi|enhancement spot|enhancement point)\b/i.test(question)
-    if (isExitQuestion) {
-      results = await runCSE(`${globalCleanQuery} enhancement site:help.sap.com OR site:community.sap.com`, 4)
-      return results
-    }
-
-    // ── DEFAULT: clean keyword query, multi-source SAP search ────────────────
-    // ── DEFAULT: parallel searches — targeted + open to catch community/blogs ─
-    const [helpResults, communityResults, blogResults, openResults] = await Promise.all([
-      runCSE(`${globalCleanQuery} site:help.sap.com`, 3),
-      runCSE(`${globalCleanQuery} site:community.sap.com`, 2),
-      runCSE(`${globalCleanQuery} site:blogs.sap.com`, 2),
-      runCSE(globalCleanQuery, 4),  // unrestricted — catches whatever CSE is configured for
-    ])
-
-    // Merge all, deduplicate by URL, prefer specific sources first
-    const seenUrls = new Set()
-    const allResults = [...helpResults, ...communityResults, ...blogResults, ...openResults]
-    results = allResults.filter(r => {
-      if (seenUrls.has(r.url)) return false
-      seenUrls.add(r.url)
-      return true
-    }).slice(0, 6)
-
-    console.log(`Google CSE — help:${helpResults.length} community:${communityResults.length} blogs:${blogResults.length} open:${openResults.length} total:${results.length}`)
-
-    // Always append search links for community + blogs if those sources have no results
-    // so the user always has a way to search those sources
-    const hasComm  = results.some(r => r.url.includes('community.sap.com'))
-    const hasBlog  = results.some(r => r.url.includes('blogs.sap.com'))
-    const rawTerms2 = globalCleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
-    const enc2 = encodeURIComponent(rawTerms2)
-    if (!hasComm) results.push({
-      title: `SAP Community: ${rawTerms2.slice(0, 55)}`,
-      url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${enc2}`,
-      snippet: 'Questions and answers from SAP consultants worldwide',
-      source: 'SAP Community',
-    })
-    if (!hasBlog) results.push({
-      title: `SAP Blogs: ${rawTerms2.slice(0, 60)}`,
-      url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&filter=location&location=category%3Aall-blogs&q=${enc2}`,
-      snippet: 'Expert blog posts from the SAP community',
-      source: 'SAP Blog',
-    })
-    if (!results.some(r => r.url.includes('help.sap.com'))) results.push({
-      title: `SAP Help: ${rawTerms2.slice(0, 60)}`,
-      url: `https://help.sap.com/docs/search?q=${enc2}`,
-      snippet: 'Official SAP documentation',
-      source: 'SAP Help',
-    })
-    if (results.length === 0) {
-      const rawTerms = globalCleanQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
-      const encoded = encodeURIComponent(rawTerms)
-      const encodedFull = encodeURIComponent(globalCleanQuery)
-      results = [
-        {
-          title: `SAP Help: ${rawTerms.slice(0, 60)}`,
-          url: `https://help.sap.com/docs/search?q=${encoded}&version=2023`,
-          snippet: 'Official SAP documentation, configuration guides and release notes',
-          source: 'SAP Help',
-        },
-        {
-          title: `SAP Community: ${rawTerms.slice(0, 60)}`,
-          url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${encoded}`,
-          snippet: 'Questions, answers and discussions from SAP consultants worldwide',
-          source: 'SAP Community',
-        },
-        {
-          title: `Google: ${rawTerms.slice(0, 60)} — SAP`,
-          url: `https://www.google.com/search?q=${encodedFull}+site%3Ahelp.sap.com+OR+site%3Acommunity.sap.com+OR+site%3Ablogs.sap.com`,
-          snippet: 'Search SAP Help, Community and Blogs via Google for the most relevant results',
-          source: 'Web',
-        },
-      ]
-      console.log('Google CSE fallback links generated for:', globalCleanQuery)
-    }
-    return results
-
-  } catch (err) {
-    console.error('Google CSE error:', err.message)
-    return []
-  }
-  console.log('Google CSE: search complete, results:', results?.length || 0)
-}
 
 // ── 5a. EXTRACT SAP NOTE NUMBERS from search results ─────────────────────────
 // Finds note numbers in titles and snippets, builds direct login links
@@ -1254,7 +1089,22 @@ export default async function handler(req, res) {
           })
         })
         const summData = await summRes.json()
-        const summary = summData.choices?.[0]?.message?.content?.trim() || ''
+        let summary = summData.choices?.[0]?.message?.content?.trim() || ''
+
+        // If Groq failed (429 or empty) — build a basic fallback summary
+        // from the last assistant message so memory save still works
+        if (!summary || summary.length < 20) {
+          const lastAssistant = (messages || []).slice().reverse().find(m => m.role === 'assistant')
+          const lastUser = (messages || []).slice().reverse().find(m => m.role === 'user')
+          if (lastAssistant && lastUser) {
+            summary = `Q: ${lastUser.content.slice(0, 100)}\nA: ${lastAssistant.content.slice(0, 300)}`
+          }
+        }
+
+        if (!summary || summary.length < 20) {
+          send({ type: 'error', error: 'Could not generate summary — please try again' })
+          return res.end()
+        }
 
         send({ type: 'save_to_memory_confirm', summary })
         return res.end()
