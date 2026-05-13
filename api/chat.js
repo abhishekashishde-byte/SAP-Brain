@@ -227,6 +227,11 @@ async function streamClaudeSonnet(systemPrompt, messages, onChunk, maxTokens) {
   return streamClaude('claude-sonnet-4-5', systemPrompt, messages, onChunk, maxTokens)
 }
 
+async function streamClaudeHaiku(systemPrompt, messages, onChunk) {
+  // claude-haiku-4-5: fast and cheap, paired with GPT-4o-mini
+  return streamClaude('claude-haiku-4-5-20251001', systemPrompt, messages, onChunk, 4000)
+}
+
 async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1267,25 +1272,43 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
 
     let modelUsed
     if (isComplexAbap || isCode) {
-      // Complex ABAP or any code → Claude Sonnet (8k sufficient for code analysis)
+      // Complex ABAP or any code → Claude Sonnet only (no dual — code analysis needs one clear answer)
       fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
       modelUsed = 'claude-sonnet'
       console.log('MODEL: Claude Sonnet (ABAP/code)')
     } else if (isComplexDeliverable) {
-      // FS, Tech Spec, Workshop PPT → Claude Sonnet with max tokens (17 sections needs space)
+      // FS, Tech Spec, Workshop PPT → Claude Sonnet only (deliverables need one complete document)
       fullAnswer = await streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
       modelUsed = 'claude-sonnet'
       console.log('MODEL: Claude Sonnet (deliverable, 16k tokens)')
     } else if (isSimpleQA) {
-      // Simple SAP Q&A → GPT-4o-mini (cheap, fast, good enough)
-      fullAnswer = await streamGPTMini(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      // Simple SAP Q&A → GPT-4o-mini + Claude Haiku in PARALLEL
+      send({ type: 'model_label', label: 'by GPT-4o mini' })
+      send({ type: 'dual_start', label: 'by Claude Haiku' })
       modelUsed = 'gpt4o-mini'
-      console.log('MODEL: GPT-4o-mini (simple Q&A)')
+      console.log('MODEL: GPT-4o-mini + Claude Haiku (parallel)')
+      const [miniAnswer] = await Promise.all([
+        streamGPTMini(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+          .catch(e => { console.error('Mini error:', e.message); return '' }),
+        streamClaudeHaiku(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }))
+          .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
+          .catch(e => { console.error('Haiku error:', e.message); return '' }),
+      ])
+      fullAnswer = miniAnswer
     } else {
-      // Everything else → GPT-4o (complex Q&A, error diagnosis, impact analysis, workshops)
-      fullAnswer = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+      // Complex Q&A → GPT-4o + Claude Sonnet in PARALLEL
+      send({ type: 'model_label', label: 'by GPT-4o' })
+      send({ type: 'dual_start', label: 'by Claude Sonnet' })
       modelUsed = 'gpt4o'
-      console.log('MODEL: GPT-4o (complex/default)')
+      console.log('MODEL: GPT-4o + Claude Sonnet (parallel)')
+      const [gptAnswer] = await Promise.all([
+        streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
+          .catch(e => { console.error('GPT error:', e.message); return '' }),
+        streamClaudeSonnet(systemPrompt, validMessages, chunk => send({ type: 'dual_chunk', text: chunk }), 4000)
+          .then(ans => { send({ type: 'dual_done', text: ans }); return ans })
+          .catch(e => { console.error('Sonnet error:', e.message); return '' }),
+      ])
+      fullAnswer = gptAnswer
     }
 
     // Deliverable type — stored on conversation for UI filtering
