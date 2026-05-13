@@ -89,6 +89,8 @@ Question: "${question.slice(0, 500)}"
     const isCorrectionRegex = /\b(actually|that('s| is) (wrong|incorrect|not right|not correct)|you('re| are) wrong|wrong answer|incorrect answer|that's not|this is not right|no,?\s+it (is|'s)|it should be|the correct|the right (answer|t-?code|table|path|tcode)|please (note|remember|correct)|i('m| am) correcting|let me correct|to clarify|to correct|actually it('s| is)|that is (incorrect|wrong|not))\b/i.test(question)
     const isCorrection = result.isCorrection === true || isCorrectionRegex
     const isFsKeyword    = /\b(functional spec|FS|create.*spec|write.*spec|generate.*spec|specification for)\b/i.test(question)
+    // FS edit detection — user wants to modify specific sections, not regenerate the whole FS
+    const isFsEdit = /\b(edit.*section|update.*section|change.*section|modify.*section|add.*section|section.*add|section.*change|section.*update|edit.*fs|update.*fs|change.*fs|modify.*fs|add.*to.*fs|fs.*add|revise.*section|section.*revise|in section|to section|the section)\b/i.test(question) && hasCodeInHistory
     const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
     const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
     const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop|presentation.*workshop)\b/i.test(question)
@@ -104,7 +106,8 @@ Question: "${question.slice(0, 500)}"
     // PROBLEM_ANALYSIS — intentionally NO hard regex override
     // Groq detects this from few-shot examples and intent description in the prompt
     // Regex would be too fragile and miss nuanced problem descriptions
-    if (isFsKeyword && !isCode && !isError)   { intent = 'FS_SPEC';       confidence = 0.95 }
+    if (isFsEdit && !isCode && !isError)       { intent = 'FS_EDIT';       confidence = 0.95 }
+    if (isFsKeyword && !isCode && !isError && intent !== 'FS_EDIT') { intent = 'FS_SPEC'; confidence = 0.95 }
     if (isTestKeyword && !isCode && !isError) { intent = 'TEST_CASES';    confidence = 0.95 }
     if (isFioriKeyword && !isCode && !isError){ intent = 'FIORI_REC';     confidence = 0.95 }
     if (isWorkshopPPT && !isCode && !isError) { intent = 'WORKSHOP_PPT';  confidence = 1.0  }
@@ -918,7 +921,7 @@ export default async function handler(req, res) {
     let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isConceptQuestion, isCode, isError, isBapiSearch, isExitSearch, isNoteSearch } = classification
 
     // Declare early — used in STEP 3, 4, and system prompt building
-    const isDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
+    const isDeliverable = ['FS_SPEC', 'FS_EDIT', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
 
     console.log('CLASSIFICATION:', JSON.stringify({
       q: lastMsg.slice(0, 60), intent, confidence, secondaryIntent, needsSearch,
@@ -1140,7 +1143,7 @@ export default async function handler(req, res) {
     }
 
     // ── OUTPUT LENGTH CONTROL — per intent ───────────────────────────────────
-    const LONG_INTENTS  = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
+    const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
     const SHORT_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','FIORI_REC'])
     if (SHORT_INTENTS.has(intent)) {
       systemPrompt += `\n\nOUTPUT LENGTH: Keep answers concise and direct. Do not pad with unnecessary sections.`
