@@ -233,6 +233,11 @@ async function streamClaudeHaiku(systemPrompt, messages, onChunk) {
 }
 
 async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
+  console.log('[CLAUDE] Starting call — model:', model, '| key present:', !!process.env.ANTHROPIC_API_KEY)
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('[CLAUDE] ERROR: ANTHROPIC_API_KEY not set')
+    throw new Error('ANTHROPIC_API_KEY not set in environment variables')
+  }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -1312,7 +1317,7 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
         send({ type: 'model_label', label: 'by GPT-4o' })
         send({ type: 'dual_start', label: 'by Claude Sonnet' })
         modelUsed = 'gpt4o'
-        console.log('MODEL: GPT-4o + Claude Sonnet (parallel)')
+        console.log('MODEL: GPT-4o + Claude Sonnet (parallel) — firing Promise.all now')
         const [gptAnswer] = await Promise.all([
           streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }))
             .catch(e => { console.error('GPT error:', e.message); return '' }),
