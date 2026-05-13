@@ -1094,6 +1094,9 @@ export default async function handler(req, res) {
       ? lastMsg  // keep as-is — full conversation history already has context
       : await rewriteQuestion(lastMsg, messages || [])
 
+    // allMessages declared here so it's available for search query building below
+    const allMessages = (messages || []).filter(m => m.role && m.content?.trim())
+
     // STEP 4 — Web search: OpenAI for content, Groq for clean query → supplemental pills
     // CSE removed — it returns 0 results consistently. OpenAI handles real link content.
     let searchResults = []
@@ -1175,7 +1178,7 @@ export default async function handler(req, res) {
     // ── TIERED CONTEXT WINDOW ─────────────────────────────────────────────────
     // Recent messages (last 4) sent in full, older messages summarised by Groq
     // Stored conversation is NEVER modified — user always sees full history
-    const allMessages = (messages || []).filter(m => m.role && m.content?.trim())
+    // NOTE: allMessages declared earlier (before search block) to avoid TDZ error
     const hasCodeInHistory = allMessages.slice(-12).some(m =>
       /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(m.content || '')
     )
