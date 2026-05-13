@@ -3,7 +3,7 @@ export default async function handler(req, res) {
   const { messages, module: mod, topic } = req.body
 
   const conversation = messages
-    .map(m => `${m.role === 'user' ? 'Consultant' : 'SAP Brain'}: ${m.content}`)
+    .map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}: ${m.content}`)
     .join('\n\n')
 
   const prompt = `Create a concise technical summary of this SAP ${mod} / ${topic} conversation.
@@ -27,7 +27,8 @@ Technical Summary:`
       }),
     })
     const data = await response.json()
-    const summary = data.choices?.[0]?.message?.content || 'Summary unavailable.'
+    const summary = data.choices?.[0]?.message?.content?.trim() || ''
+    if (!summary) return res.status(200).json({ summary: null })
     return res.status(200).json({ summary })
   } catch (err) {
     return res.status(500).json({ error: err.message })
