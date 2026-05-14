@@ -1023,12 +1023,12 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-        .wani-home-inner{max-width:1120px;margin:0 auto;padding:28px 34px 104px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;}
+        .wani-home-inner{max-width:1120px;margin:0 auto;padding:28px 34px 104px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;}
         .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-shrink:0;}
         .wani-hero h1{font-size:clamp(20px,3.1vw,30px);line-height:1.08;letter-spacing:-.8px;margin:0 0 5px;font-weight:800;}
         .wani-hero p{font-size:clamp(13px,1.5vw,16px);line-height:1.35;margin:0;font-weight:600;color:#6B7280;}
         .wani-sparkle{width:150px;height:82px;flex:0 0 150px;margin-top:0;}
-        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:14px;flex:1;min-height:0;}
+        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:1fr;gap:14px;flex:1;min-height:0;overflow:hidden;}
         .wani-tool-card{animation:exactTileIn .42s cubic-bezier(.16,1,.3,1) both;}
         .wani-tool-card:nth-child(1){animation-delay:.03s}.wani-tool-card:nth-child(2){animation-delay:.07s}.wani-tool-card:nth-child(3){animation-delay:.11s}
         .wani-tool-card:nth-child(4){animation-delay:.15s}.wani-tool-card:nth-child(5){animation-delay:.19s}.wani-tool-card:nth-child(6){animation-delay:.23s}
