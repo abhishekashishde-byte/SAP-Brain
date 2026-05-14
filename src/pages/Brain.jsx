@@ -2308,15 +2308,16 @@ export default function Brain({ session }) {
                           </div>
                         )}
                         <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
-                        {(dualStreaming || dualText) && (
-                          <div style={{ marginTop:16 }}>
-                            <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
-                              {dualLabel}
-                            </div>
-                            <MessageBubble msg={{role:'assistant',content:dualText}} isStreaming={dualStreaming} streamingText={dualStreaming ? dualText : ''} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
-                          </div>
-                        )}
                       </>
+                    ) : null}
+                    {/* Dual model bubble — rendered OUTSIDE isStreaming so it persists after GPT finishes */}
+                    {(dualStreaming || dualText) ? (
+                      <div style={{ marginTop:16 }}>
+                        <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
+                          {dualLabel}
+                        </div>
+                        <MessageBubble msg={{role:'assistant',content:dualText}} isStreaming={dualStreaming} streamingText={dualStreaming ? dualText : ''} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                      </div>
                     ) : null}
                     <div ref={bottomRef}/>
                   </>
