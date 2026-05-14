@@ -1289,6 +1289,7 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
     } else if (isSimpleQA) {
       // Only fire dual if message has real SAP content — not greetings or single words
       const isMeaningfulQuery = lastMsg.trim().split(/\s+/).length >= 4
+      console.log('[ROUTING] isSimpleQA=true, isMeaningfulQuery=', isMeaningfulQuery, 'words=', lastMsg.trim().split(/\s+/).length)
       if (isMeaningfulQuery) {
         // Simple SAP Q&A → GPT-4o-mini + Claude Haiku in PARALLEL
         send({ type: 'model_label', label: 'by GPT-4o mini' })
