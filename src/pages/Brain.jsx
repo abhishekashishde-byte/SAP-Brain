@@ -1209,6 +1209,8 @@ export default function Brain({ session }) {
   const [dualText, setDualText] = useState('')
   const [dualLabel, setDualLabel] = useState('')
   const [primaryLabel, setPrimaryLabel] = useState('')
+  const dualTextRef = useRef('')
+  const dualLabelRef = useRef('')
   const [messageCount, setMessageCount]   = useState(0)
   const [isUnlimited, setIsUnlimited]     = useState(false)
   const DAILY_LIMIT = 50
@@ -1612,6 +1614,8 @@ export default function Brain({ session }) {
     setDualText('')
     setDualLabel('')
     setPrimaryLabel('')
+    dualTextRef.current = ''
+    dualLabelRef.current = ''
 
     let convId = activeConvId
     let currentMod = activeConv?.module||browseModule
@@ -1685,9 +1689,12 @@ export default function Brain({ session }) {
               setPrimaryLabel(evt.label || '')
             } else if (evt.type === 'dual_start') {
               setDualLabel(evt.label || '')
+              dualLabelRef.current = evt.label || ''
               setDualStreaming(true)
               setDualText('')
+              dualTextRef.current = ''
             } else if (evt.type === 'dual_chunk') {
+              dualTextRef.current += evt.text
               setDualText(prev => prev + evt.text)
             } else if (evt.type === 'dual_done') {
               setDualStreaming(false)
@@ -1797,7 +1804,7 @@ export default function Brain({ session }) {
         content: replyContent,
         _model: modelUsed,
         ...(primaryLabel ? { _primaryLabel: primaryLabel } : {}),
-        ...(dualText ? { _dualText: dualText, _dualLabel: dualLabel } : {}),
+        ...(dualTextRef.current ? { _dualText: dualTextRef.current, _dualLabel: dualLabelRef.current } : {}),
         ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
         ...(deliverableType === 'FS_SPEC' && window.__lastFsText
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
