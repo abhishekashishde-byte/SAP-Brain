@@ -1609,6 +1609,9 @@ export default function Brain({ session }) {
     setAttachedCode(null)
     if (inputRef.current) inputRef.current.style.height = '24px'
     setIsLoading(true)
+    setDualText('')
+    setDualLabel('')
+    setPrimaryLabel('')
 
     let convId = activeConvId
     let currentMod = activeConv?.module||browseModule
@@ -1819,7 +1822,9 @@ export default function Brain({ session }) {
       checkForFindings(finalMsgs).catch(() => {})
 
     } catch(err) {
-      setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setDualText('');setDualLabel('');setPrimaryLabel('')
+      setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('')
+      // Note: dualText and dualLabel intentionally NOT cleared here
+      // They persist until next dual_start event so Claude answer stays visible
       const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:errMsgs}:c))
     }
