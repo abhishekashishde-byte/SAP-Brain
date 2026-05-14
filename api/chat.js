@@ -386,7 +386,7 @@ async function buildSAPSearchQuery(question, allMessages) {
       .trim()
 
     let input = ''
-    if (allMessages && allMessages.length > 1) {
+    if (allMessages && allMessages.filter(m => m.role === 'user').length > 0) {
       const stripped = allMessages
         .filter(m => m.role === 'user')
         .slice(0, 6)
@@ -1154,7 +1154,7 @@ export default async function handler(req, res) {
 
     // ── OUTPUT LENGTH CONTROL — per intent ───────────────────────────────────
     const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
-    const SHORT_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','FIORI_REC'])
+    const SHORT_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','FIORI_REC','GENERAL'])
     if (SHORT_INTENTS.has(intent)) {
       systemPrompt += `\n\nOUTPUT LENGTH: Keep answers concise and direct. Do not pad with unnecessary sections.`
     } else if (LONG_INTENTS.has(intent)) {
@@ -1264,7 +1264,7 @@ ${userMemories.map(m => `- ${m.content}`).join('\n')}`
 
     const isSimpleQA = !isCode && !hasCodeInHistory && (
       // Simple intents — always mini
-      ['CUSTOMIZING', 'PROCESS_QA', 'FIORI_REC', 'BAPI_SEARCH', 'EXIT_SEARCH'].includes(intent) ||
+      ['CUSTOMIZING', 'PROCESS_QA', 'FIORI_REC', 'BAPI_SEARCH', 'EXIT_SEARCH', 'GENERAL'].includes(intent) ||
       // SAP_QA with no search needed and no complexity signals
       (
         intent === 'SAP_QA' &&
