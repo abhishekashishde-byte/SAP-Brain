@@ -1817,6 +1817,11 @@ export default function Brain({ session }) {
       if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
       await updateConversation(convId, convUpdate)
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,updated_at:new Date().toISOString()}:c))
+      // Clear live dual bubble now that saved message has _dualText — prevents duplicate
+      dualTextRef.current = ''
+      dualLabelRef.current = ''
+      setDualText('')
+      setDualLabel('')
 
       if (currentMsgs.length===1) {
         fetch('/api/categorise',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:msgText }) })
@@ -2310,8 +2315,8 @@ export default function Brain({ session }) {
                         <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       </>
                     ) : null}
-                    {/* Dual model bubble — only show during/after active streaming session */}
-                    {(dualStreaming || dualText) && !isLoading && (isStreaming || dualStreaming || dualTextRef.current) ? (
+                    {/* Dual model bubble — only show while actively streaming */}
+                    {(dualStreaming || dualText) && !isLoading ? (
                       <div style={{ marginTop:16 }}>
                         <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
                           {dualLabel}
