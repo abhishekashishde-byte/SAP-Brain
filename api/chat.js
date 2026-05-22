@@ -238,6 +238,20 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
     console.error('[CLAUDE] ERROR: ANTHROPIC_API_KEY not set')
     throw new Error('ANTHROPIC_API_KEY not set in environment variables')
   }
+
+  // Haiku 4.5 has extended thinking enabled by default — disable it explicitly.
+  // Thinking tokens silently consume the token budget first, and thinking_delta events
+  // carry json.delta.thinking (not .text), so the old parser returned empty strings.
+  const isHaiku = model.includes('haiku')
+  const requestBody = {
+    model,
+    max_tokens: maxTokens || (model.includes('sonnet') ? 8000 : 4000),
+    system: systemPrompt,
+    messages,
+    stream: true,
+    ...(isHaiku && { thinking: { type: 'disabled' } }),
+  }
+
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -245,13 +259,7 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens || (model.includes('sonnet') ? 8000 : 2048),
-      system: systemPrompt,
-      messages,
-      stream: true,
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   if (!res.ok) {
@@ -277,12 +285,17 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
       try {
         const json = JSON.parse(data)
         if (json.type === 'content_block_delta') {
-          const text = json.delta?.text || ''
+          // delta.type is 'text_delta' for normal text, 'thinking_delta' for reasoning tokens.
+          // Only forward text_delta — thinking content should never surface in the UI.
+          const deltaType = json.delta?.type
+          const text = deltaType === 'text_delta' ? (json.delta?.text || '') : ''
           if (text) { fullText += text; onChunk(text) }
         }
       } catch { }
     }
   }
+
+  console.log('[CLAUDE] Stream complete — model:', model, '| chars returned:', fullText.length)
   return fullText
 }
 
