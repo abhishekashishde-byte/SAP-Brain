@@ -239,19 +239,10 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
     throw new Error('ANTHROPIC_API_KEY not set in environment variables')
   }
 
-  // Haiku 4.5 has extended thinking enabled by default — disable it explicitly.
-  // Thinking tokens silently consume the token budget first, and thinking_delta events
-  // carry json.delta.thinking (not .text), so the old parser returned empty strings.
-  const isHaiku = model.includes('haiku')
-  const requestBody = {
-    model,
-    max_tokens: maxTokens || (model.includes('sonnet') ? 8000 : 4000),
-    system: systemPrompt,
-    messages,
-    stream: true,
-    ...(isHaiku && { thinking: { type: 'disabled' } }),
-  }
-
+  // Build request — do NOT include the thinking parameter at all.
+  // Passing thinking:{type:'disabled'} is not a valid Anthropic value and may be rejected.
+  // Extended thinking on Haiku 4.5 emits thinking_delta events (json.delta.thinking not .text).
+  // The parser below handles both text_delta and thinking_delta correctly.
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -259,7 +250,13 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens || (model.includes('sonnet') ? 8000 : 4000),
+      system: systemPrompt,
+      messages,
+      stream: true,
+    }),
   })
 
   if (!res.ok) {
@@ -270,7 +267,7 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
-  let buffer = '', fullText = ''
+  let buffer = '', fullText = '', eventCount = 0
 
   while (true) {
     const { done, value } = await reader.read()
@@ -284,18 +281,23 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens) {
       if (data === '[DONE]') continue
       try {
         const json = JSON.parse(data)
+        eventCount++
+        // Log first 3 events to diagnose delta structure without flooding logs
+        if (eventCount <= 3) console.log('[CLAUDE] SSE event', eventCount, JSON.stringify(json).slice(0, 150))
         if (json.type === 'content_block_delta') {
           // delta.type is 'text_delta' for normal text, 'thinking_delta' for reasoning tokens.
           // Only forward text_delta — thinking content should never surface in the UI.
           const deltaType = json.delta?.type
-          const text = deltaType === 'text_delta' ? (json.delta?.text || '') : ''
+          const text = deltaType === 'text_delta' ? (json.delta?.text || '')
+                     : (deltaType == null)         ? (json.delta?.text || '')  // older API format fallback
+                     : ''
           if (text) { fullText += text; onChunk(text) }
         }
       } catch { }
     }
   }
 
-  console.log('[CLAUDE] Stream complete — model:', model, '| chars returned:', fullText.length)
+  console.log('[CLAUDE] Stream complete — model:', model, '| chars returned:', fullText.length, '| total events:', eventCount)
   return fullText
 }
 
