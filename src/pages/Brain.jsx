@@ -1228,6 +1228,16 @@ export default function Brain({ session }) {
   const [isMobile, setIsMobile]           = useState(isMobileWidth())
   const [showExport, setShowExport]       = useState(false)
 
+  // ── DOC WIZARD STATE ──────────────────────────────────────────────────────
+  const [docWizardStage, setDocWizardStage] = useState(null)   // null | 'awaiting_confirm' | 'confirmed' | 'gathering' | 'generate'
+  const [docWizardIntent, setDocWizardIntent] = useState(null) // 'FS_SPEC' | 'WORKSHOP_PPT' etc.
+
+  // ── ADMIN DEBUG PANEL ─────────────────────────────────────────────────────
+  const [debugData, setDebugData]         = useState(null)
+  const [showDebug, setShowDebug]         = useState(false)
+  const ADMIN_EMAILS = [import.meta.env.VITE_ADMIN_EMAIL_1, import.meta.env.VITE_ADMIN_EMAIL_2].filter(Boolean)
+  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email || '')
+
   // Document upload state
   const [uploadedDoc, setUploadedDoc]         = useState(null) // { name, content, type, docType }
   const [docUploading, setDocUploading]       = useState(false)
@@ -1642,7 +1652,7 @@ export default function Brain({ session }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null }),
+        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
       })
 
       if (!res.ok) throw new Error('Network error')
@@ -1705,6 +1715,17 @@ export default function Brain({ session }) {
             } else if (evt.type === 'further_reading') {
               furtherReadingLinks = evt.links || []
             } else if (evt.type === 'done') {
+                              // Handle doc wizard stage transitions
+                              if (evt.docWizardStage) {
+                                setDocWizardStage(evt.docWizardStage)
+                                if (evt.docIntent) setDocWizardIntent(evt.docIntent)
+                              } else if (evt.docWizardStage === null) {
+                                setDocWizardStage(null)
+                                setDocWizardIntent(null)
+                              }
+                              // If user confirmed doc wizard → move to gathering stage
+                              if (docWizardStage === 'awaiting_confirm') setDocWizardStage('confirmed')
+                              if (docWizardStage === 'gathering') setDocWizardStage('generate')
               // For FS/PPT: always use evt.full (the clean card) — never accumulated raw content
               fullReply = evt.full || (
                 (evt.fsComplete || evt.pptComplete) ? '' : accumulated
@@ -1782,7 +1803,9 @@ export default function Brain({ session }) {
                   }
                 } catch (e) { console.error('PPT generation failed:', e) }
               }
-            } else if (evt.type === 'error') {
+            } else if (evt.type === 'debug_info') {
+                              if (isAdmin) setDebugData(evt.data)
+                            } else if (evt.type === 'error') {
               throw new Error(evt.error)
             }
           } catch {}
@@ -2478,6 +2501,91 @@ export default function Brain({ session }) {
 
       {showProfile&&<ProfileModal session={session} profile={profile} t={t} onClose={()=>setShowProfile(false)} onSave={async(u)=>{await upsertProfile(session.user.id,u);setProfile(p=>({...p,...u}))}} onSignOut={signOut}/>}
       {showExport&&<ExportModal conversation={activeConv} messages={messages} t={t} dark={dark} onClose={()=>setShowExport(false)}/>}
+
+      {/* ── ADMIN DEBUG PANEL — only visible to admin emails ── */}
+      {isAdmin && debugData && (
+        <div style={{ position:'fixed', bottom:16, right:16, zIndex:300 }}>
+          <button onClick={()=>setShowDebug(p=>!p)}
+            style={{ background:'#1a1a2e', border:'1px solid #4F46E5', borderRadius:10, padding:'6px 12px', color:'#a5b4fc', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:"'Inter',sans-serif", letterSpacing:0.5 }}>
+            {showDebug ? '✕ Debug' : '🔍 Debug'}
+          </button>
+          {showDebug && (
+            <div style={{ position:'absolute', bottom:36, right:0, width:380, maxHeight:'70vh', overflowY:'auto', background:'#0D0D1A', border:'1px solid #2A2440', borderRadius:14, padding:16, boxShadow:'0 8px 32px rgba(0,0,0,0.6)', fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:'#a5b4fc' }}>
+              <div style={{ fontWeight:700, color:'#818cf8', marginBottom:10, fontSize:12 }}>🔍 Wani Debug Panel</div>
+
+              {/* Intent */}
+              <div style={{ marginBottom:8 }}>
+                <span style={{ color:'#6366f1' }}>Intent: </span>
+                <span style={{ color:'#e2e8f0' }}>{debugData.intent}</span>
+                <span style={{ color:'#475569', marginLeft:8 }}>({(debugData.confidence*100).toFixed(0)}%)</span>
+              </div>
+
+              {/* Routing */}
+              <div style={{ marginBottom:8 }}>
+                <span style={{ color:'#6366f1' }}>Routing: </span>
+                <span style={{ color:'#fbbf24' }}>{debugData.routing}</span>
+              </div>
+
+              {/* Module */}
+              {debugData.detectedModule && (
+                <div style={{ marginBottom:8 }}>
+                  <span style={{ color:'#6366f1' }}>Module: </span>
+                  <span style={{ color:'#34d399' }}>{debugData.detectedModule}</span>
+                </div>
+              )}
+
+              {/* Search query */}
+              {debugData.searchQuery && (
+                <div style={{ marginBottom:8 }}>
+                  <span style={{ color:'#6366f1' }}>Search query: </span>
+                  <span style={{ color:'#e2e8f0' }}>"{debugData.searchQuery}"</span>
+                </div>
+              )}
+
+              {/* Sources */}
+              <div style={{ marginBottom:8, display:'flex', gap:12, flexWrap:'wrap' }}>
+                <span><span style={{ color:'#6366f1' }}>Book chunks: </span><span style={{ color: debugData.bookChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.bookChunks}</span></span>
+                <span><span style={{ color:'#6366f1' }}>Tavily: </span><span style={{ color: debugData.tavilyFiltered > 0 ? '#34d399' : '#ef4444' }}>{debugData.tavilyFiltered}/{debugData.tavilyRaw}</span></span>
+                <span><span style={{ color:'#6366f1' }}>OpenAI: </span><span style={{ color: debugData.openAISources > 0 ? '#34d399' : '#ef4444' }}>{debugData.openAISources}</span></span>
+                <span><span style={{ color:'#6366f1' }}>Knowledge: </span><span style={{ color: debugData.knowledgeChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.knowledgeChunks}</span></span>
+              </div>
+
+              {/* Conversation compression */}
+              <div style={{ marginBottom:8 }}>
+                <span style={{ color:'#6366f1' }}>Compressed: </span>
+                <span style={{ color: debugData.conversationCompressed ? '#34d399' : '#94a3b8' }}>{debugData.conversationCompressed ? `Yes (${debugData.summaryLength} chars)` : 'No'}</span>
+              </div>
+
+              {/* Timing */}
+              {debugData.timing && (
+                <div style={{ marginBottom:8, borderTop:'1px solid #2A2440', paddingTop:8 }}>
+                  <div style={{ color:'#6366f1', marginBottom:4 }}>Timing:</div>
+                  <div style={{ color:'#94a3b8', paddingLeft:8 }}>
+                    {debugData.timing.parallelMs && <div>Parallel fetch: {debugData.timing.parallelMs}ms</div>}
+                    {debugData.timing.modelsMs && <div>Models: {debugData.timing.modelsMs}ms</div>}
+                    {debugData.timing.synthesisMs && <div>Synthesis: {debugData.timing.synthesisMs}ms</div>}
+                    <div style={{ color:'#fbbf24', fontWeight:700 }}>Total: {debugData.timing.totalMs}ms</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Raw answers */}
+              {debugData.rawAnswers?.gpt && (
+                <div style={{ borderTop:'1px solid #2A2440', paddingTop:8, marginTop:4 }}>
+                  <div style={{ color:'#6366f1', marginBottom:4 }}>GPT-4o raw (first 300):</div>
+                  <div style={{ color:'#94a3b8', fontSize:10, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{debugData.rawAnswers.gpt.slice(0,300)}...</div>
+                </div>
+              )}
+              {debugData.rawAnswers?.claude && (
+                <div style={{ borderTop:'1px solid #2A2440', paddingTop:8, marginTop:4 }}>
+                  <div style={{ color:'#6366f1', marginBottom:4 }}>Claude raw (first 300):</div>
+                  <div style={{ color:'#94a3b8', fontSize:10, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{debugData.rawAnswers.claude.slice(0,300)}...</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Capability Discovery Panel */}
       {showCapabilities && (
