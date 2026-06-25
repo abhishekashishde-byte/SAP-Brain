@@ -1232,8 +1232,9 @@ export default async function handler(req, res) {
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (deliverable)'
 
-    } else if (isMeaningfulQuery && intent !== 'GENERAL') {
-      // SAP Q&A + BAPI/FM questions → GPT-4o + Claude Haiku → GPT-4o mini synthesises
+    } else if (isMeaningfulQuery) {
+      // ALL meaningful messages → GPT-4o + Claude Haiku → GPT-4o mini synthesises
+      // No exceptions by intent — follow-ups and short SAP questions need full synthesis too
       modelUsed = 'synthesised'
       debugLog.routing = 'gpt4o + haiku → mini synthesis'
 
