@@ -78,7 +78,9 @@ Question: "${question.slice(0, 500)}"
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
     const result = JSON.parse(raw.replace(/```json|```/g, '').trim())
 
-    const isCode  = result.isCode  === true || /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question)
+    // isCode should not trigger on 'function module' questions — those are Q&A not code
+    const hasFmPhrase = /\b(function module|bapi|rfc module)\b/i.test(question)
+    const isCode  = result.isCode  === true || (!hasFmPhrase && /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question))
     const isError = result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question)
     const isCorrectionRegex = /\b(actually|that('s| is) (wrong|incorrect|not right)|you('re| are) wrong|wrong answer|incorrect answer|it should be|the correct|please (note|correct)|i('m| am) correcting)\b/i.test(question)
     const isCorrection = result.isCorrection === true || isCorrectionRegex
@@ -94,7 +96,7 @@ Question: "${question.slice(0, 500)}"
     const isNewFeature   = /\b(2024|2025|2026|S\/4HANA 2|latest|new in|what changed|release note)\b/i.test(question)
     const isTroubleshoot = /\b(not working|doesn't work|missing|error|wrong|incorrect|failed|why is|why does|not found|not appearing|problem|issue)\b/i.test(question)
     const isVersionSpecific = /\b(s\/4hana \d|ecc|r\/3|vs\.|versus|difference between.*version|upgrade|migration)\b/i.test(question)
-    const isBapiSearch   = /\b(bapi|function module|rfc|which.*bapi|bapi.*for)\b/i.test(question)
+    const isBapiSearch   = /\b(bapi|function module|fm|rfc|which.*bapi|bapi.*for|function.*module|module.*function)\b/i.test(question)
     const isExitSearch   = /\b(user exit|badi|enhancement spot|which.*exit|exit.*for)\b/i.test(question)
 
     // User confirming or answering doc wizard
@@ -105,7 +107,7 @@ Question: "${question.slice(0, 500)}"
     let confidence = typeof result.confidence === 'number' ? result.confidence : 0.7
     let secondaryIntent = result.secondaryIntent || null
 
-    if (isCode)           { intent = 'CODE_ANALYSIS';   confidence = 1.0 }
+    if (isCode && !hasFmPhrase) { intent = 'CODE_ANALYSIS';   confidence = 1.0 }
     if (isError)          { intent = 'ERROR_ANALYSIS';   confidence = 1.0 }
     if (isFsKeyword && !isCode && !isError)    { intent = 'FS_SPEC';        confidence = 0.95 }
     if (isTestKeyword && !isCode && !isError)  { intent = 'TEST_CASES';     confidence = 0.95 }
@@ -146,7 +148,7 @@ Question: "${question.slice(0, 500)}"
 function detectModule(question, intent) {
   const q = question.toUpperCase()
   const modulePatterns = [
-    { module: 'PM', patterns: ['PM ', 'PLANT MAINT', 'MAINTENANCE ORDER', 'IW31', 'IW32', 'IW33', 'IP10', 'IP11', 'EQUI', 'IFLOT', 'MPLA', 'STRATEGY GROUP', 'MAINTENANCE PLAN', 'FUNCTIONAL LOCATION', 'EQUIPMENT MASTER'] },
+    { module: 'PM', patterns: ['PM ', 'PLANT MAINT', 'MAINTENANCE ORDER', 'IW31', 'IW32', 'IW33', 'IP10', 'IP11', 'EQUI', 'IFLOT', 'MPLA', 'STRATEGY GROUP', 'MAINTENANCE PLAN', 'FUNCTIONAL LOCATION', 'EQUIPMENT MASTER', 'MEASUREM', 'MEASUR', 'MEASUREMENT POINT', 'COUNTER READING', 'IMRG', 'IMRC', 'IMPT', 'IK01', 'IK11', 'IK21', 'PYEAR'] },
     { module: 'PP', patterns: ['PP ', 'PRODUCTION', 'CO01', 'CO02', 'CO03', 'MD01', 'MD04', 'PRODUCTION ORDER', 'PLANNED ORDER', 'BOM', 'ROUTING', 'WORK CENTER', 'MRP', 'PRODUCTION VERSION'] },
     { module: 'MM', patterns: ['MM ', 'MATERIAL', 'MM01', 'MM02', 'ME21N', 'ME51N', 'MIGO', 'PURCHASE ORDER', 'GOODS RECEIPT', 'MATERIAL MASTER', 'VENDOR', 'PURCHASING'] },
     { module: 'SD', patterns: ['SD ', 'SALES', 'VA01', 'VA02', 'VF01', 'VL01N', 'SALES ORDER', 'DELIVERY', 'BILLING', 'CUSTOMER ORDER'] },
