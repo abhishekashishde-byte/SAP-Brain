@@ -243,7 +243,7 @@ Conversation context: ${conversationSummary || 'No previous context'}`
 }
 
 // ── 5. TAVILY SEARCH — SAP-targeted ──────────────────────────────────────────
-async function tavilySearch(searchQuery) {
+async function tavilySearch(searchQuery, intent) {
   try {
     const key = process.env.TAVILY_API_KEY
     if (!key) { console.error('[TAVILY] No API key'); return [] }
@@ -1070,7 +1070,7 @@ export default async function handler(req, res) {
 
     if (!isCode && !isDeliverable && needsSearch) {
       // We need the rewritten query for Tavily, so chain after searchQueryPromise
-      tavilyResultsPromise = searchQueryPromise.then(q => tavilySearch(q).catch(() => []))
+      tavilyResultsPromise = searchQueryPromise.then(q => tavilySearch(q, intent).catch(() => []))
       openAIResultPromise  = callOpenAISearch(lastMsg).catch(() => null)
     }
 
