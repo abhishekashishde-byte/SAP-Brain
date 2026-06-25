@@ -1050,8 +1050,8 @@ export default async function handler(req, res) {
     const t1 = Date.now()
 
     // 5a. Book RAG — always fires for SAP Q&A intents, skip for code/deliverables
-    const SAP_QA_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','PROBLEM_ANALYSIS','CUSTOMIZING','BEST_PRACTICES','FIORI_REC'])
-    const bookRagPromise = (!isCode && !isDeliverable && SAP_QA_INTENTS.has(intent))
+    const SAP_QA_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','PROBLEM_ANALYSIS','CUSTOMIZING','BEST_PRACTICES','FIORI_REC','CODE_ANALYSIS'])
+    const bookRagPromise = (!isDeliverable && (SAP_QA_INTENTS.has(intent) || isBapiSearch || isExitSearch))
       ? fetchBookChunks(lastMsg, detectedModule, userToken).catch(() => [])
       : Promise.resolve([])
 
@@ -1226,20 +1226,27 @@ export default async function handler(req, res) {
 
     // ── STEP 8: MODEL ROUTING ──────────────────────────────────────────────
     //
-    // CODE / ABAP               → Claude Sonnet only
-    // Deliverables (FS/PPT)     → Claude Sonnet only
-    // All SAP Q&A               → GPT-4o + Claude Sonnet parallel → GPT-4o mini synthesises
+    // Real ABAP code pasted    → Claude Sonnet only
+    // Deliverables (FS/PPT)    → Claude Sonnet only
+    // BAPI/FM name questions   → Q&A path (Groq misclassifies as CODE_ANALYSIS)
+    // All SAP Q&A              → GPT-4o + Claude Haiku parallel → GPT-4o mini synthesises
     //
 
-    const isComplexAbap = isCode && (
+    // BAPI/FM question override — names like MEASUREM_POINT_UPD_PYEAR look like
+    // code to Groq but are SAP Q&A questions. Override isCode when no code was actually pasted.
+    const isBapiFmQuestion = isBapiSearch || isExitSearch ||
+      (/\b(function module|bapi|rfc|user exit|badi|enhancement spot)\b/i.test(lastMsg) && !body.attachedCode)
+    const isRealCode = isCode && !isBapiFmQuestion
+
+    const isComplexAbap = isRealCode && (
       /\b(CLASS|INTERFACE|BADI|ENHANCEMENT|METHOD\s+\w+|CALL METHOD)\b/i.test(systemPrompt) ||
       /\b(risk|vulnerabilit|impact|performance|optimi[sz]e)\b/i.test(lastMsg)
     )
     const isComplexDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
     const isMeaningfulQuery = lastMsg.trim().split(/\s+/).length >= 4
 
-    if (isCode || isComplexAbap) {
-      // ABAP / code → Claude Sonnet only
+    if (isRealCode || isComplexAbap) {
+      // Real ABAP code pasted → Claude Sonnet only
       send({ type: 'model_label', label: 'by Claude Sonnet' })
       fullAnswer = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
       modelUsed = 'claude-sonnet'
@@ -1253,9 +1260,9 @@ export default async function handler(req, res) {
       debugLog.routing = 'claude-sonnet (deliverable)'
 
     } else if (isMeaningfulQuery) {
-      // All SAP Q&A → GPT-4o + Claude Sonnet parallel → GPT-4o mini synthesises
+      // SAP Q&A + BAPI/FM questions → GPT-4o + Claude Haiku → GPT-4o mini synthesises
       modelUsed = 'synthesised'
-      debugLog.routing = 'gpt4o + sonnet → mini synthesis'
+      debugLog.routing = 'gpt4o + haiku → mini synthesis'
 
       let gptAnswer    = ''
       let claudeAnswer = ''
@@ -1284,7 +1291,6 @@ export default async function handler(req, res) {
         fullAnswer = '⚠️ Both models failed — please try again.'
       } else if (!claudeAnswer || !gptAnswer) {
         fullAnswer = gptAnswer || claudeAnswer
-        // Stream the fallback answer
         for (const chunk of fullAnswer.split(' ')) {
           send({ type: 'chunk', text: chunk + ' ' })
         }
