@@ -122,7 +122,7 @@ Question: "${question.slice(0, 500)}"
 
     const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
       || isNoteSearch || isErrorSearch || isNewFeature || isTroubleshoot || isVersionSpecific
-      || intent === 'PROBLEM_ANALYSIS'
+      || intent === 'PROBLEM_ANALYSIS' || isBapiSearch || isExitSearch
 
     return {
       intent, confidence, secondaryIntent,
@@ -254,7 +254,7 @@ async function tavilySearch(searchQuery) {
       body: JSON.stringify({
         api_key: key,
         query: searchQuery,
-        search_depth: 'advanced',
+        search_depth: (intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') ? 'advanced' : 'basic',
         max_results: 7,
         include_domains: [
           'community.sap.com',
@@ -414,7 +414,8 @@ MERGING RULES — follow strictly:
 7. Do NOT mention that two models were used. Write as one expert voice.
 8. Preserve all formatting (markdown, bold, tables, bullet points) from the better-formatted answer.
 9. Preserve follow-up questions (💡 You may also ask) from Answer A if present.
-10. Preserve 📌 Summary from Answer A if present.`
+10. Preserve 📌 Summary from Answer A if present.
+11. CRITICAL — CITATIONS: If either answer contains citations like (PM Maintenance Planning, p.45) or [1] [2] source references — ALWAYS preserve them exactly. Never drop a citation. They are the most important part of the answer for verification.`
         }, {
           role: 'user',
           content: `SAP Question: "${originalQuestion}"
@@ -1265,7 +1266,7 @@ export default async function handler(req, res) {
       const [gptResult, claudeResult] = await Promise.all([
         streamGPT(systemPrompt, validMessages, null, 'gpt-4o', 4096)
           .catch(e => { console.error('[GPT-4o] Error:', e.message); return '' }),
-        streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, null, 4000)
+        streamClaude('claude-haiku-4-5-20251001', systemPrompt, validMessages, null, 4000)
           .catch(e => { console.error('[Claude] Error:', e.message); return '' }),
       ])
 
@@ -1452,6 +1453,18 @@ export default async function handler(req, res) {
       isUnlimited: UNLIMITED_EMAILS.includes(userEmail || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
+      sourceInfo: {
+        intent,
+        routing:        debugLog.routing      || modelUsed,
+        bookChunks:     debugLog.bookChunks   || 0,
+        bookSources:    (bookChunks || []).map(c => `${c.source_book}, p.${c.page_number}`),
+        tavilyRaw:      debugLog.tavilyRaw    || 0,
+        tavilyFiltered: debugLog.tavilyFiltered || 0,
+        openAISources:  debugLog.openAISources || 0,
+        needsSearch,
+        detectedModule: debugLog.detectedModule || null,
+        totalMs:        debugLog.totalMs       || null,
+      },
     })
 
   } catch (err) {
