@@ -122,9 +122,10 @@ Question: "${question.slice(0, 500)}"
       secondaryIntent = null
     }
 
-    const needsSearch = result.needsSearch === true || intent === 'FIORI_REC' || isFioriKeyword
-      || isNoteSearch || isErrorSearch || isNewFeature || isTroubleshoot || isVersionSpecific
-      || intent === 'PROBLEM_ANALYSIS' || isBapiSearch || isExitSearch
+    // Tavily fires by default for all SAP questions
+    // Only skip for pure conversational messages and memory saves
+    const isNonSAPMessage = intent === 'GENERAL' && !isBapiSearch && !isExitSearch && !isNoteSearch
+    const needsSearch = !isNonSAPMessage && intent !== 'SAVE_TO_MEMORY'
 
     return {
       intent, confidence, secondaryIntent,
@@ -163,53 +164,11 @@ function detectModule(question, intent) {
   return null
 }
 
-// ── 3. CONVERSATION COMPRESSION — rolling summary ────────────────────────────
-// Compresses older messages into a dense summary so Wani never forgets context
-async function compressConversationHistory(allMessages) {
-  if (allMessages.length <= 6) return { recentMsgs: allMessages, summary: '' }
-
-  const recentMsgs = allMessages.slice(-6)
-  const olderMsgs  = allMessages.slice(0, -6)
-
-  if (olderMsgs.length === 0) return { recentMsgs, summary: '' }
-
-  try {
-    const olderText = olderMsgs
-      .map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}: ${m.content.slice(0, 400)}`)
-      .join('\n')
-
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: 300,
-        temperature: 0,
-        messages: [{
-          role: 'system',
-          content: `You compress SAP consultant conversations into a dense context summary.
-Rules:
-- Keep ALL: T-codes mentioned, table names, module names, decisions made, problems identified, specific field names, configuration paths, any numbers or IDs
-- Keep ALL: the main topic and how it evolved across the conversation
-- Keep ALL: any corrections made (what was wrong, what is correct)
-- Discard: greetings, filler phrases, questions that were fully answered and don't need context
-- Format: 3-5 dense sentences, not bullet points
-- This summary will be injected into every future prompt so Wani remembers the full conversation`
-        }, {
-          role: 'user',
-          content: `Compress this SAP conversation history:\n\n${olderText}`
-        }]
-      })
-    })
-    const data = await res.json()
-    const summary = data.choices?.[0]?.message?.content?.trim() || ''
-    console.log('[COMPRESS] Compressed', olderMsgs.length, 'messages into summary:', summary.slice(0, 100))
-    return { recentMsgs, summary }
-  } catch (e) {
-    console.error('[COMPRESS] Error:', e.message)
-    // Fallback: keep more recent messages
-    return { recentMsgs: allMessages.slice(-8), summary: '' }
-  }
+// ── 3. CONVERSATION CONTEXT — keep last 12 messages, no compression ──────────
+// Compression removed — was causing context loss and wrong answers
+function getConversationContext(allMessages) {
+  const recentMsgs = allMessages.slice(-12)
+  return { recentMsgs, summary: '' }
 }
 
 // ── 4. QUERY REWRITING for search — context-aware ────────────────────────────
@@ -1049,11 +1008,9 @@ export default async function handler(req, res) {
 
     // ── STEP 3: Conversation compression (rolling summary) ─────────────────
     const allMessages = (messages || []).filter(m => m.role && m.content?.trim())
-    const { recentMsgs, summary: conversationSummary } = await compressConversationHistory(allMessages)
+    const { recentMsgs, summary: conversationSummary } = getConversationContext(allMessages)
 
-    debugLog.conversationCompressed = allMessages.length > 6
-    debugLog.summaryLength = conversationSummary.length
-
+    
     // ── STEP 4: Detect module for RAG filtering ────────────────────────────
     const detectedModule = detectModule(lastMsg + ' ' + (conversationSummary || ''), intent)
     debugLog.detectedModule = detectedModule
@@ -1069,7 +1026,7 @@ export default async function handler(req, res) {
       : Promise.resolve([])
 
     // 5b. Search query rewrite (context-aware, uses summary)
-    const searchQueryPromise = (!isCode && !isDeliverable && needsSearch)
+    const searchQueryPromise = (!isDeliverable && needsSearch)
       ? rewriteForSearch(lastMsg, conversationSummary).catch(() => lastMsg)
       : Promise.resolve(lastMsg)
 
@@ -1081,10 +1038,13 @@ export default async function handler(req, res) {
     let tavilyResultsPromise  = Promise.resolve([])
     let openAIResultPromise   = Promise.resolve(null)
 
-    if (!isCode && !isDeliverable && needsSearch) {
-      // We need the rewritten query for Tavily, so chain after searchQueryPromise
+    if (!isDeliverable && needsSearch) {
+      // Tavily fires by default for all SAP questions
       tavilyResultsPromise = searchQueryPromise.then(q => tavilySearch(q, intent).catch(() => []))
-      openAIResultPromise  = callOpenAISearch(lastMsg).catch(() => null)
+      // OpenAI search fires for complex questions and error/note lookups
+      if (isNoteSearch || isErrorSearch || intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') {
+        openAIResultPromise = callOpenAISearch(lastMsg).catch(() => null)
+      }
     }
 
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
@@ -1272,7 +1232,7 @@ export default async function handler(req, res) {
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (deliverable)'
 
-    } else if (isMeaningfulQuery) {
+    } else if (isMeaningfulQuery && intent !== 'GENERAL') {
       // SAP Q&A + BAPI/FM questions → GPT-4o + Claude Haiku → GPT-4o mini synthesises
       modelUsed = 'synthesised'
       debugLog.routing = 'gpt4o + haiku → mini synthesis'
