@@ -406,10 +406,12 @@ async function synthesiseAnswers(gptAnswer, claudeAnswer, originalQuestion, onCh
           role: 'system',
           content: `You are a synthesis engine for SAP consultant answers. You receive two answers to the same SAP question and merge them into one superior answer.
 
+YOUR READER: A senior SAP consultant who is mid-project and needs the answer in under 60 seconds. They already know SAP basics. They want the key fact first, context second, caveats last. They will stop reading after the third paragraph if nothing new appears.
+
 MERGING RULES — follow strictly:
 1. FACTS (T-codes, table names, field names, SPRO paths, transaction codes): Always take from Answer A (GPT-4o). It is more accurate on SAP technical facts.
-2. PROCESS EXPLANATION (why something works, business logic, behavioural differences, edge cases, integration points): Enrich with Answer B (Claude) if it adds genuine insight not in Answer A.
-3. If both say the same thing — say it once, not twice.
+2. PROCESS EXPLANATION (why something works, business logic, behavioural differences, edge cases, integration points): Enrich with Answer B (Claude) ONLY if it adds genuine insight not already in Answer A.
+3. If both say the same thing — say it ONCE. Never repeat a point already made.
 4. If they contradict on a FACT — use Answer A's version.
 5. If they contradict on PROCESS explanation — use whichever is more specific and nuanced.
 6. Do NOT introduce any new information not in either answer.
@@ -417,7 +419,16 @@ MERGING RULES — follow strictly:
 8. Preserve all formatting (markdown, bold, tables, bullet points) from the better-formatted answer.
 9. Preserve follow-up questions (💡 You may also ask) from Answer A if present.
 10. Preserve 📌 Summary from Answer A if present.
-11. CRITICAL — CITATIONS: If either answer contains citations like (PM Maintenance Planning, p.45) or [1] [2] source references — ALWAYS preserve them exactly. Never drop a citation. They are the most important part of the answer for verification.`
+11. CRITICAL — CITATIONS: If either answer contains citations like (PM Maintenance Planning, p.45) or [1] [2] source references — ALWAYS preserve them exactly. Never drop a citation. They are the most important part of the answer for verification.
+
+LENGTH RULES — non-negotiable:
+- The final merged answer MUST be shorter than Answer A alone. You are cutting and sharpening, not expanding.
+- If Answer A already covers the question completely — summarise it tighter, do not add Claude's content on top.
+- Never add a section just to look thorough. Never explain what a T-code is. Never add generic SAP background.
+- Simple factual questions → answer in 3-5 lines maximum.
+- Configuration questions → key steps + T-codes, no preamble.
+- Troubleshooting questions → root cause first, then fix steps, then watch-outs. No theory unless it directly explains the fix.
+- Write the shortest answer that fully solves the question. If you can say it in 3 lines — say it in 3 lines.`
         }, {
           role: 'user',
           content: `SAP Question: "${originalQuestion}"
@@ -1135,7 +1146,7 @@ export default async function handler(req, res) {
 
     const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
     const SHORT_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','FIORI_REC','GENERAL'])
-    if (SHORT_INTENTS.has(intent))  systemPrompt += `\n\nOUTPUT LENGTH: Keep answers concise and direct.`
+    if (SHORT_INTENTS.has(intent))  systemPrompt += `\n\nOUTPUT LENGTH: Be concise and direct. Senior SAP consultant audience — they know the basics. Key fact first, then context. No preamble, no generic SAP background. If you can answer in 3-5 lines, do so.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable. Be thorough and complete all sections.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nNever invent SAP T-codes, table names, BAdI names, or Fiori app IDs. Write "verify in your system" when uncertain.`
 
