@@ -178,6 +178,90 @@ function UsageBar({ count, limit, dark }) {
   )
 }
 
+// ── SOURCE INFO PANEL — shows under every answer ─────────────────────────────
+function SourceInfoPanel({ info, t, dark }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!info) return null
+
+  const modelLabel = info.routing?.includes('sonnet') ? 'GPT-4o + Claude Sonnet → mini'
+    : info.routing?.includes('haiku') ? 'GPT-4o + Claude Haiku → mini'
+    : info.routing?.includes('gpt4o') ? 'GPT-4o'
+    : info.routing || 'GPT-4o'
+
+  const pills = [
+    info.bookChunks > 0   && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
+    info.tavilyFiltered > 0 && { icon:'🔍', label:`Tavily: ${info.tavilyFiltered}/${info.tavilyRaw}`, color:'#D97706' },
+    info.openAISources > 0  && { icon:'🌐', label:`Web: ${info.openAISources}`, color:'#2563EB' },
+    !info.needsSearch       && { icon:'⚡', label:'No search', color:'#6B7280' },
+  ].filter(Boolean)
+
+  return (
+    <div style={{ marginTop:8, fontSize:11, fontFamily:"'Inter',sans-serif" }}>
+      {/* Collapsed row */}
+      <div
+        onClick={() => setExpanded(p => !p)}
+        style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', userSelect:'none', flexWrap:'wrap' }}
+      >
+        <span style={{ color: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)', fontSize:10 }}>
+          {expanded ? '▼' : '▶'}
+        </span>
+        <span style={{ color: dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)', fontSize:10, fontWeight:500 }}>
+          Sources
+        </span>
+        {pills.map((p, i) => (
+          <span key={i} style={{
+            padding:'1px 7px', borderRadius:10,
+            background: `${p.color}18`,
+            border: `1px solid ${p.color}40`,
+            color: p.color, fontWeight:600, fontSize:10,
+          }}>
+            {p.icon} {p.label}
+          </span>
+        ))}
+        <span style={{ color: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)', fontSize:10, marginLeft:'auto' }}>
+          {modelLabel}
+          {info.totalMs && ` · ${(info.totalMs/1000).toFixed(1)}s`}
+        </span>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{
+          marginTop:8, padding:'10px 12px',
+          background: dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+          border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+          borderRadius:10,
+        }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 16px' }}>
+            <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Intent: </span><span style={{ color: dark?'#a5b4fc':'#4F46E5', fontWeight:600 }}>{info.intent}</span></div>
+            {info.detectedModule && <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Module: </span><span style={{ color:'#059669', fontWeight:600 }}>{info.detectedModule}</span></div>}
+            <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Models: </span><span style={{ color: dark?'#e2e8f0':'#1C1C1E' }}>{modelLabel}</span></div>
+            {info.totalMs && <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Time: </span><span style={{ color: dark?'#fbbf24':'#D97706', fontWeight:600 }}>{(info.totalMs/1000).toFixed(1)}s</span></div>}
+          </div>
+          {info.bookSources?.length > 0 && (
+            <div style={{ marginTop:6 }}>
+              <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Book sources: </span>
+              <span style={{ color:'#059669' }}>{info.bookSources.join(' · ')}</span>
+            </div>
+          )}
+          {info.tavilyFiltered > 0 && (
+            <div style={{ marginTop:4 }}>
+              <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Tavily: </span>
+              <span style={{ color:'#D97706' }}>{info.tavilyFiltered} results kept from {info.tavilyRaw} found</span>
+            </div>
+          )}
+          {info.openAISources > 0 && (
+            <div style={{ marginTop:4 }}>
+              <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>OpenAI web: </span>
+              <span style={{ color:'#2563EB' }}>{info.openAISources} sources</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FurtherReading({ links, t, dark }) {
   if (!links || links.length === 0) return null
 
@@ -535,6 +619,9 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         )}
         {!isStreaming && msg._links?.length > 0 && (
           <FurtherReading links={msg._links} t={t} dark={dark} />
+        )}
+        {!isStreaming && msg._sourceInfo && (
+          <SourceInfoPanel info={msg._sourceInfo} t={t} dark={dark} />
         )}
         {/* Fallback download button for FS documents */}
         {!isStreaming && msg._deliverable === 'FS_SPEC' && msg._fsText && (
@@ -1210,6 +1297,7 @@ export default function Brain({ session }) {
   const [dualLabel, setDualLabel] = useState('')
   const [primaryLabel, setPrimaryLabel] = useState('')
   const dualTextRef = useRef('')
+  const sourceInfoRef = useRef(null)
   const dualLabelRef = useRef('')
   const [messageCount, setMessageCount]   = useState(0)
   const [isUnlimited, setIsUnlimited]     = useState(false)
@@ -1734,6 +1822,7 @@ export default function Brain({ session }) {
               deliverableType = evt.deliverableType || 'NONE'
               if (typeof evt.messageCount === 'number') setMessageCount(evt.messageCount)
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
+              if (evt.sourceInfo) sourceInfoRef.current = evt.sourceInfo
               if (evt.isCorrection) {
                 setPendingCorrection({
                   userMsg: currentMsgs[currentMsgs.length - 1]?.content || '',
@@ -1833,7 +1922,9 @@ export default function Brain({ session }) {
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
         ...(deliverableType === 'WORKSHOP_PPT' && window.__lastPptText
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
+        ...(sourceInfoRef.current ? { _sourceInfo: sourceInfoRef.current } : {}),
       }
+      sourceInfoRef.current = null
 
       const finalMsgs = [...currentMsgs, assistantMsg]
       const convUpdate = { messages: finalMsgs }
