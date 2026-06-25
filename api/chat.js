@@ -132,7 +132,7 @@ Question: "${question.slice(0, 500)}"
       isCode, isError, isCorrection, needsSearch,
       isDocConfirm, isDocDeny,
       isTroubleshoot, isVersionSpecific,
-      isBapiSearch, isExitSearch, isNoteSearch,
+      isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch,
     }
   } catch {
     return {
@@ -140,7 +140,7 @@ Question: "${question.slice(0, 500)}"
       isCode: false, isError: false, isCorrection: false, needsSearch: false,
       isDocConfirm: false, isDocDeny: false,
       isTroubleshoot: false, isVersionSpecific: false,
-      isBapiSearch: false, isExitSearch: false, isNoteSearch: false,
+      isBapiSearch: false, isExitSearch: false, isNoteSearch: false, isErrorSearch: false,
     }
   }
 }
@@ -962,7 +962,7 @@ export default async function handler(req, res) {
     ])
 
     let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError,
-          isBapiSearch, isExitSearch, isNoteSearch, isDocConfirm, isDocDeny } = classification
+          isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isDocConfirm, isDocDeny } = classification
 
     debugLog.intent     = intent
     debugLog.confidence = confidence
