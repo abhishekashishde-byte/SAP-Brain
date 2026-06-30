@@ -176,7 +176,6 @@ function getConversationContext(allMessages) {
   return { recentMsgs, summary: '' }
 }
 
-// ── 4. QUERY REWRITING for search — context-aware ────────────────────────────
 // ── 3b. EXCEL/VALIDATION CLASSIFIER — Stage 2 nuanced check via GPT-4o mini ──
 // Only fires when Groq flags possible deliverable ambiguity.
 // Separates "what type of deliverable" from "is the user ready to generate"
@@ -226,7 +225,8 @@ Return ONLY valid JSON: {"isExcelIntent": true/false, "readyToGenerate": true/fa
   }
 }
 
-
+// ── 4. QUERY REWRITING for search — context-aware ────────────────────────────
+async function rewriteForSearch(question, conversationSummary) {
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
