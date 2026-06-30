@@ -98,6 +98,9 @@ Question: "${question.slice(0, 500)}"
     const isVersionSpecific = /\b(s\/4hana \d|ecc|r\/3|vs\.|versus|difference between.*version|upgrade|migration)\b/i.test(question)
     const isBapiSearch   = /\b(bapi|function module|fm|rfc|which.*bapi|bapi.*for|function.*module|module.*function)\b/i.test(question)
     const isExitSearch   = /\b(user exit|badi|enhancement spot|which.*exit|exit.*for)\b/i.test(question)
+    // Signals that the conversation MIGHT be heading toward a tabular/Excel deliverable —
+    // triggers Stage 2 nuanced check via GPT-4o mini. Intentionally broad; Stage 2 filters precision.
+    const hasTabularSignal = /\b(compare|comparison|validate|validation|reconcil|mapping|map.*field|migrat|table.*by.*table|field.*by.*field|discrepanc|gap list|cross.?reference|two systems|source.*target|before.*after)\b/i.test(question)
 
     // User confirming or answering doc wizard
     const isDocConfirm = /\b(yes|go ahead|create it|generate it|proceed|do it|sure|yeah|correct|that's right)\b/i.test(question)
@@ -133,6 +136,7 @@ Question: "${question.slice(0, 500)}"
       isDocConfirm, isDocDeny,
       isTroubleshoot, isVersionSpecific,
       isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch,
+      hasTabularSignal,
     }
   } catch {
     return {
@@ -141,6 +145,7 @@ Question: "${question.slice(0, 500)}"
       isDocConfirm: false, isDocDeny: false,
       isTroubleshoot: false, isVersionSpecific: false,
       isBapiSearch: false, isExitSearch: false, isNoteSearch: false, isErrorSearch: false,
+      hasTabularSignal: false,
     }
   }
 }
@@ -172,7 +177,56 @@ function getConversationContext(allMessages) {
 }
 
 // ── 4. QUERY REWRITING for search — context-aware ────────────────────────────
-async function rewriteForSearch(question, conversationSummary) {
+// ── 3b. EXCEL/VALIDATION CLASSIFIER — Stage 2 nuanced check via GPT-4o mini ──
+// Only fires when Groq flags possible deliverable ambiguity.
+// Separates "what type of deliverable" from "is the user ready to generate"
+async function classifyExcelIntent(lastMsg, conversationHistory) {
+  try {
+    const convText = (conversationHistory || [])
+      .slice(-6)
+      .map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}: ${m.content.slice(0, 300)}`)
+      .join('\n')
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 150,
+        temperature: 0,
+        messages: [{
+          role: 'user',
+          content: `Read this SAP consultant conversation and answer two separate questions.
+
+QUESTION 1 — isExcelIntent: Is this conversation about comparing, validating, or tracking MULTIPLE records/fields against each other in a way that would naturally live in rows and columns (a spreadsheet)? Examples: data migration validation, table-by-table comparison, field mapping, gap lists, reconciliation. NOT excel: narrative documents, single explanations, process descriptions, conceptual questions.
+
+QUESTION 2 — readyToGenerate: Has the user given an EXPLICIT instruction to create/generate/build the file NOW? Examples of ready: "create it", "generate the file", "make this for me", "build the macro", "yes go ahead". 
+NOT ready: questions like "what will it look like", "how should I structure this", "can we do X", "what format" — these are still clarifying/discussing, even if document-shaped. Asking ABOUT the output is not the same as asking FOR the output.
+
+Conversation:
+${convText}
+
+Latest message: "${lastMsg}"
+
+Return ONLY valid JSON: {"isExcelIntent": true/false, "readyToGenerate": true/false, "reasoning": "one short sentence"}`
+        }]
+      })
+    })
+    const data = await res.json()
+    const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    return {
+      isExcelIntent: parsed.isExcelIntent === true,
+      readyToGenerate: parsed.readyToGenerate === true,
+      reasoning: parsed.reasoning || '',
+    }
+  } catch (e) {
+    console.error('[EXCEL CLASSIFY] Error:', e.message)
+    return { isExcelIntent: false, readyToGenerate: false, reasoning: '' }
+  }
+}
+
+
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -450,6 +504,7 @@ async function buildDocConfirmMessage(intent, conversationHistory) {
     WORKSHOP_PLAN:'Workshop Plan',
     GAP_ANALYSIS: 'Gap Analysis',
     FORMS_SPEC:   'Forms Specification',
+    EXCEL_VALIDATION: 'Excel validation/comparison file',
   }
   const docName = docNames[intent] || 'Document'
   return `I've understood that you need a **${docName}**. Should I go ahead and create it?`
@@ -469,8 +524,12 @@ async function gatherDocRequirements(intent, conversationHistory, userConfirmati
       WORKSHOP_PPT: 'Workshop Presentation',
       WORKSHOP_PLAN:'Workshop Plan',
       GAP_ANALYSIS: 'Gap Analysis',
+      EXCEL_VALIDATION: 'Excel validation/comparison file',
     }
     const docName = docNames[intent] || 'Document'
+
+    const isExcel = intent === 'EXCEL_VALIDATION'
+    const excelGuidance = isExcel ? `\n\nFor an Excel validation file specifically, you need to know: exact table/field names being compared, the key/mapping field that links source to target records, sample data format if available, and whether the user wants a macro (VBA) or formula-based (VLOOKUP/Power Query) approach.` : ''
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -485,10 +544,11 @@ async function gatherDocRequirements(intent, conversationHistory, userConfirmati
 Read the conversation and identify what information is ALREADY known vs what is MISSING.
 Ask ONLY for what is missing — never ask for things already mentioned in the conversation.
 Format your response as a friendly numbered list of specific questions (max 4 questions).
-Be specific to the SAP context discussed.`
+Be specific to the SAP context discussed.${excelGuidance}`
         }, {
           role: 'user',
           content: `The consultant wants a ${docName}. Based on this conversation, what specific information do I still need?
+
 
 Conversation:
 ${convText}
@@ -962,20 +1022,39 @@ export default async function handler(req, res) {
     ])
 
     let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError,
-          isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isDocConfirm, isDocDeny } = classification
+          isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isDocConfirm, isDocDeny,
+          hasTabularSignal } = classification
 
     debugLog.intent     = intent
     debugLog.confidence = confidence
     debugLog.needsSearch = needsSearch
 
-    const isDeliverable = ['FS_SPEC', 'FS_EDIT', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
-    const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','WORKSHOP_PPT'])
+    // ── STEP 1b: Stage 2 Excel/validation classifier ────────────────────────
+    // Only fires when Groq flags possible tabular/comparison signal — keeps cost low
+    let excelClassification = { isExcelIntent: false, readyToGenerate: false }
+    if (hasTabularSignal && !isCode && intent !== 'SAVE_TO_MEMORY') {
+      excelClassification = await classifyExcelIntent(lastMsg, messages || []).catch(() => excelClassification)
+      debugLog.excelClassify = excelClassification
+      if (excelClassification.isExcelIntent) {
+        intent = 'EXCEL_VALIDATION'
+        confidence = 0.9
+      }
+    }
+
+    const isDeliverable = ['FS_SPEC', 'FS_EDIT', 'TECH_SPEC', 'WORKSHOP_PPT', 'EXCEL_VALIDATION'].includes(intent)
+    const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','WORKSHOP_PPT','EXCEL_VALIDATION'])
 
     console.log('CLASSIFICATION:', JSON.stringify({ q: lastMsg.slice(0, 60), intent, confidence, needsSearch }))
 
     // ── STEP 2: DOC WIZARD HANDLING ────────────────────────────────────────
     // Stage 1: Wani detected a doc intent → ask for confirmation
-    if (DELIVERABLE_INTENTS_SET.has(intent) && docWizardStage !== 'confirmed' && docWizardStage !== 'gathering' && docWizardStage !== 'generate') {
+    // EXCEL_VALIDATION has an extra gate: only trigger the wizard if Stage 2
+    // classifier confirmed the user is actually ready to generate — never on
+    // a clarifying question like "what will the format look like".
+    const excelNotReady = intent === 'EXCEL_VALIDATION' && !excelClassification.readyToGenerate
+      && docWizardStage !== 'confirmed' && docWizardStage !== 'gathering' && docWizardStage !== 'generate'
+
+    if (DELIVERABLE_INTENTS_SET.has(intent) && !excelNotReady && docWizardStage !== 'confirmed' && docWizardStage !== 'gathering' && docWizardStage !== 'generate') {
       const confirmMsg = await buildDocConfirmMessage(intent, messages || [])
       send({ type: 'start', intent })
       send({ type: 'chunk', text: confirmMsg })
@@ -1104,7 +1183,7 @@ export default async function handler(req, res) {
       systemPrompt += `\n\nADDITIONAL REQUEST: After completing the primary task, also provide a ${secondaryIntent.replace(/_/g, ' ')} section. Keep it clearly separated with a "---" divider and heading.`
     }
 
-    const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT'])
+    const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','EXCEL_VALIDATION'])
     const SHORT_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','FIORI_REC','GENERAL'])
     if (SHORT_INTENTS.has(intent))  systemPrompt += `\n\nOUTPUT LENGTH: Be concise and direct. Senior SAP consultant audience — they know the basics. Key fact first, then context. No preamble, no generic SAP background. If you can answer in 3-5 lines, do so.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable. Be thorough and complete all sections.`
@@ -1224,6 +1303,13 @@ export default async function handler(req, res) {
       fullAnswer = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (code)'
+
+    } else if (intent === 'EXCEL_VALIDATION' && shouldGenerateDoc) {
+      // Excel/macro/VBA generation → GPT-4o only (better at formulas, VBA syntax, tabular logic)
+      send({ type: 'model_label', label: 'by GPT-4o' })
+      fullAnswer = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 'gpt-4o', 16000)
+      modelUsed = 'gpt4o'
+      debugLog.routing = 'gpt4o (excel/macro)'
 
     } else if (isComplexDeliverable || shouldGenerateDoc) {
       // Deliverables → Claude Sonnet only
@@ -1419,7 +1505,7 @@ export default async function handler(req, res) {
     }
 
     // ── STEP 14: Send done ────────────────────────────────────────────────
-    const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES'])
+    const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'
 
     send({
