@@ -1676,8 +1676,8 @@ export default async function handler(req, res) {
         detectedModule:      debugLog.detectedModule || null,
         totalMs:             debugLog.totalMs || null,
         geminiCorrections:   debugLog.geminiCorrections || 0,
-        // Full pipeline — only sent to admin via Brain.jsx isAdmin gate
-        pipeline: isAdmin ? {
+        // Full pipeline — always sent, collapsed by default in UI
+        pipeline: {
           bookChunkDetails: (bookChunks || []).map(c => ({
             book:    c.source_book,
             page:    c.page_number,
@@ -1696,7 +1696,7 @@ export default async function handler(req, res) {
           mergedAnswer:      debugLog.rawMergedAnswer || '',
           geminiCorrections: debugLog.geminiCorrections || 0,
           geminiDetails:     debugLog.geminiDetails   || [],
-        } : null,
+        },
       },
     })
 
