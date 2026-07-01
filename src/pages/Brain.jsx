@@ -193,6 +193,9 @@ function SourceInfoPanel({ info, t, dark }) {
     info.tavilyFiltered > 0 && { icon:'🔍', label:`Tavily: ${info.tavilyFiltered}/${info.tavilyRaw}`, color:'#D97706' },
     info.openAISources > 0  && { icon:'🌐', label:`Web: ${info.openAISources}`, color:'#2563EB' },
     !info.needsSearch       && { icon:'⚡', label:'No search', color:'#6B7280' },
+    info.geminiCorrections > 0
+      ? { icon:'⚠️', label:`Gemini: ${info.geminiCorrections} correction${info.geminiCorrections>1?'s':''}`, color:'#DC2626' }
+      : { icon:'✅', label:'Gemini verified', color:'#059669' },
   ].filter(Boolean)
 
   return (
@@ -256,6 +259,161 @@ function SourceInfoPanel({ info, t, dark }) {
               <span style={{ color:'#2563EB' }}>{info.openAISources} sources</span>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── ANSWER PIPELINE DEBUGGER — admin only, collapsible ───────────────────────
+function AnswerPipeline({ pipeline, dark }) {
+  const [open, setOpen] = useState(false)
+  const [activeStep, setActiveStep] = useState(null)
+  if (!pipeline) return null
+
+  const mono = { fontFamily:"'IBM Plex Mono',monospace", fontSize:11 }
+  const labelStyle = { color: dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.35)', fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:0.8 }
+  const contentStyle = { color: dark?'#94a3b8':'#475569', fontSize:11, lineHeight:1.6, whiteSpace:'pre-wrap', wordBreak:'break-word', marginTop:4 }
+
+  const steps = [
+    {
+      id: 'books',
+      icon: '📚',
+      label: `Book RAG (${pipeline.bookChunkDetails?.length || 0} chunks)`,
+      color: '#059669',
+      empty: !pipeline.bookChunkDetails?.length,
+      content: pipeline.bookChunkDetails?.length
+        ? pipeline.bookChunkDetails.map((c,i) =>
+            `[${i+1}] ${c.book}, p.${c.page}${c.title ? ` — ${c.title}` : ''}\n${c.content}`
+          ).join('\n\n---\n\n')
+        : 'No book chunks found for this question',
+    },
+    {
+      id: 'tavily',
+      icon: '🔍',
+      label: `Tavily (${pipeline.tavilyResults?.length || 0} results)`,
+      color: '#D97706',
+      empty: !pipeline.tavilyResults?.length,
+      content: pipeline.tavilyResults?.length
+        ? pipeline.tavilyResults.map((r,i) =>
+            `[${i+1}] ${r.source} — ${r.title}\n${r.url}\n${r.snippet}`
+          ).join('\n\n---\n\n')
+        : 'Tavily did not fire or returned no results',
+    },
+    {
+      id: 'openai_search',
+      icon: '🌐',
+      label: 'OpenAI Search',
+      color: '#2563EB',
+      empty: !pipeline.openAISnippet,
+      content: pipeline.openAISnippet || 'OpenAI search did not fire',
+    },
+    {
+      id: 'gpt',
+      icon: '🤖',
+      label: 'GPT-4o Raw Answer',
+      color: '#10B981',
+      empty: !pipeline.gptAnswer,
+      content: pipeline.gptAnswer || 'No GPT-4o answer',
+    },
+    {
+      id: 'claude',
+      icon: '🧠',
+      label: 'Claude Sonnet Raw Answer',
+      color: '#8B5CF6',
+      empty: !pipeline.claudeAnswer,
+      content: pipeline.claudeAnswer || 'No Claude answer',
+    },
+    {
+      id: 'merged',
+      icon: '✨',
+      label: 'Claude Sonnet Merged Answer',
+      color: '#4F46E5',
+      empty: !pipeline.mergedAnswer,
+      content: pipeline.mergedAnswer || 'No merged answer',
+    },
+    {
+      id: 'gemini',
+      icon: pipeline.geminiCorrections > 0 ? '⚠️' : '✅',
+      label: pipeline.geminiCorrections > 0
+        ? `Gemini (${pipeline.geminiCorrections} correction${pipeline.geminiCorrections>1?'s':''})`
+        : 'Gemini (verified)',
+      color: pipeline.geminiCorrections > 0 ? '#DC2626' : '#059669',
+      empty: false,
+      content: pipeline.geminiCorrections > 0 && pipeline.geminiDetails?.length
+        ? pipeline.geminiDetails.map(c => `❌ Wrong: ${c.wrong}\n✅ Correct: ${c.correct}\n💡 Reason: ${c.reason}`).join('\n\n')
+        : 'No corrections needed — all technical facts verified',
+    },
+  ]
+
+  return (
+    <div style={{ marginTop:8, fontFamily:"'Inter',sans-serif" }}>
+      {/* Header toggle */}
+      <div
+        onClick={() => setOpen(p => !p)}
+        style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', userSelect:'none', padding:'4px 0' }}
+      >
+        <span style={{ color: dark?'rgba(255,255,255,0.2)':'rgba(0,0,0,0.2)', fontSize:10 }}>{open ? '▼' : '▶'}</span>
+        <span style={{ color: dark?'rgba(255,255,255,0.25)':'rgba(0,0,0,0.25)', fontSize:10, fontWeight:600, letterSpacing:0.5 }}>
+          ANSWER PIPELINE
+        </span>
+        <span style={{ color: dark?'rgba(255,255,255,0.15)':'rgba(0,0,0,0.15)', fontSize:10 }}>
+          {steps.length} steps
+        </span>
+      </div>
+
+      {open && (
+        <div style={{
+          marginTop:6,
+          background: dark?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)',
+          border:`1px solid ${dark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}`,
+          borderRadius:12,
+          overflow:'hidden',
+        }}>
+          {/* Step list */}
+          <div style={{ display:'flex', flexDirection:'column' }}>
+            {steps.map((step, idx) => (
+              <div key={step.id}>
+                {/* Step header */}
+                <div
+                  onClick={() => setActiveStep(activeStep === step.id ? null : step.id)}
+                  style={{
+                    display:'flex', alignItems:'center', gap:8, padding:'8px 12px',
+                    cursor:'pointer', userSelect:'none',
+                    background: activeStep === step.id
+                      ? (dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.04)')
+                      : 'transparent',
+                    borderBottom: idx < steps.length-1
+                      ? `1px solid ${dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'}`
+                      : 'none',
+                  }}
+                >
+                  <span style={{ fontSize:13 }}>{step.icon}</span>
+                  <span style={{ ...mono, color: step.empty ? (dark?'#475569':'#94a3b8') : step.color, fontWeight:600 }}>
+                    {step.label}
+                  </span>
+                  <span style={{ marginLeft:'auto', color: dark?'rgba(255,255,255,0.2)':'rgba(0,0,0,0.2)', fontSize:10 }}>
+                    {activeStep === step.id ? '▲' : '▼'}
+                  </span>
+                </div>
+
+                {/* Step content — expanded */}
+                {activeStep === step.id && (
+                  <div style={{
+                    padding:'10px 14px 12px',
+                    background: dark?'rgba(0,0,0,0.2)':'rgba(0,0,0,0.02)',
+                    borderBottom: idx < steps.length-1
+                      ? `1px solid ${dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'}`
+                      : 'none',
+                  }}>
+                    <div style={{ ...contentStyle, ...mono }}>
+                      {step.content}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -373,7 +531,7 @@ function DownloadDeliverableButton({ label, color, onClick, t }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse, session }) {
+function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse, session, isAdmin }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -622,6 +780,9 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         )}
         {!isStreaming && msg._sourceInfo && (
           <SourceInfoPanel info={msg._sourceInfo} t={t} dark={dark} />
+        )}
+        {!isStreaming && msg._sourceInfo?.pipeline && isAdmin && (
+          <AnswerPipeline pipeline={msg._sourceInfo.pipeline} dark={dark} />
         )}
         {/* Fallback download button for FS documents */}
         {!isStreaming && msg._deliverable === 'FS_SPEC' && msg._fsText && (
@@ -2347,7 +2508,7 @@ export default function Brain({ session }) {
                   quickLaunchMessages.length > 0 ? (
                     <div style={{ animation:'fadeIn 0.4s ease', padding:'20px 0' }}>
                       {quickLaunchMessages.map((msg, i) => (
-                        <MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                        <MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()} isAdmin={isAdmin}/>
                       ))}
                     </div>
                   ) : (
@@ -2426,7 +2587,7 @@ export default function Brain({ session }) {
                             {primaryLabel}
                           </div>
                         )}
-                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()} isAdmin={isAdmin}/>
                       </>
                     ) : null}
                     {/* Dual model bubble — only show while actively streaming */}
@@ -2435,7 +2596,7 @@ export default function Brain({ session }) {
                         <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
                           {dualLabel}
                         </div>
-                        <MessageBubble msg={{role:'assistant',content:dualText}} isStreaming={dualStreaming} streamingText={dualStreaming ? dualText : ''} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                        <MessageBubble msg={{role:'assistant',content:dualText}} isStreaming={dualStreaming} streamingText={dualStreaming ? dualText : ''} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()} isAdmin={isAdmin}/>
                       </div>
                     ) : null}
                     <div ref={bottomRef}/>
