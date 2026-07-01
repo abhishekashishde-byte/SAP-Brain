@@ -183,8 +183,13 @@ function SourceInfoPanel({ info, t, dark }) {
   const [expanded, setExpanded] = useState(false)
   if (!info) return null
 
-  const modelLabel = info.routing?.includes('sonnet') ? 'GPT-4o + Claude Sonnet → mini'
-    : info.routing?.includes('haiku') ? 'GPT-4o + Claude Haiku → mini'
+  const modelLabel = info.routing?.includes('sonnet') && info.routing?.includes('gpt4o')
+    ? 'GPT-4o + Claude Sonnet'
+    : info.routing?.includes('haiku') && info.routing?.includes('gpt4o')
+    ? 'GPT-4o + Claude Haiku'
+    : info.routing?.includes('sonnet') ? 'Claude Sonnet'
+    : info.routing?.includes('gpt4o') ? 'GPT-4o'
+    : info.routing || 'GPT-4o'
     : info.routing?.includes('gpt4o') ? 'GPT-4o'
     : info.routing || 'GPT-4o'
 
@@ -268,7 +273,9 @@ function SourceInfoPanel({ info, t, dark }) {
 // ── ANSWER PIPELINE DEBUGGER — admin only, collapsible ───────────────────────
 function AnswerPipeline({ pipeline, dark }) {
   const [open, setOpen] = useState(false)
-  const [activeStep, setActiveStep] = useState(null)
+  const [openSteps, setOpenSteps] = useState({}) // each step independently toggleable
+
+  const toggleStep = (id) => setOpenSteps(prev => ({ ...prev, [id]: !prev[id] }))
   if (!pipeline) return null
 
   const mono = { fontFamily:"'IBM Plex Mono',monospace", fontSize:11 }
@@ -376,11 +383,11 @@ function AnswerPipeline({ pipeline, dark }) {
               <div key={step.id}>
                 {/* Step header */}
                 <div
-                  onClick={() => setActiveStep(activeStep === step.id ? null : step.id)}
+                  onClick={() => toggleStep(step.id)}
                   style={{
                     display:'flex', alignItems:'center', gap:8, padding:'8px 12px',
                     cursor:'pointer', userSelect:'none',
-                    background: activeStep === step.id
+                    background: openSteps[step.id]
                       ? (dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.04)')
                       : 'transparent',
                     borderBottom: idx < steps.length-1
@@ -393,12 +400,12 @@ function AnswerPipeline({ pipeline, dark }) {
                     {step.label}
                   </span>
                   <span style={{ marginLeft:'auto', color: dark?'rgba(255,255,255,0.2)':'rgba(0,0,0,0.2)', fontSize:10 }}>
-                    {activeStep === step.id ? '▲' : '▼'}
+                    {openSteps[step.id] ? '▲' : '▼'}
                   </span>
                 </div>
 
                 {/* Step content — expanded */}
-                {activeStep === step.id && (
+                {openSteps[step.id] && (
                   <div style={{
                     padding:'10px 14px 12px',
                     background: dark?'rgba(0,0,0,0.2)':'rgba(0,0,0,0.02)',
@@ -754,11 +761,6 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         <WaniLogo size={26} dark={dark}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
-        {!isStreaming && (msg._primaryLabel || msg._model) && (
-          <div style={{ marginBottom:6, fontSize:10, color:'#6366F1', opacity:0.7, fontFamily:"'Inter',sans-serif", letterSpacing:'0.03em' }}>
-            {msg._primaryLabel || (msg._model?.includes('claude') ? '⚡ Claude Sonnet' : msg._model === 'gpt4o' ? '✦ GPT-4o' : msg._model === 'gpt4o-mini' ? '✦ GPT-4o mini' : '')}
-          </div>
-        )}
         <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
           {renderMarkdown(content)}
           {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
@@ -2582,11 +2584,6 @@ export default function Brain({ session }) {
                       </div>
                     ) : isStreaming ? (
                       <>
-                        {primaryLabel && (
-                          <div style={{ fontSize:10, color:'#6366F1', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
-                            {primaryLabel}
-                          </div>
-                        )}
                         <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       </>
                     ) : null}
