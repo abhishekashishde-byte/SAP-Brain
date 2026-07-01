@@ -1481,6 +1481,7 @@ export default async function handler(req, res) {
         if (corrections.length > 0) {
           // Replace the streamed answer with corrected version
           fullAnswer = checkedAnswer
+          debugLog.geminiDetails = corrections
           // Send correction note to UI
           const correctionNote = `\n\n---\n⚠️ **Fact-check correction:** ${corrections.map(c => `*${c.wrong}* → **${c.correct}** (${c.reason})`).join('; ')}`
           send({ type: 'chunk', text: correctionNote })
@@ -1489,9 +1490,10 @@ export default async function handler(req, res) {
         }
       }
 
-      // Store raw answers in debug log for admin inspection
-      debugLog.rawGptAnswer    = gptAnswer.slice(0, 500)
-      debugLog.rawClaudeAnswer = claudeAnswer.slice(0, 500)
+      // Store full pipeline in debug log for admin inspection
+      debugLog.rawGptAnswer    = gptAnswer
+      debugLog.rawClaudeAnswer = claudeAnswer
+      debugLog.rawMergedAnswer = fullAnswer
 
     } else {
       // Short/greeting — GPT-4o only
@@ -1614,22 +1616,34 @@ export default async function handler(req, res) {
           tavilyFiltered:     debugLog.tavilyFiltered,
           openAISources:      debugLog.openAISources,
           knowledgeChunks:    debugLog.knowledgeChunks,
-          conversationCompressed: debugLog.conversationCompressed,
-          summaryLength:      debugLog.summaryLength,
-          gptAnswerLength:    debugLog.gptAnswerLength,
-          claudeAnswerLength: debugLog.claudeAnswerLength,
           timing: {
             parallelMs:    debugLog.parallelMs,
             promptBuildMs: debugLog.promptBuildMs,
             modelsMs:      debugLog.modelsMs,
             synthesisMs:   debugLog.synthesisMs,
             geminiMs:      debugLog.geminiMs,
-            geminiCorrections: debugLog.geminiCorrections,
             totalMs:       debugLog.totalMs,
           },
-          rawAnswers: {
-            gpt:    debugLog.rawGptAnswer,
-            claude: debugLog.rawClaudeAnswer,
+          // Full pipeline data for answer pipeline debugger
+          pipeline: {
+            bookChunkDetails: (bookChunks || []).map(c => ({
+              book:    c.source_book,
+              page:    c.page_number,
+              title:   c.lesson_title || '',
+              content: c.content?.slice(0, 300) || '',
+            })),
+            tavilyResults: (tavilyFiltered || []).map(r => ({
+              source:  r.source,
+              title:   r.title?.slice(0, 80) || '',
+              url:     r.url || '',
+              snippet: r.snippet?.slice(0, 200) || '',
+            })),
+            openAISnippet: geminiSearchText?.slice(0, 400) || '',
+            gptAnswer:     debugLog.rawGptAnswer    || '',
+            claudeAnswer:  debugLog.rawClaudeAnswer || '',
+            mergedAnswer:  debugLog.rawMergedAnswer || '',
+            geminiCorrections: debugLog.geminiCorrections || 0,
+            geminiDetails: debugLog.geminiDetails   || [],
           }
         }
       })
@@ -1662,6 +1676,27 @@ export default async function handler(req, res) {
         detectedModule:      debugLog.detectedModule || null,
         totalMs:             debugLog.totalMs || null,
         geminiCorrections:   debugLog.geminiCorrections || 0,
+        // Full pipeline — only sent to admin via Brain.jsx isAdmin gate
+        pipeline: isAdmin ? {
+          bookChunkDetails: (bookChunks || []).map(c => ({
+            book:    c.source_book,
+            page:    c.page_number,
+            title:   c.lesson_title || '',
+            content: c.content?.slice(0, 400) || '',
+          })),
+          tavilyResults: (tavilyFiltered || []).map(r => ({
+            source:  r.source,
+            title:   r.title?.slice(0, 80) || '',
+            url:     r.url || '',
+            snippet: r.snippet?.slice(0, 300) || '',
+          })),
+          openAISnippet:     geminiSearchText?.slice(0, 500) || '',
+          gptAnswer:         debugLog.rawGptAnswer    || '',
+          claudeAnswer:      debugLog.rawClaudeAnswer || '',
+          mergedAnswer:      debugLog.rawMergedAnswer || '',
+          geminiCorrections: debugLog.geminiCorrections || 0,
+          geminiDetails:     debugLog.geminiDetails   || [],
+        } : null,
       },
     })
 
