@@ -388,8 +388,8 @@ async function fetchBookChunks(question, detectedModule, userToken) {
 
     const { data, error } = await userClient.rpc('match_sap_book_chunks', {
       query_embedding:  queryEmbedding,
-      match_threshold:  0.70,
-      match_count:      5,
+      match_threshold:  0.60,
+      match_count:      8,
       filter_module:    detectedModule || null,
       filter_version:   null,
     })
@@ -1202,7 +1202,7 @@ export default async function handler(req, res) {
           : ''
         return `[Book ${i+1}] ${c.source_book}, p.${c.page_number}${versionNote}\n${c.lesson_title ? `Topic: ${c.lesson_title}\n` : ''}${c.content}`
       }).join('\n\n---\n\n')
-      systemPrompt += `\n\n📚 SAP DOCUMENTATION (from indexed books — use as primary reference):\n${chunkText}\n\nCITATION RULE: When citing book content, mention the book name and page number inline, e.g. "(PM Maintenance Planning, p.45)"`
+      systemPrompt += `\n\n📚 SAP DOCUMENTATION (from indexed books — use as primary reference):\n${chunkText}\n\nCITATION RULES — MANDATORY:\n- You MUST cite book chunks when they cover the topic. Never state a fact from your own training when the book covers it.\n- Every fact derived from a book chunk MUST include an inline citation: (Book Title, p.XX)\n- If multiple chunks are relevant, cite each one where used\n- Book citations are not optional — they are the primary value Wani provides\n- Example: "The call horizon is configured in IP10 (PM Maintenance Planning, p.129)"`
     }
 
     // ── Inject verified knowledge ──────────────────────────────────────────
