@@ -404,16 +404,22 @@ async function fetchBookChunks(question, detectedModule, userToken) {
   }
 }
 
-// ── 8. SYNTHESIS — GPT-4o mini merges GPT-4o + Claude answers ────────────────
-async function synthesiseAnswers(gptAnswer, claudeAnswer, originalQuestion, onChunk) {
+// ── 8. SYNTHESIS — Claude Sonnet merges GPT-4o + its own answer ──────────────
+// Mini removed — it was introducing hallucinated table names and technical terms
+// Sonnet merges because: better instruction following, less hallucination risk,
+// already produced the best standalone answers in testing
+async function synthesiseAnswers(gptAnswer, claudeAnswer, originalQuestion, onChunk, systemContext) {
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'claude-sonnet-4-5',
         max_tokens: 2048,
-        temperature: 0.1,
         stream: true,
         messages: [{
           role: 'system',
@@ -495,8 +501,11 @@ Merge into one expert answer:`
         const data = line.slice(6).trim()
         if (data === '[DONE]') continue
         try {
-          const delta = JSON.parse(data)?.choices?.[0]?.delta?.content
-          if (delta) { fullText += delta; onChunk && onChunk(delta) }
+          const json = JSON.parse(data)
+          if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+            const text = json.delta.text || ''
+            if (text) { fullText += text; onChunk && onChunk(text) }
+          }
         } catch {}
       }
     }
@@ -505,6 +514,77 @@ Merge into one expert answer:`
   } catch (e) {
     console.error('[SYNTHESIS] Exception:', e.message)
     return gptAnswer // fallback
+  }
+}
+
+// ── 8b. GEMINI FACT-CHECKER ───────────────────────────────────────────────────
+// Runs AFTER synthesis — checks technical SAP facts silently
+// Only fires if answer contains technical objects (tables, T-codes, BAdIs etc.)
+// Returns corrected answer + list of corrections made
+async function geminiFactCheck(answer, originalQuestion) {
+  try {
+    const key = process.env.GEMINI_API_KEY
+    if (!key) { console.error('[GEMINI] No API key'); return { answer, corrections: [] } }
+
+    // Only fact-check if answer contains technical SAP objects
+    const hasTechnicalContent = /\b([A-Z]{2,6}\d*|[A-Z]+_[A-Z]+|[A-Z]{4,})\b/.test(answer)
+    if (!hasTechnicalContent) return { answer, corrections: [] }
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `You are a senior SAP technical fact-checker with deep knowledge of SAP table structures, T-codes, BAdIs, and function modules.
+
+Review this SAP answer for technical accuracy. Focus ONLY on:
+1. Table names — do they actually exist in SAP? (e.g. EQUI, ILOA, EQUZ, MARA, MARC are real — EQUA does not exist)
+2. T-codes — are they correct for the stated purpose?
+3. BAdI/user exit/FM names — do they actually exist?
+4. Technical architecture claims — are they factually correct?
+
+SAP Question: "${originalQuestion}"
+
+Answer to fact-check:
+${answer}
+
+Rules:
+- If everything is correct — return EXACTLY: {"status":"ok","corrections":[]}
+- If you find errors — return EXACTLY: {"status":"corrected","corrections":[{"wrong":"EQUA","correct":"ILOA","reason":"EQUA does not exist; Equipment-Asset data is in ILOA via EQUZ"}],"correctedAnswer":"[full corrected answer text here]"}
+- Only flag things you are 100% certain are wrong
+- Do NOT flag things you are merely unsure about
+- Return ONLY valid JSON, nothing else`
+          }]
+        }],
+        generationConfig: { temperature: 0, maxOutputTokens: 2048 }
+      })
+    })
+
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('[GEMINI] Error:', res.status, err.slice(0, 200))
+      return { answer, corrections: [] }
+    }
+
+    const data = await res.json()
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '{}'
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
+
+    if (parsed.status === 'corrected' && parsed.corrections?.length > 0) {
+      console.log('[GEMINI] Corrections found:', parsed.corrections.length, parsed.corrections.map(c => `${c.wrong}→${c.correct}`).join(', '))
+      return {
+        answer: parsed.correctedAnswer || answer,
+        corrections: parsed.corrections
+      }
+    }
+
+    console.log('[GEMINI] Fact-check passed — no corrections needed')
+    return { answer, corrections: [] }
+
+  } catch (e) {
+    console.error('[GEMINI] Exception:', e.message)
+    return { answer, corrections: [] }
   }
 }
 
@@ -1387,9 +1467,26 @@ export default async function handler(req, res) {
           send({ type: 'chunk', text: chunk + ' ' })
         }
       } else {
-        // Both answered — synthesise
+        // Both answered — synthesise via Claude Sonnet
         fullAnswer = await synthesiseAnswers(gptAnswer, claudeAnswer, lastMsg, chunk => send({ type: 'chunk', text: chunk }))
         debugLog.synthesisMs = Date.now() - t4
+
+        // ── Gemini fact-check runs AFTER synthesis ────────────────────────
+        // Checks technical SAP facts silently — corrects if needed
+        const t5gemini = Date.now()
+        const { answer: checkedAnswer, corrections } = await geminiFactCheck(fullAnswer, lastMsg).catch(() => ({ answer: fullAnswer, corrections: [] }))
+        debugLog.geminiMs = Date.now() - t5gemini
+        debugLog.geminiCorrections = corrections.length
+
+        if (corrections.length > 0) {
+          // Replace the streamed answer with corrected version
+          fullAnswer = checkedAnswer
+          // Send correction note to UI
+          const correctionNote = `\n\n---\n⚠️ **Fact-check correction:** ${corrections.map(c => `*${c.wrong}* → **${c.correct}** (${c.reason})`).join('; ')}`
+          send({ type: 'chunk', text: correctionNote })
+          fullAnswer += correctionNote
+          console.log('[GEMINI] Applied', corrections.length, 'corrections')
+        }
       }
 
       // Store raw answers in debug log for admin inspection
@@ -1526,6 +1623,8 @@ export default async function handler(req, res) {
             promptBuildMs: debugLog.promptBuildMs,
             modelsMs:      debugLog.modelsMs,
             synthesisMs:   debugLog.synthesisMs,
+            geminiMs:      debugLog.geminiMs,
+            geminiCorrections: debugLog.geminiCorrections,
             totalMs:       debugLog.totalMs,
           },
           rawAnswers: {
@@ -1560,8 +1659,9 @@ export default async function handler(req, res) {
         tavilyFiltered: debugLog.tavilyFiltered || 0,
         openAISources:  debugLog.openAISources || 0,
         needsSearch,
-        detectedModule: debugLog.detectedModule || null,
-        totalMs:        debugLog.totalMs       || null,
+        detectedModule:      debugLog.detectedModule || null,
+        totalMs:             debugLog.totalMs || null,
+        geminiCorrections:   debugLog.geminiCorrections || 0,
       },
     })
 
