@@ -531,7 +531,7 @@ function DownloadDeliverableButton({ label, color, onClick, t }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse, session, isAdmin }) {
+function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, prevUserMsg, onAnalyse, session }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -781,7 +781,7 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         {!isStreaming && msg._sourceInfo && (
           <SourceInfoPanel info={msg._sourceInfo} t={t} dark={dark} />
         )}
-        {!isStreaming && msg._sourceInfo?.pipeline && isAdmin && (
+        {!isStreaming && msg._sourceInfo?.pipeline && (
           <AnswerPipeline pipeline={msg._sourceInfo.pipeline} dark={dark} />
         )}
         {/* Fallback download button for FS documents */}
@@ -2508,7 +2508,7 @@ export default function Brain({ session }) {
                   quickLaunchMessages.length > 0 ? (
                     <div style={{ animation:'fadeIn 0.4s ease', padding:'20px 0' }}>
                       {quickLaunchMessages.map((msg, i) => (
-                        <MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()} isAdmin={isAdmin}/>
+                        <MessageBubble key={i} msg={msg} isStreaming={false} streamingText="" t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       ))}
                     </div>
                   ) : (
@@ -2587,7 +2587,7 @@ export default function Brain({ session }) {
                             {primaryLabel}
                           </div>
                         )}
-                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()} isAdmin={isAdmin}/>
+                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       </>
                     ) : null}
                     {/* Dual model bubble — only show while actively streaming */}
@@ -2596,7 +2596,7 @@ export default function Brain({ session }) {
                         <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
                           {dualLabel}
                         </div>
-                        <MessageBubble msg={{role:'assistant',content:dualText}} isStreaming={dualStreaming} streamingText={dualStreaming ? dualText : ''} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()} isAdmin={isAdmin}/>
+                        <MessageBubble msg={{role:'assistant',content:dualText}} isStreaming={dualStreaming} streamingText={dualStreaming ? dualText : ''} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       </div>
                     ) : null}
                     <div ref={bottomRef}/>
