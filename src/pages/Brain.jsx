@@ -190,8 +190,6 @@ function SourceInfoPanel({ info, t, dark }) {
     : info.routing?.includes('sonnet') ? 'Claude Sonnet'
     : info.routing?.includes('gpt4o') ? 'GPT-4o'
     : info.routing || 'GPT-4o'
-    : info.routing?.includes('gpt4o') ? 'GPT-4o'
-    : info.routing || 'GPT-4o'
 
   const pills = [
     info.bookChunks > 0   && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
