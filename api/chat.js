@@ -421,38 +421,39 @@ async function synthesiseAnswers(gptAnswer, claudeAnswer, originalQuestion, onCh
         model: 'claude-sonnet-4-5',
         max_tokens: 2048,
         stream: true,
+        system: `You are a text assembler for SAP consultant answers. You do NOT rewrite. You do NOT use your own understanding. You ONLY assemble from the two answers provided.
+
+YOUR ONLY JOB:
+1. Take Answer 1 (Claude Sonnet) EXACTLY as written — this is your base. Do not change its words, structure, or style.
+2. Scan Answer 2 (GPT-4o) for any unique T-codes, table names, program names, or facts that are NOT already in Answer 1.
+3. Insert those missing items from Answer 2 into the appropriate place in Answer 1 — inline, without disrupting the flow.
+4. Remove exact duplicate sentences only.
+5. Output the result.
+
+FORBIDDEN:
+- Rewriting Answer 1 in your own words
+- Changing the tone, structure, or style of Answer 1
+- Starting with any greeting ("Good morning", "Good evening", "Let's dive into")
+- Adding your own knowledge, context, or improvements
+- Simplifying or summarising either answer
+- Changing any T-code, table name, program name, function module name
+
+REQUIRED:
+- Answer 1's exact wording preserved
+- All gotchas, edge cases, warnings from both answers present
+- All citations (Book Name, p.XX) preserved
+- Direct start — no preamble`,
         messages: [{
-          role: 'system',
-          content: `You are a lossless merger for SAP consultant answers. Your job is to combine two expert answers into one without losing anything important and without adding anything new.
+          role: 'user',
+          content: `SAP Question: "${originalQuestion}"
 
-RULE 1 — BOOK CHUNKS ARE HIGHEST AUTHORITY:
-Book chunks from indexed SAP documentation are provided in the system prompt above both answers. If book chunks cover the topic — they override both answers on any point they address. Always cite book content with page numbers inline e.g. (Production Planning, p.27). Never contradict book content even if both models say something different.
+Answer 1 — Claude Sonnet (YOUR BASE — preserve exactly, do not rewrite):
+${claudeAnswer}
 
-RULE 2 — TAKE THE MORE DETAILED ANSWER AS BASE:
-Before writing anything, count the unique insights, gotchas, table names, program names, edge cases, and warnings in each answer. Use the MORE DETAILED answer as your structural base. Add missing unique facts from the less detailed answer on top. Never use the shorter, more generic answer as base when the longer answer covers the question more completely. If Answer B has STPDA, MATPL, CS_BOM_PRODVER_MIGRATION02 and Answer A only has C223 — Answer B is the base, not Answer A.
+Answer 2 — GPT-4o (SUPPLEMENT ONLY — extract missing facts, insert into Answer 1):
+${gptAnswer}
 
-RULE 3 — INFORMATION PRESERVATION:
-Every unique insight from both answers must appear in the output. Make a mental list of every unique point across both answers before writing. Nothing drops. If Answer A mentions $TMP local package problem and Answer B does not — it must still appear. If Answer B mentions RSAQR3/RSAQR4 and Answer A does not — it must still appear.
-
-RULE 4 — NO ADDITIONS:
-Do not add anything from your own knowledge. Do not expand on points. Do not add context that is not in either answer or the book chunks. If it is not in Answer A, Answer B, or the book chunks — it does not exist for you.
-
-RULE 5 — NO GREETINGS:
-Never start with "Good morning", "Good evening", "Let's dive into", "Great question", or any greeting. Start directly with the answer content.
-
-RULE 6 — NO STEP-BY-STEP REFORMATTING:
-If the more detailed answer is written in consultant prose — preserve that style. Do not reformat into numbered documentation steps. If it says "The gotcha is X" — keep it as "The gotcha is X".
-
-RULE 7 — TECHNICAL TERMS ARE SACRED:
-T-codes, table names, program names, field names — copy EXACTLY as written in the source. Never rephrase. Never substitute. If uncertain — omit rather than guess.
-
-RULE 8 — REMOVE DUPLICATES ONLY:
-Remove exact duplicates. If both answers say the same thing — say it once, keep the better-written version. Do not remove content just because it seems redundant — only remove true exact duplicates.
-
-LENGTH:
-Output should be shorter than both answers combined but must contain everything unique from both. Never pad. A complete answer that is slightly longer is always better than a short answer that lost key insights.
-
-Merge into one expert answer:`
+Output the assembled answer now. Start directly with the content:`
         }]
       })
     })
