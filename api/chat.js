@@ -1410,10 +1410,10 @@ export default async function handler(req, res) {
       debugLog.routing = 'claude-sonnet (deliverable)'
 
     } else if (isMeaningfulQuery) {
-      // ALL meaningful messages → GPT-4o + Claude Haiku → GPT-4o mini synthesises
+      // ALL meaningful messages → GPT-4o + Claude Sonnet → Claude Sonnet merges
       // No exceptions by intent — follow-ups and short SAP questions need full synthesis too
       modelUsed = 'synthesised'
-      debugLog.routing = 'gpt4o + haiku → mini synthesis'
+      debugLog.routing = 'gpt4o + sonnet → sonnet merge'
 
       let gptAnswer    = ''
       let claudeAnswer = ''
@@ -1424,7 +1424,7 @@ export default async function handler(req, res) {
       const [gptResult, claudeResult] = await Promise.all([
         streamGPT(systemPrompt, validMessages, null, 'gpt-4o', 4096)
           .catch(e => { console.error('[GPT-4o] Error:', e.message); return '' }),
-        streamClaude('claude-haiku-4-5-20251001', systemPrompt, validMessages, null, 4000)
+        streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, null, 4000)
           .catch(e => { console.error('[Claude] Error:', e.message); return '' }),
       ])
 
