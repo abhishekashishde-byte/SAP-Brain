@@ -492,32 +492,49 @@ RULES — non-negotiable:
 
 
 // ── 8b. GEMINI — parallel answerer ───────────────────────────────────────────
-async function geminiAnswer(question, systemPrompt) {
+async function geminiAnswer(question) {
   try {
     const key = process.env.GEMINI_API_KEY
     if (!key) { console.error('[GEMINI] No API key'); return '' }
+
+    // Only pass the question — NOT the full system prompt
+    // systemPrompt is too large (books + Tavily + history) and causes Gemini to return empty
+    // Gemini answers independently — GPT-4o analyst combines all sources
+    const prompt = `You are a senior SAP consultant with deep expertise across all SAP modules.
+Answer the following question directly and concisely. 
+No greetings. No preamble. Start immediately with the answer.
+Write in consultant-to-consultant tone — skip basics, focus on mechanisms, gotchas, and edge cases.
+
+Question: ${question}`
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `${systemPrompt}\n\nQuestion: ${question}\n\nAnswer directly as a senior SAP consultant. No greetings. No preamble. Start with the answer.`
-          }]
-        }],
+        contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
       })
     })
 
     if (!res.ok) {
-      console.error('[GEMINI] Error:', res.status)
+      const errText = await res.text()
+      console.error('[GEMINI] Error:', res.status, errText.slice(0, 300))
       return ''
     }
 
     const data = await res.json()
+    
+    // Log full response for debugging
+    if (data.promptFeedback?.blockReason) {
+      console.error('[GEMINI] Blocked:', data.promptFeedback.blockReason)
+      return ''
+    }
+    
     const answer = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
     console.log('[GEMINI] Answer length:', answer.length)
+    if (!answer) {
+      console.error('[GEMINI] Empty answer. Finish reason:', data.candidates?.[0]?.finishReason)
+    }
     return answer
   } catch (e) {
     console.error('[GEMINI] Exception:', e.message)
@@ -1382,7 +1399,7 @@ export default async function handler(req, res) {
       const [claudeResult, geminiResult] = await Promise.all([
         streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, null, 4000)
           .catch(e => { console.error('[Claude] Error:', e.message); return '' }),
-        geminiAnswer(lastMsg, systemPrompt)
+        geminiAnswer(lastMsg)
           .catch(e => { console.error('[Gemini] Error:', e.message); return '' }),
       ])
 
@@ -1586,6 +1603,76 @@ export default async function handler(req, res) {
     const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'
 
+    // ── Build full debug document ─────────────────────────────────────────
+    const debugDoc = [
+      '═══════════════════════════════════════════════════════════',
+      'WANI DEBUG DOCUMENT',
+      `Generated: ${new Date().toISOString()}`,
+      `Total time: ${debugLog.totalMs}ms`,
+      '═══════════════════════════════════════════════════════════',
+      '',
+      '1. QUESTION',
+      '─────────────────────────────────────────────────────────',
+      lastMsg,
+      '',
+      '2. CLASSIFICATION (Groq)',
+      '─────────────────────────────────────────────────────────',
+      `Intent: ${intent} (confidence: ${debugLog.confidence})`,
+      `Module detected: ${debugLog.detectedModule || 'none'}`,
+      `needsSearch: ${needsSearch}`,
+      `Routing: ${debugLog.routing}`,
+      '',
+      '3. BOOK RAG',
+      '─────────────────────────────────────────────────────────',
+      `Chunks found: ${debugLog.bookChunks || 0}`,
+      ...(bookChunks || []).map((c, i) =>
+        `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`
+      ),
+      '',
+      '4. TAVILY SEARCH',
+      '─────────────────────────────────────────────────────────',
+      `Search query sent: ${debugLog.searchQuery || lastMsg}`,
+      `Raw results: ${debugLog.tavilyRaw || 0} | After filtering: ${debugLog.tavilyFiltered || 0}`,
+      ...(tavilyFiltered || []).map((r, i) =>
+        `[T${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}\n    Snippet: ${r.snippet?.slice(0, 400) || ''}`
+      ),
+      '',
+      '5. CLAUDE SONNET',
+      '─────────────────────────────────────────────────────────',
+      '→ PROMPT SENT (system prompt excerpt — first 1000 chars):',
+      (systemPrompt || '').slice(0, 1000),
+      '',
+      '← ANSWER RECEIVED:',
+      debugLog.rawClaudeAnswer || 'No answer',
+      '',
+      '6. GEMINI 2.5 FLASH',
+      '─────────────────────────────────────────────────────────',
+      '→ PROMPT SENT:',
+      `You are a senior SAP consultant. Answer: ${lastMsg}`,
+      '',
+      '← ANSWER RECEIVED:',
+      debugLog.geminiRawAnswer || 'No answer (check Vercel logs for [GEMINI] error)',
+      '',
+      '7. GPT-4o ANALYST',
+      '─────────────────────────────────────────────────────────',
+      '→ SOURCES PASSED:',
+      `  Book chunks: ${(bookChunks || []).length}`,
+      `  Tavily results: ${(tavilyFiltered || []).length}`,
+      `  Expert Answer 1 (Sonnet): ${(debugLog.rawClaudeAnswer || '').length} chars`,
+      `  Expert Answer 2 (Gemini): ${(debugLog.geminiRawAnswer || '').length} chars`,
+      '',
+      '← FINAL ANSWER RECEIVED:',
+      debugLog.rawMergedAnswer || fullAnswer || '',
+      '',
+      '8. FINAL OUTPUT TO USER',
+      '─────────────────────────────────────────────────────────',
+      chatAnswer || fullAnswer || '',
+      '',
+      '═══════════════════════════════════════════════════════════',
+      'END OF DEBUG DOCUMENT',
+      '═══════════════════════════════════════════════════════════',
+    ].join('\n')
+
     send({
       type: 'done',
       model: modelUsed,
@@ -1597,6 +1684,7 @@ export default async function handler(req, res) {
       isUnlimited: UNLIMITED_EMAILS.includes(userEmail || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
+      debugDoc,
       sourceInfo: {
         intent,
         routing:        debugLog.routing      || modelUsed,
