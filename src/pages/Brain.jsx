@@ -198,7 +198,9 @@ function SourceInfoPanel({ info, t, dark }) {
     !info.needsSearch       && { icon:'⚡', label:'No search', color:'#6B7280' },
     info.geminiCorrections > 0
       ? { icon:'⚠️', label:`Gemini: ${info.geminiCorrections} correction${info.geminiCorrections>1?'s':''}`, color:'#DC2626' }
-      : { icon:'✅', label:'Gemini verified', color:'#059669' },
+      : info.pipeline?.geminiAnswer
+      ? { icon:'✅', label:'Gemini answered', color:'#059669' }
+      : { icon:'⚫', label:'Gemini unavailable', color:'#6B7280' },
   ].filter(Boolean)
 
   return (
@@ -771,6 +773,33 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         )}
         {!isStreaming && msg._sourceInfo?.pipeline && (
           <AnswerPipeline pipeline={msg._sourceInfo.pipeline} dark={dark} />
+        )}
+        {!isStreaming && msg._debugDoc && (
+          <div style={{ marginTop:6 }}>
+            <button
+              onClick={() => {
+                const blob = new Blob([msg._debugDoc], { type: 'text/plain' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `wani-debug-${Date.now()}.txt`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.12)'}`,
+                borderRadius: 8,
+                padding: '3px 10px',
+                fontSize: 11,
+                color: dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.35)',
+                cursor: 'pointer',
+                fontFamily: "'Inter',sans-serif",
+              }}
+            >
+              📄 Download Debug Doc
+            </button>
+          </div>
         )}
         {/* Fallback download button for FS documents */}
         {!isStreaming && msg._deliverable === 'FS_SPEC' && msg._fsText && (
@@ -1447,6 +1476,7 @@ export default function Brain({ session }) {
   const [primaryLabel, setPrimaryLabel] = useState('')
   const dualTextRef = useRef('')
   const sourceInfoRef = useRef(null)
+  const debugDocRef   = useRef(null)
   const dualLabelRef = useRef('')
   const [messageCount, setMessageCount]   = useState(0)
   const [isUnlimited, setIsUnlimited]     = useState(false)
@@ -1972,6 +2002,7 @@ export default function Brain({ session }) {
               if (typeof evt.messageCount === 'number') setMessageCount(evt.messageCount)
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
               if (evt.sourceInfo) sourceInfoRef.current = evt.sourceInfo
+              if (evt.debugDoc)    debugDocRef.current   = evt.debugDoc
               if (evt.isCorrection) {
                 setPendingCorrection({
                   userMsg: currentMsgs[currentMsgs.length - 1]?.content || '',
@@ -2072,8 +2103,10 @@ export default function Brain({ session }) {
         ...(deliverableType === 'WORKSHOP_PPT' && window.__lastPptText
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(sourceInfoRef.current ? { _sourceInfo: sourceInfoRef.current } : {}),
+        ...(debugDocRef.current ? { _debugDoc: debugDocRef.current } : {}),
       }
       sourceInfoRef.current = null
+      debugDocRef.current   = null
 
       const finalMsgs = [...currentMsgs, assistantMsg]
       const convUpdate = { messages: finalMsgs }
