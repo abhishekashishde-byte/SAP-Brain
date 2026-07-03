@@ -183,10 +183,10 @@ function SourceInfoPanel({ info, t, dark }) {
   const [expanded, setExpanded] = useState(false)
   if (!info) return null
 
-  const modelLabel = info.routing?.includes('sonnet') && info.routing?.includes('gpt4o')
+  const modelLabel = info.routing?.includes('gemini') && info.routing?.includes('sonnet')
+    ? 'Sonnet + Gemini → GPT-4o'
+    : info.routing?.includes('sonnet') && info.routing?.includes('gpt4o')
     ? 'GPT-4o + Claude Sonnet'
-    : info.routing?.includes('haiku') && info.routing?.includes('gpt4o')
-    ? 'GPT-4o + Claude Haiku'
     : info.routing?.includes('sonnet') ? 'Claude Sonnet'
     : info.routing?.includes('gpt4o') ? 'GPT-4o'
     : info.routing || 'GPT-4o'
@@ -314,40 +314,28 @@ function AnswerPipeline({ pipeline, dark }) {
       content: pipeline.openAISnippet || 'OpenAI search did not fire',
     },
     {
-      id: 'gpt',
-      icon: '🤖',
-      label: 'GPT-4o Raw Answer',
-      color: '#10B981',
-      empty: !pipeline.gptAnswer,
-      content: pipeline.gptAnswer || 'No GPT-4o answer',
-    },
-    {
       id: 'claude',
       icon: '🧠',
-      label: 'Claude Sonnet Raw Answer',
+      label: 'Claude Sonnet Answer',
       color: '#8B5CF6',
       empty: !pipeline.claudeAnswer,
-      content: pipeline.claudeAnswer || 'No Claude answer',
+      content: pipeline.claudeAnswer || 'No Claude Sonnet answer',
+    },
+    {
+      id: 'gemini_answer',
+      icon: '🤖',
+      label: 'Gemini Flash Answer',
+      color: '#10B981',
+      empty: !pipeline.geminiAnswer,
+      content: pipeline.geminiAnswer || 'No Gemini answer',
     },
     {
       id: 'merged',
       icon: '✨',
-      label: 'Claude Sonnet Merged Answer',
+      label: 'GPT-4o Final Analysis',
       color: '#4F46E5',
       empty: !pipeline.mergedAnswer,
-      content: pipeline.mergedAnswer || 'No merged answer',
-    },
-    {
-      id: 'gemini',
-      icon: pipeline.geminiCorrections > 0 ? '⚠️' : '✅',
-      label: pipeline.geminiCorrections > 0
-        ? `Gemini (${pipeline.geminiCorrections} correction${pipeline.geminiCorrections>1?'s':''})`
-        : 'Gemini (verified)',
-      color: pipeline.geminiCorrections > 0 ? '#DC2626' : '#059669',
-      empty: false,
-      content: pipeline.geminiCorrections > 0 && pipeline.geminiDetails?.length
-        ? pipeline.geminiDetails.map(c => `❌ Wrong: ${c.wrong}\n✅ Correct: ${c.correct}\n💡 Reason: ${c.reason}`).join('\n\n')
-        : 'No corrections needed — all technical facts verified',
+      content: pipeline.mergedAnswer || 'No final answer',
     },
   ]
 
