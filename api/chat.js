@@ -273,6 +273,7 @@ async function tavilySearch(searchQuery, intent) {
         max_results: 7,
         include_answer: false,
         include_raw_content: false,
+        max_tokens_per_result: 800,
       })
     })
 
@@ -380,7 +381,7 @@ async function fetchBookChunks(question, detectedModule, userToken) {
 
     const { data, error } = await userClient.rpc('match_sap_book_chunks', {
       query_embedding:  queryEmbedding,
-      match_threshold:  0.60,
+      match_threshold:  0.55,
       match_count:      8,
       filter_module:    detectedModule || null,
       filter_version:   null,
@@ -1385,65 +1386,49 @@ export default async function handler(req, res) {
       debugLog.routing = 'claude-sonnet (deliverable)'
 
     } else if (isMeaningfulQuery) {
-      // ALL SAP Q&A → Sonnet + Gemini answer → GPT-4o analyses all sources
-      modelUsed = 'analysed'
-      debugLog.routing = 'sonnet + gemini → gpt4o analyst'
+      // ALL SAP Q&A → Sonnet answers directly with books + Tavily injected
+      // No merger. No GPT-4o. Sonnet IS the final answer.
+      modelUsed = 'sonnet-direct'
+      debugLog.routing = 'sonnet-direct (books + tavily injected)'
 
-      let gptAnswer    = ''
-      let claudeAnswer = ''
-      let geminiAns    = ''
+      // Build enriched system prompt with books and Tavily baked in
+      let enrichedSystemPrompt = systemPrompt
 
-      send({ type: 'model_label', label: 'analysing...' })
-
-      // Fire Sonnet + Gemini in parallel — GPT-4o will analyse all sources
-      const [claudeResult, geminiResult] = await Promise.all([
-        streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, null, 4000)
-          .catch(e => { console.error('[Claude] Error:', e.message); return '' }),
-        geminiAnswer(lastMsg)
-          .catch(e => { console.error('[Gemini] Error:', e.message); return '' }),
-      ])
-
-      claudeAnswer = claudeResult
-      geminiAns    = geminiResult
-
-      debugLog.claudeAnswerLength = claudeAnswer.length
-      debugLog.geminiAnswerLength = geminiAns.length
-
-      const t4 = Date.now()
-      debugLog.modelsMs = t4 - t3
-
-      // Build book chunks text for analyst
-      const bookChunksText = (bookChunks || []).length > 0
-        ? bookChunks.map((c, i) => `[${i+1}] ${c.source_book}, p.${c.page_number}${c.lesson_title ? ` — ${c.lesson_title}` : ''}\n${c.content}`).join('\n\n')
-        : ''
-
-      // Build Tavily text for analyst
-      const tavilyTextForMerge = tavilyFiltered.length > 0
-        ? tavilyFiltered.map((r, i) => `[T${i+1}] ${r.source} — ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')
-        : ''
-
-      if (!claudeAnswer && !geminiAns) {
-        fullAnswer = '⚠️ Models failed — please try again.'
-      } else {
-        // GPT-4o analyses all sources and produces clean answer
-        fullAnswer = await synthesiseAnswers(
-          claudeAnswer,
-          geminiAns,
-          lastMsg,
-          bookChunksText,
-          tavilyTextForMerge,
-          chunk => send({ type: 'chunk', text: chunk })
-        )
-        debugLog.synthesisMs = Date.now() - t4
-        debugLog.geminiCorrections = 0
+      // Inject book chunks directly into Sonnet's prompt
+      if ((bookChunks || []).length > 0) {
+        const bookText = bookChunks.map((c, i) =>
+          `[Book ${i+1}] ${c.source_book}, p.${c.page_number}${c.lesson_title ? ` — ${c.lesson_title}` : ''}\n${c.content}`
+        ).join('\n\n')
+        enrichedSystemPrompt += `\n\n📚 SAP BOOK DOCUMENTATION — cite these with page numbers inline:\n${bookText}\n\nWhen using book content, cite it as: (${bookChunks[0]?.source_book || 'Book'}, p.XX)`
       }
 
-      // Store full pipeline in debug log for admin inspection
-      debugLog.rawGptAnswer    = ''  // GPT-4o is now analyst not answerer
-      debugLog.rawClaudeAnswer = claudeAnswer
-      debugLog.rawMergedAnswer = fullAnswer
-      debugLog.geminiRawAnswer = geminiAns
+      // Inject Tavily results directly into Sonnet's prompt
+      if (tavilyFiltered.length > 0) {
+        const tavilyText = tavilyFiltered.map((r, i) =>
+          `[Web ${i+1}] ${r.title}\nURL: ${r.url}\n${r.snippet}`
+        ).join('\n\n')
+        enrichedSystemPrompt += `\n\n🔍 WEB SEARCH RESULTS — cite relevant ones with URL inline:\n${tavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
+      }
 
+      // Sonnet answers directly — streaming to user
+      send({ type: 'model_label', label: '' })
+      fullAnswer = await streamClaude(
+        'claude-sonnet-4-5',
+        enrichedSystemPrompt,
+        validMessages,
+        chunk => send({ type: 'chunk', text: chunk }),
+        4096
+      )
+
+      debugLog.rawClaudeAnswer = fullAnswer
+      debugLog.rawMergedAnswer = fullAnswer
+      debugLog.geminiRawAnswer = ''
+      debugLog.rawGptAnswer    = ''
+
+      const t4 = Date.now()
+      debugLog.modelsMs    = t4 - t3
+      debugLog.synthesisMs = 0
+      debugLog.geminiCorrections = 0
     } else {
       // Short/greeting — GPT-4o only
       send({ type: 'model_label', label: 'by GPT-4o' })
@@ -1637,10 +1622,10 @@ export default async function handler(req, res) {
         `[T${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}\n    Snippet: ${r.snippet?.slice(0, 400) || ''}`
       ),
       '',
-      '5. CLAUDE SONNET',
+      '5. CLAUDE SONNET (PRIMARY ANSWERER)',
       '─────────────────────────────────────────────────────────',
-      '→ PROMPT SENT (system prompt excerpt — first 1000 chars):',
-      (systemPrompt || '').slice(0, 1000),
+      '→ PROMPT SENT (system prompt with books + Tavily injected, first 2000 chars):',
+      (systemPrompt || '').slice(0, 2000),
       '',
       '← ANSWER RECEIVED:',
       debugLog.rawClaudeAnswer || 'No answer',
