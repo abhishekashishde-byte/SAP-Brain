@@ -183,13 +183,15 @@ function SourceInfoPanel({ info, t, dark }) {
   const [expanded, setExpanded] = useState(false)
   if (!info) return null
 
-  const modelLabel = info.routing?.includes('gemini') && info.routing?.includes('sonnet')
+  const modelLabel = info.routing?.includes('sonnet-direct')
+    ? 'Claude Sonnet'
+    : info.routing?.includes('gemini') && info.routing?.includes('sonnet')
     ? 'Sonnet + Gemini → GPT-4o'
     : info.routing?.includes('sonnet') && info.routing?.includes('gpt4o')
     ? 'GPT-4o + Claude Sonnet'
     : info.routing?.includes('sonnet') ? 'Claude Sonnet'
     : info.routing?.includes('gpt4o') ? 'GPT-4o'
-    : info.routing || 'GPT-4o'
+    : info.routing || 'Claude Sonnet'
 
   const pills = [
     info.bookChunks > 0   && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
