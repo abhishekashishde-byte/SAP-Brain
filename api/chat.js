@@ -513,7 +513,13 @@ Question: ${question}`
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,  // Must be high — thinking tokens consume this budget
+          thinkingConfig: {
+            thinkingBudget: 0     // Disable thinking — we need fast answers not deep reasoning
+          }
+        }
       })
     })
 
@@ -1419,8 +1425,17 @@ export default async function handler(req, res) {
         enrichedSystemPrompt += `\n\n🔍 WEB SEARCH RESULTS — cite relevant ones with URL inline:\n${tavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
       }
 
-      // Sonnet answers directly — streaming to user
+      // Fire Sonnet + Gemini in parallel
+      // Sonnet streams directly to user — Gemini runs in background for pipeline visibility
       send({ type: 'model_label', label: '' })
+
+      // Start Gemini in parallel (background — does not affect user-facing answer)
+      const geminiPromise = geminiAnswer(lastMsg).catch(e => {
+        console.error('[GEMINI] Exception:', e.message)
+        return ''
+      })
+
+      // Sonnet answers directly — streaming to user — THIS is the final answer
       fullAnswer = await streamClaude(
         'claude-sonnet-4-5',
         enrichedSystemPrompt,
@@ -1429,15 +1444,19 @@ export default async function handler(req, res) {
         4096
       )
 
+      // Resolve Gemini after Sonnet is done (it runs in parallel so usually ready)
+      const geminiAns = await geminiPromise
+
       debugLog.rawClaudeAnswer = fullAnswer
       debugLog.rawMergedAnswer = fullAnswer
-      debugLog.geminiRawAnswer = ''
+      debugLog.geminiRawAnswer = geminiAns
       debugLog.rawGptAnswer    = ''
 
       const t4 = Date.now()
       debugLog.modelsMs    = t4 - t3
       debugLog.synthesisMs = 0
       debugLog.geminiCorrections = 0
+      debugLog.enrichedPromptSnippet = enrichedSystemPrompt.slice(0, 3000)
     } else {
       // Short/greeting — GPT-4o only
       send({ type: 'model_label', label: 'by GPT-4o' })
@@ -1631,10 +1650,10 @@ export default async function handler(req, res) {
         `[T${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}\n    Snippet: ${r.snippet?.slice(0, 400) || ''}`
       ),
       '',
-      '5. CLAUDE SONNET (PRIMARY ANSWERER)',
+      '5. CLAUDE SONNET (PRIMARY ANSWERER — FINAL ANSWER)',
       '─────────────────────────────────────────────────────────',
-      '→ PROMPT SENT (system prompt with books + Tavily injected, first 2000 chars):',
-      (systemPrompt || '').slice(0, 2000),
+      '→ FULL ENRICHED PROMPT SENT TO SONNET (includes books + Tavily):',
+      (debugLog.enrichedPromptSnippet || systemPrompt || '').slice(0, 4000),
       '',
       '← ANSWER RECEIVED:',
       debugLog.rawClaudeAnswer || 'No answer',
@@ -1647,9 +1666,9 @@ export default async function handler(req, res) {
       '← ANSWER RECEIVED:',
       debugLog.geminiRawAnswer || 'No answer (check Vercel logs for [GEMINI] error)',
       '',
-      '7. GPT-4o ANALYST',
+      '7. GPT-4o ANALYST (removed from Q&A pipeline)',
       '─────────────────────────────────────────────────────────',
-      '→ SOURCES PASSED:',
+      '→ NOT USED — Sonnet answers directly. GPT-4o only used for short greetings.',
       `  Book chunks: ${(bookChunks || []).length}`,
       `  Tavily results: ${(tavilyFiltered || []).length}`,
       `  Expert Answer 1 (Sonnet): ${(debugLog.rawClaudeAnswer || '').length} chars`,
