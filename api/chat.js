@@ -271,14 +271,6 @@ async function tavilySearch(searchQuery, intent) {
         query: searchQuery,
         search_depth: (intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') ? 'advanced' : 'basic',
         max_results: 7,
-        include_domains: [
-          'community.sap.com',
-          'blogs.sap.com',
-          'help.sap.com',
-          'me.sap.com',
-          'support.sap.com',
-          'launchpad.support.sap.com'
-        ],
         include_answer: false,
         include_raw_content: false,
       })
@@ -408,52 +400,56 @@ async function fetchBookChunks(question, detectedModule, userToken) {
 // Mini removed — it was introducing hallucinated table names and technical terms
 // Sonnet merges because: better instruction following, less hallucination risk,
 // already produced the best standalone answers in testing
-async function synthesiseAnswers(gptAnswer, claudeAnswer, originalQuestion, onChunk, systemContext) {
+async function synthesiseAnswers(sonnetAnswer, geminiAns, originalQuestion, bookChunksText, tavilyText, onChunk) {
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // Build the analyst prompt with all 4 sources
+    const sourcesBlock = []
+
+    if (bookChunksText) {
+      sourcesBlock.push(`📚 SAP BOOK DOCUMENTATION (highest authority — always cite with page numbers):
+${bookChunksText}`)
+    }
+
+    if (tavilyText) {
+      sourcesBlock.push(`🔍 WEB SEARCH RESULTS (SAP Community, SAP Help, blogs):
+${tavilyText}`)
+    }
+
+    if (sonnetAnswer) {
+      sourcesBlock.push(`🧠 SAP CONSULTANT ANSWER 1 (Claude Sonnet):
+${sonnetAnswer}`)
+    }
+
+    if (geminiAns) {
+      sourcesBlock.push(`🤖 SAP CONSULTANT ANSWER 2 (Gemini):
+${geminiAns}`)
+    }
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'gpt-4o',
         max_tokens: 2048,
+        temperature: 0.1,
         stream: true,
-        system: `You are a text assembler for SAP consultant answers. You do NOT rewrite. You do NOT use your own understanding. You ONLY assemble from the two answers provided.
-
-YOUR ONLY JOB:
-1. Take Answer 1 (Claude Sonnet) EXACTLY as written — this is your base. Do not change its words, structure, or style.
-2. Scan Answer 2 (GPT-4o) for any unique T-codes, table names, program names, or facts that are NOT already in Answer 1.
-3. Insert those missing items from Answer 2 into the appropriate place in Answer 1 — inline, without disrupting the flow.
-4. Remove exact duplicate sentences only.
-5. Output the result.
-
-FORBIDDEN:
-- Rewriting Answer 1 in your own words
-- Changing the tone, structure, or style of Answer 1
-- Starting with any greeting ("Good morning", "Good evening", "Let's dive into")
-- Adding your own knowledge, context, or improvements
-- Simplifying or summarising either answer
-- Changing any T-code, table name, program name, function module name
-
-REQUIRED:
-- Answer 1's exact wording preserved
-- All gotchas, edge cases, warnings from both answers present
-- All citations (Book Name, p.XX) preserved
-- Direct start — no preamble`,
         messages: [{
+          role: 'system',
+          content: `You are an expert SAP analyst. You receive a question and multiple sources. Your job is to produce one clean, expert answer.
+
+RULES — non-negotiable:
+1. RELEVANCE FIRST: Read the question carefully. Only use content from the sources that directly answers the question. If a source talks about something unrelated — ignore it completely.
+2. NO OWN KNOWLEDGE: Do not add anything from your own training. Only use what is in the provided sources.
+3. BOOK CHUNKS = HIGHEST AUTHORITY: If book documentation covers the topic — cite it with page numbers inline e.g. (Production Planning, p.27). It overrides other sources.
+4. CONSULTANT ANSWERS = PRIMARY CONTENT: Use the consultant answers as the main content. They contain the key insights, gotchas, and mechanisms.
+5. WEB RESULTS = SUPPORTING EVIDENCE: Use web results only to add SAP Note numbers, community-verified workarounds, or specific links. Do not use web results as primary content.
+6. NO GREETINGS: Start directly with the answer. No "Good morning", "Let's dive into", or preamble.
+7. NO STEP-BY-STEP FOR CONSULTANTS: Write in consultant prose. Not numbered documentation steps.
+8. CONCISE: Remove duplicates. Say each point once. The output must be shorter than all sources combined.
+9. CITATIONS: Weave citations inline naturally — (Book, p.XX) for books, [SAP Community] for web results.`
+        }, {
           role: 'user',
-          content: `SAP Question: "${originalQuestion}"
-
-Answer 1 — Claude Sonnet (YOUR BASE — preserve exactly, do not rewrite):
-${claudeAnswer}
-
-Answer 2 — GPT-4o (SUPPLEMENT ONLY — extract missing facts, insert into Answer 1):
-${gptAnswer}
-
-Output the assembled answer now. Start directly with the content:`
+          content: 'SAP Question: ' + originalQuestion + '\n\n' + sourcesBlock.join('\n\n---\n\n') + '\n\nProduce one clean expert answer using only the relevant content above:'
         }]
       })
     })
@@ -461,12 +457,11 @@ Output the assembled answer now. Start directly with the content:`
     if (!res.ok) {
       const err = await res.text()
       console.error('[SYNTHESIS] Error:', res.status, err.slice(0, 100))
-      // Fallback: return GPT-4o answer as-is
-      onChunk && gptAnswer.split(' ').forEach(w => onChunk(w + ' '))
-      return gptAnswer
+      onChunk && sonnetAnswer.split(' ').forEach(w => onChunk(w + ' '))
+      return sonnetAnswer
     }
 
-    const reader  = res.body.getReader()
+    const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = '', fullText = ''
 
@@ -481,34 +476,25 @@ Output the assembled answer now. Start directly with the content:`
         const data = line.slice(6).trim()
         if (data === '[DONE]') continue
         try {
-          const json = JSON.parse(data)
-          if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-            const text = json.delta.text || ''
-            if (text) { fullText += text; onChunk && onChunk(text) }
-          }
+          const text = JSON.parse(data)?.choices?.[0]?.delta?.content || ''
+          if (text) { fullText += text; onChunk && onChunk(text) }
         } catch {}
       }
     }
-    console.log('[SYNTHESIS] Merged answer length:', fullText.length)
+    console.log('[SYNTHESIS] Final answer length:', fullText.length)
     return fullText
   } catch (e) {
     console.error('[SYNTHESIS] Exception:', e.message)
-    return gptAnswer // fallback
+    return sonnetAnswer
   }
 }
 
-// ── 8b. GEMINI FACT-CHECKER ───────────────────────────────────────────────────
-// Runs AFTER synthesis — checks technical SAP facts silently
-// Only fires if answer contains technical objects (tables, T-codes, BAdIs etc.)
-// Returns corrected answer + list of corrections made
-async function geminiFactCheck(answer, originalQuestion) {
+
+// ── 8b. GEMINI — parallel answerer ───────────────────────────────────────────
+async function geminiAnswer(question, systemPrompt) {
   try {
     const key = process.env.GEMINI_API_KEY
-    if (!key) { console.error('[GEMINI] No API key'); return { answer, corrections: [] } }
-
-    // Only fact-check if answer contains technical SAP objects
-    const hasTechnicalContent = /\b([A-Z]{2,6}\d*|[A-Z]+_[A-Z]+|[A-Z]{4,})\b/.test(answer)
-    if (!hasTechnicalContent) return { answer, corrections: [] }
+    if (!key) { console.error('[GEMINI] No API key'); return '' }
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
       method: 'POST',
@@ -516,55 +502,25 @@ async function geminiFactCheck(answer, originalQuestion) {
       body: JSON.stringify({
         contents: [{
           parts: [{
-            text: `You are a senior SAP technical fact-checker with deep knowledge of SAP table structures, T-codes, BAdIs, and function modules.
-
-Review this SAP answer for technical accuracy. Focus ONLY on:
-1. Table names — do they actually exist in SAP? (e.g. EQUI, ILOA, EQUZ, MARA, MARC are real — EQUA does not exist)
-2. T-codes — are they correct for the stated purpose?
-3. BAdI/user exit/FM names — do they actually exist?
-4. Technical architecture claims — are they factually correct?
-
-SAP Question: "${originalQuestion}"
-
-Answer to fact-check:
-${answer}
-
-Rules:
-- If everything is correct — return EXACTLY: {"status":"ok","corrections":[]}
-- If you find errors — return EXACTLY: {"status":"corrected","corrections":[{"wrong":"EQUA","correct":"ILOA","reason":"EQUA does not exist; Equipment-Asset data is in ILOA via EQUZ"}],"correctedAnswer":"[full corrected answer text here]"}
-- Only flag things you are 100% certain are wrong
-- Do NOT flag things you are merely unsure about
-- Return ONLY valid JSON, nothing else`
+            text: `${systemPrompt}\n\nQuestion: ${question}\n\nAnswer directly as a senior SAP consultant. No greetings. No preamble. Start with the answer.`
           }]
         }],
-        generationConfig: { temperature: 0, maxOutputTokens: 2048 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
       })
     })
 
     if (!res.ok) {
-      const err = await res.text()
-      console.error('[GEMINI] Error:', res.status, err.slice(0, 200))
-      return { answer, corrections: [] }
+      console.error('[GEMINI] Error:', res.status)
+      return ''
     }
 
     const data = await res.json()
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '{}'
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
-
-    if (parsed.status === 'corrected' && parsed.corrections?.length > 0) {
-      console.log('[GEMINI] Corrections found:', parsed.corrections.length, parsed.corrections.map(c => `${c.wrong}→${c.correct}`).join(', '))
-      return {
-        answer: parsed.correctedAnswer || answer,
-        corrections: parsed.corrections
-      }
-    }
-
-    console.log('[GEMINI] Fact-check passed — no corrections needed')
-    return { answer, corrections: [] }
-
+    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+    console.log('[GEMINI] Answer length:', answer.length)
+    return answer
   } catch (e) {
     console.error('[GEMINI] Exception:', e.message)
-    return { answer, corrections: [] }
+    return ''
   }
 }
 
@@ -1411,69 +1367,64 @@ export default async function handler(req, res) {
       debugLog.routing = 'claude-sonnet (deliverable)'
 
     } else if (isMeaningfulQuery) {
-      // ALL meaningful messages → GPT-4o + Claude Sonnet → Claude Sonnet merges
-      // No exceptions by intent — follow-ups and short SAP questions need full synthesis too
-      modelUsed = 'synthesised'
-      debugLog.routing = 'gpt4o + sonnet → sonnet merge'
+      // ALL SAP Q&A → Sonnet + Gemini answer → GPT-4o analyses all sources
+      modelUsed = 'analysed'
+      debugLog.routing = 'sonnet + gemini → gpt4o analyst'
 
       let gptAnswer    = ''
       let claudeAnswer = ''
+      let geminiAns    = ''
 
-      send({ type: 'model_label', label: 'synthesising...' })
+      send({ type: 'model_label', label: 'analysing...' })
 
-      // Fire both models in parallel — neither streams to UI yet
-      const [gptResult, claudeResult] = await Promise.all([
-        streamGPT(systemPrompt, validMessages, null, 'gpt-4o', 4096)
-          .catch(e => { console.error('[GPT-4o] Error:', e.message); return '' }),
+      // Fire Sonnet + Gemini in parallel — GPT-4o will analyse all sources
+      const [claudeResult, geminiResult] = await Promise.all([
         streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, null, 4000)
           .catch(e => { console.error('[Claude] Error:', e.message); return '' }),
+        geminiAnswer(lastMsg, systemPrompt)
+          .catch(e => { console.error('[Gemini] Error:', e.message); return '' }),
       ])
 
-      gptAnswer    = gptResult
       claudeAnswer = claudeResult
+      geminiAns    = geminiResult
 
-      debugLog.gptAnswerLength    = gptAnswer.length
       debugLog.claudeAnswerLength = claudeAnswer.length
+      debugLog.geminiAnswerLength = geminiAns.length
 
       const t4 = Date.now()
       debugLog.modelsMs = t4 - t3
 
-      // If either model failed, use the other
-      if (!gptAnswer && !claudeAnswer) {
-        fullAnswer = '⚠️ Both models failed — please try again.'
-      } else if (!claudeAnswer || !gptAnswer) {
-        fullAnswer = gptAnswer || claudeAnswer
-        for (const chunk of fullAnswer.split(' ')) {
-          send({ type: 'chunk', text: chunk + ' ' })
-        }
+      // Build book chunks text for analyst
+      const bookChunksText = (bookChunks || []).length > 0
+        ? bookChunks.map((c, i) => `[${i+1}] ${c.source_book}, p.${c.page_number}${c.lesson_title ? ` — ${c.lesson_title}` : ''}\n${c.content}`).join('\n\n')
+        : ''
+
+      // Build Tavily text for analyst
+      const tavilyTextForMerge = tavilyFiltered.length > 0
+        ? tavilyFiltered.map((r, i) => `[T${i+1}] ${r.source} — ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')
+        : ''
+
+      if (!claudeAnswer && !geminiAns) {
+        fullAnswer = '⚠️ Models failed — please try again.'
       } else {
-        // Both answered — synthesise via Claude Sonnet
-        fullAnswer = await synthesiseAnswers(gptAnswer, claudeAnswer, lastMsg, chunk => send({ type: 'chunk', text: chunk }))
+        // GPT-4o analyses all sources and produces clean answer
+        fullAnswer = await synthesiseAnswers(
+          claudeAnswer,
+          geminiAns,
+          lastMsg,
+          bookChunksText,
+          tavilyTextForMerge,
+          chunk => send({ type: 'chunk', text: chunk })
+        )
         debugLog.synthesisMs = Date.now() - t4
-
-        // ── Gemini fact-check runs AFTER synthesis ────────────────────────
-        // Checks technical SAP facts silently — corrects if needed
-        const t5gemini = Date.now()
-        const { answer: checkedAnswer, corrections } = await geminiFactCheck(fullAnswer, lastMsg).catch(() => ({ answer: fullAnswer, corrections: [] }))
-        debugLog.geminiMs = Date.now() - t5gemini
-        debugLog.geminiCorrections = corrections.length
-
-        if (corrections.length > 0) {
-          // Replace the streamed answer with corrected version
-          fullAnswer = checkedAnswer
-          debugLog.geminiDetails = corrections
-          // Send correction note to UI
-          const correctionNote = `\n\n---\n⚠️ **Fact-check correction:** ${corrections.map(c => `*${c.wrong}* → **${c.correct}** (${c.reason})`).join('; ')}`
-          send({ type: 'chunk', text: correctionNote })
-          fullAnswer += correctionNote
-          console.log('[GEMINI] Applied', corrections.length, 'corrections')
-        }
+        debugLog.geminiCorrections = 0
       }
 
       // Store full pipeline in debug log for admin inspection
-      debugLog.rawGptAnswer    = gptAnswer
+      debugLog.rawGptAnswer    = ''  // GPT-4o is now analyst not answerer
       debugLog.rawClaudeAnswer = claudeAnswer
       debugLog.rawMergedAnswer = fullAnswer
+      debugLog.geminiRawAnswer = geminiAns
 
     } else {
       // Short/greeting — GPT-4o only
@@ -1619,7 +1570,8 @@ export default async function handler(req, res) {
               snippet: r.snippet?.slice(0, 200) || '',
             })),
             openAISnippet: geminiSearchText?.slice(0, 400) || '',
-            gptAnswer:     debugLog.rawGptAnswer    || '',
+            gptAnswer:     '',  // GPT-4o is now analyst not answerer
+            geminiAnswer:  debugLog.geminiRawAnswer || '',
             claudeAnswer:  debugLog.rawClaudeAnswer || '',
             mergedAnswer:  debugLog.rawMergedAnswer || '',
             geminiCorrections: debugLog.geminiCorrections || 0,
