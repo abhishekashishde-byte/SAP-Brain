@@ -435,18 +435,18 @@ ${geminiAns}`)
         stream: true,
         messages: [{
           role: 'system',
-          content: `You are an expert SAP analyst. You receive a question and multiple sources. Your job is to produce one clean, expert answer.
+          content: `You are an expert SAP analyst. You receive a question and multiple sources. Your job is to produce one clean, expert answer using ALL provided sources.
 
 RULES — non-negotiable:
-1. RELEVANCE FIRST: Read the question carefully. Only use content from the sources that directly answers the question. If a source talks about something unrelated — ignore it completely.
+1. USE ALL SOURCES: Use content from ALL sources provided. Do not ignore any source unless it is completely off-topic (different SAP module entirely, completely unrelated process). If a web result touches the topic even partially — cite it.
 2. NO OWN KNOWLEDGE: Do not add anything from your own training. Only use what is in the provided sources.
 3. BOOK CHUNKS = HIGHEST AUTHORITY: If book documentation covers the topic — cite it with page numbers inline e.g. (Production Planning, p.27). It overrides other sources.
-4. CONSULTANT ANSWERS = PRIMARY CONTENT: Use the consultant answers as the main content. They contain the key insights, gotchas, and mechanisms.
-5. WEB RESULTS = SUPPORTING EVIDENCE: Use web results only to add SAP Note numbers, community-verified workarounds, or specific links. Do not use web results as primary content.
+4. CONSULTANT ANSWERS = PRIMARY CONTENT: Use the consultant answers as the main content. They contain the key insights, gotchas, and mechanisms. PRESERVE ALL unique insights — especially gotchas, edge cases, table names, program names, and warnings. Do not drop any point that adds value.
+5. WEB RESULTS = ALWAYS CITE: For every Tavily/web result provided — always include at least one reference to it in the answer. Add the URL as an inline citation [Source Title](URL). Even if the web result only partially addresses the question — cite it for further reading.
 6. NO GREETINGS: Start directly with the answer. No "Good morning", "Let's dive into", or preamble.
 7. NO STEP-BY-STEP FOR CONSULTANTS: Write in consultant prose. Not numbered documentation steps.
-8. CONCISE: Remove duplicates. Say each point once. The output must be shorter than all sources combined.
-9. CITATIONS: Weave citations inline naturally — (Book, p.XX) for books, [SAP Community] for web results.`
+8. CONCISE BUT COMPLETE: Remove duplicates. Say each point once. But never drop a unique insight just to be shorter.
+9. CITATIONS: Weave citations inline — (Book, p.XX) for books, [Title](URL) for web results.`
         }, {
           role: 'user',
           content: 'SAP Question: ' + originalQuestion + '\n\n' + sourcesBlock.join('\n\n---\n\n') + '\n\nProduce one clean expert answer using only the relevant content above:'
@@ -496,7 +496,7 @@ async function geminiAnswer(question, systemPrompt) {
     const key = process.env.GEMINI_API_KEY
     if (!key) { console.error('[GEMINI] No API key'); return '' }
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
