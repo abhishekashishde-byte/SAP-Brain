@@ -447,7 +447,7 @@ RULES — non-negotiable:
 7. NO STEP-BY-STEP FOR CONSULTANTS: Write in consultant prose. Not numbered documentation steps.
 8. CONCISE BUT COMPLETE: Remove duplicates. Say each point once. But never drop a unique insight just to be shorter.
 9. CITATIONS: Weave citations inline — (Book, p.XX) for books, [Title](URL) for web results.
-10. NEVER write model names or source labels in the output. Never write [Claude Sonnet], [Gemini], [Expert Answer 1] or any attribution. Write as one seamless expert voice.\`
+10. NEVER write model names or source labels in the output. Never write [Claude Sonnet], [Gemini], [Expert Answer 1] or any attribution. Write as one seamless expert voice.`
         }, {
           role: 'user',
           content: 'SAP Question: ' + originalQuestion + '\n\n' + sourcesBlock.join('\n\n---\n\n') + '\n\nProduce one clean expert answer using only the relevant content above:'
