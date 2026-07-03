@@ -531,10 +531,19 @@ Question: ${question}`
       return ''
     }
     
-    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
-    console.log('[GEMINI] Answer length:', answer.length)
+    // Gemini 2.5 Flash uses thinking mode — response has multiple parts
+    // parts[0] may be the thinking part (thought: true), parts[1] is the actual answer
+    const parts = data.candidates?.[0]?.content?.parts || []
+    const answer = parts
+      .filter(p => !p.thought)  // skip thinking parts
+      .map(p => p.text || '')
+      .join('')
+      .trim()
+    
+    console.log('[GEMINI] Parts count:', parts.length, '| Answer length:', answer.length)
     if (!answer) {
       console.error('[GEMINI] Empty answer. Finish reason:', data.candidates?.[0]?.finishReason)
+      console.error('[GEMINI] Full response:', JSON.stringify(data).slice(0, 500))
     }
     return answer
   } catch (e) {
