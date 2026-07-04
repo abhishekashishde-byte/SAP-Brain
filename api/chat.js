@@ -257,6 +257,42 @@ Conversation context: ${conversationSummary || 'No previous context'}`
   } catch { return question }
 }
 
+// ── STRIP BOILERPLATE — remove nav/menu/header junk from raw_content ────────
+// Tavily's raw_content is a markdown dump of the whole page, which usually starts
+// with site nav, breadcrumbs, category menus and images before the real article
+// body. Slicing the first N chars of that raw text mostly returns junk. This
+// strips link-only/nav-like lines and images, then returns the first real prose.
+function stripBoilerplate(text) {
+  if (!text) return ''
+  // Remove images entirely first (including images nested inside a link wrapper),
+  // e.g. [![alt](imgUrl)](linkUrl) and ![alt](imgUrl)
+  let scrubbed = text
+    .replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+
+  const lines = scrubbed.split('\n')
+  const cleaned = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    // Strip remaining markdown links down to their link text for measuring real content
+    const withoutLinks = trimmed.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').trim()
+    const linkCount = (trimmed.match(/\]\([^)]*\)/g) || []).length
+    // Nav/menu lines: multiple links crammed together with little surrounding prose
+    if (linkCount >= 2 && withoutLinks.length < 60) continue
+    if (linkCount >= 1 && withoutLinks.replace(/[^a-zA-Z]/g, '').length < 15) continue
+    // Skip short heading-only lines that look like site categories/menus
+    if (/^#{1,6}\s/.test(trimmed) && trimmed.replace(/^#{1,6}\s/, '').split(' ').length <= 4) continue
+    // Skip bare bullet markers with almost no content
+    if (/^[*\-]\s*$/.test(trimmed)) continue
+    // Skip short breadcrumb/category fragments: few words, no sentence punctuation
+    const wordCount = withoutLinks.split(/\s+/).filter(Boolean).length
+    if (wordCount <= 4 && !/[.!?]\s*$/.test(withoutLinks)) continue
+    cleaned.push(withoutLinks)
+  }
+  return cleaned.join(' ').replace(/\s+/g, ' ').trim()
+}
+
 // ── 5. TAVILY SEARCH — SAP-targeted ──────────────────────────────────────────
 async function tavilySearch(searchQuery, intent) {
   try {
@@ -287,7 +323,7 @@ async function tavilySearch(searchQuery, intent) {
     const results = (data.results || []).map(r => ({
       title:   r.title || '',
       url:     r.url   || '',
-      snippet: (r.raw_content || r.content)?.slice(0, 1000) || '',
+      snippet: stripBoilerplate(r.raw_content || r.content || '').slice(0, 1000) || (r.content || '').slice(0, 1000) || '',
       score:   r.score || 0,
       source:  r.url?.includes('community.sap.com') ? 'SAP Community'
              : r.url?.includes('blogs.sap.com')     ? 'SAP Blog'
