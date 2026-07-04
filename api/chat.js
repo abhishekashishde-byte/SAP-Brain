@@ -257,42 +257,6 @@ Conversation context: ${conversationSummary || 'No previous context'}`
   } catch { return question }
 }
 
-// ── STRIP BOILERPLATE — remove nav/menu/header junk from raw_content ────────
-// Tavily's raw_content is a markdown dump of the whole page, which usually starts
-// with site nav, breadcrumbs, category menus and images before the real article
-// body. Slicing the first N chars of that raw text mostly returns junk. This
-// strips link-only/nav-like lines and images, then returns the first real prose.
-function stripBoilerplate(text) {
-  if (!text) return ''
-  // Remove images entirely first (including images nested inside a link wrapper),
-  // e.g. [![alt](imgUrl)](linkUrl) and ![alt](imgUrl)
-  let scrubbed = text
-    .replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, '')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-
-  const lines = scrubbed.split('\n')
-  const cleaned = []
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    // Strip remaining markdown links down to their link text for measuring real content
-    const withoutLinks = trimmed.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').trim()
-    const linkCount = (trimmed.match(/\]\([^)]*\)/g) || []).length
-    // Nav/menu lines: multiple links crammed together with little surrounding prose
-    if (linkCount >= 2 && withoutLinks.length < 60) continue
-    if (linkCount >= 1 && withoutLinks.replace(/[^a-zA-Z]/g, '').length < 15) continue
-    // Skip short heading-only lines that look like site categories/menus
-    if (/^#{1,6}\s/.test(trimmed) && trimmed.replace(/^#{1,6}\s/, '').split(' ').length <= 4) continue
-    // Skip bare bullet markers with almost no content
-    if (/^[*\-]\s*$/.test(trimmed)) continue
-    // Skip short breadcrumb/category fragments: few words, no sentence punctuation
-    const wordCount = withoutLinks.split(/\s+/).filter(Boolean).length
-    if (wordCount <= 4 && !/[.!?]\s*$/.test(withoutLinks)) continue
-    cleaned.push(withoutLinks)
-  }
-  return cleaned.join(' ').replace(/\s+/g, ' ').trim()
-}
-
 // ── 5. TAVILY SEARCH — SAP-targeted ──────────────────────────────────────────
 async function tavilySearch(searchQuery, intent) {
   try {
@@ -308,8 +272,16 @@ async function tavilySearch(searchQuery, intent) {
         search_depth: (intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') ? 'advanced' : 'basic',
         max_results: 7,
         include_answer: false,
-        include_raw_content: true,   // Get full page content
-        max_tokens_per_result: 2000,
+        include_raw_content: false,
+        prefer_domains: [
+          'community.sap.com',
+          'blogs.sap.com',
+          'help.sap.com',
+          'me.sap.com',
+          'ganeshsapscm.com',
+          'saplearninghub.plateau.com'
+        ],
+        max_tokens_per_result: 1000,
       })
     })
 
@@ -323,7 +295,7 @@ async function tavilySearch(searchQuery, intent) {
     const results = (data.results || []).map(r => ({
       title:   r.title || '',
       url:     r.url   || '',
-      snippet: stripBoilerplate(r.raw_content || r.content || '').slice(0, 1000) || (r.content || '').slice(0, 1000) || '',
+      snippet: r.content?.slice(0, 1000) || '',
       score:   r.score || 0,
       source:  r.url?.includes('community.sap.com') ? 'SAP Community'
              : r.url?.includes('blogs.sap.com')     ? 'SAP Blog'
@@ -341,6 +313,59 @@ async function tavilySearch(searchQuery, intent) {
 }
 
 // ── 6. RELEVANCE FILTERING — GPT-4o mini scores Tavily results ───────────────
+// ── WEB FETCH — get full content from top Tavily URLs ────────────────────────
+// Tavily snippets are short — fetch the actual page for richer content
+async function fetchUrlContent(url, maxChars = 3000) {
+  try {
+    // Only fetch from known safe SAP sources — avoid fetching arbitrary sites
+    const safeDomains = [
+      'community.sap.com', 'blogs.sap.com', 'help.sap.com',
+      'me.sap.com', 'ganeshsapscm.com', 'saplearninghub.plateau.com',
+      'sap-press.com', 'sapgurus.com', 'erpgreat.com', 'sapcommunity.com'
+    ]
+    const isSafe = safeDomains.some(d => url.includes(d))
+    if (!isSafe) {
+      console.log(`[FETCH] Skipping non-SAP URL: ${url.slice(0, 60)}`)
+      return ''
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000) // 5s timeout
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; WaniBot/1.0; SAP research)',
+        'Accept': 'text/html,application/xhtml+xml',
+      }
+    })
+    clearTimeout(timeout)
+
+    if (!res.ok) return ''
+
+    const html = await res.text()
+
+    // Extract text content from HTML — remove tags, scripts, styles
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .trim()
+      .slice(0, maxChars)
+
+    console.log(`[FETCH] ${url.slice(0, 60)} → ${text.length} chars`)
+    return text
+  } catch (e) {
+    console.log(`[FETCH] Failed: ${url.slice(0, 60)} — ${e.message}`)
+    return ''
+  }
+}
+
 async function filterRelevantResults(results, originalQuestion) {
   if (results.length === 0) return []
   try {
@@ -1263,6 +1288,19 @@ export default async function handler(req, res) {
       ? await filterRelevantResults(tavilyRaw, lastMsg).catch(() => tavilyRaw.slice(0, 3))
       : []
 
+    // 5f. Web fetch top 2 Tavily URLs for full content
+    // Runs in parallel for speed — enriches snippets significantly
+    if (tavilyFiltered.length > 0) {
+      const fetchPromises = tavilyFiltered.slice(0, 2).map(async (r, i) => {
+        const fullContent = await fetchUrlContent(r.url).catch(() => '')
+        if (fullContent && fullContent.length > r.snippet.length) {
+          tavilyFiltered[i].snippet = fullContent  // Replace short snippet with full content
+          console.log(`[FETCH] Enriched result ${i+1}: ${fullContent.length} chars`)
+        }
+      })
+      await Promise.all(fetchPromises)
+    }
+
     // Combine search sources
     const openAISources = openAIResult?.sources || []
     const geminiSearchText = openAIResult?.text || ''
@@ -1366,6 +1404,9 @@ export default async function handler(req, res) {
     if (isBapiSearch) systemPrompt += `\n\n⚠️ BAPI/FM ACCURACY RULE: NEVER invent BAPI or Function Module names. Only state names you are 100% certain exist. Verify in SE37 or https://api.sap.com`
     if (isExitSearch) systemPrompt += `\n\n⚠️ USER EXIT/BAdI RULE: Format as markdown table: Exit/BAdI Name | Type | T-code | What It Controls. Only state exits you are certain exist. Verify in SE84.`
 
+    // ── Permanent hardcoded corrections ────────────────────────────────────────
+    systemPrompt += `\n\n⚠️ PERMANENT CORRECTIONS — ALWAYS APPLY:\n- MRP Area exists indicator field is MARC-DIBER (NOT MARC-KZAUN — KZAUN is unrelated to MRP Areas)\n- MDMA table stores MRP Area data for materials\n- Standard SAP report for mass update of MRP area indicator contains DIBER in its name`
+
     // ── Global corrections ─────────────────────────────────────────────────
     if (globalCorrections.length > 0) {
       systemPrompt += `\n\n⚠️ VERIFIED CORRECTIONS:\n${globalCorrections.map(c => `- ${c}`).join('\n')}`
@@ -1405,7 +1446,7 @@ export default async function handler(req, res) {
     // BAPI/FM question override — names like MEASUREM_POINT_UPD_PYEAR look like
     // code to Groq but are SAP Q&A questions. Override isCode when no code was actually pasted.
     const isBapiFmQuestion = isBapiSearch || isExitSearch ||
-      (/\b(function module|bapi|rfc|user exit|badi|enhancement spot)\b/i.test(lastMsg) && !body.attachedCode)
+      (/\b(function module|bapi|rfc|user exit|badi|enhancement spot|custom logic|custom code|z-program|z program|abap program)\b/i.test(lastMsg) && !body.attachedCode && !/(SELECT |DATA:|LOOP AT|ENDLOOP|METHOD |CLASS |FORM |PERFORM )/i.test(lastMsg))
     const isRealCode = isCode && !isBapiFmQuestion
 
     const isComplexAbap = isRealCode && (
@@ -1421,6 +1462,8 @@ export default async function handler(req, res) {
       fullAnswer = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (code)'
+      debugLog.rawClaudeAnswer = fullAnswer
+      debugLog.enrichedPromptSnippet = systemPrompt.slice(0, 2000)
 
     } else if (intent === 'EXCEL_VALIDATION' && shouldGenerateDoc) {
       // Excel/macro/VBA generation → GPT-4o only (better at formulas, VBA syntax, tabular logic)
@@ -1491,7 +1534,8 @@ export default async function handler(req, res) {
 
       debugLog.rawClaudeAnswer = fullAnswer
       debugLog.rawMergedAnswer = fullAnswer
-      debugLog.geminiRawAnswer = geminiAns
+      debugLog.geminiRawAnswer = geminiAns || ''
+      console.log('[GEMINI] Stored in pipeline:', (geminiAns || '').length, 'chars')
       debugLog.rawGptAnswer    = ''
 
       const t4 = Date.now()
