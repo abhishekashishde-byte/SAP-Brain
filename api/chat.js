@@ -272,8 +272,8 @@ async function tavilySearch(searchQuery, intent) {
         search_depth: (intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') ? 'advanced' : 'basic',
         max_results: 7,
         include_answer: false,
-        include_raw_content: false,
-        max_tokens_per_result: 800,
+        include_raw_content: true,   // Get full page content
+        max_tokens_per_result: 2000,
       })
     })
 
@@ -287,7 +287,7 @@ async function tavilySearch(searchQuery, intent) {
     const results = (data.results || []).map(r => ({
       title:   r.title || '',
       url:     r.url   || '',
-      snippet: r.content?.slice(0, 400) || '',
+      snippet: r.content?.slice(0, 1000) || '',
       score:   r.score || 0,
       source:  r.url?.includes('community.sap.com') ? 'SAP Community'
              : r.url?.includes('blogs.sap.com')     ? 'SAP Blog'
@@ -1420,32 +1420,38 @@ export default async function handler(req, res) {
       // Inject Tavily results directly into Sonnet's prompt
       if (tavilyFiltered.length > 0) {
         const tavilyText = tavilyFiltered.map((r, i) =>
-          `[Web ${i+1}] ${r.title}\nURL: ${r.url}\n${r.snippet}`
+          `[Web ${i+1}] ${r.title}\nURL: ${r.url}\n${(r.snippet || '').slice(0, 1000)}`
         ).join('\n\n')
         enrichedSystemPrompt += `\n\n🔍 WEB SEARCH RESULTS — cite relevant ones with URL inline:\n${tavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
       }
 
-      // Fire Sonnet + Gemini in parallel
-      // Sonnet streams directly to user — Gemini runs in background for pipeline visibility
+      // Fire Gemini first (non-streaming, runs while we build Sonnet prompt)
       send({ type: 'model_label', label: '' })
 
-      // Start Gemini in parallel (background — does not affect user-facing answer)
+      // Start Gemini immediately in parallel
       const geminiPromise = geminiAnswer(lastMsg).catch(e => {
         console.error('[GEMINI] Exception:', e.message)
         return ''
       })
 
+      // Wait for Gemini to complete (usually 3-6s, same as Sonnet setup time)
+      const geminiAns = await geminiPromise
+      console.log('[GEMINI] Answer length for injection:', geminiAns.length)
+
+      // Inject Gemini answer into Sonnet prompt as additional expert perspective
+      let finalEnrichedPrompt = enrichedSystemPrompt
+      if (geminiAns && geminiAns.length > 100) {
+        finalEnrichedPrompt += `\n\n🤖 ADDITIONAL EXPERT PERSPECTIVE (use insights not already in your answer, do not repeat yourself, do not mention this is from another model):\n${geminiAns.slice(0, 2000)}`
+      }
+
       // Sonnet answers directly — streaming to user — THIS is the final answer
       fullAnswer = await streamClaude(
         'claude-sonnet-4-5',
-        enrichedSystemPrompt,
+        finalEnrichedPrompt,
         validMessages,
         chunk => send({ type: 'chunk', text: chunk }),
         4096
       )
-
-      // Resolve Gemini after Sonnet is done (it runs in parallel so usually ready)
-      const geminiAns = await geminiPromise
 
       debugLog.rawClaudeAnswer = fullAnswer
       debugLog.rawMergedAnswer = fullAnswer
@@ -1456,7 +1462,7 @@ export default async function handler(req, res) {
       debugLog.modelsMs    = t4 - t3
       debugLog.synthesisMs = 0
       debugLog.geminiCorrections = 0
-      debugLog.enrichedPromptSnippet = enrichedSystemPrompt.slice(0, 3000)
+      debugLog.enrichedPromptSnippet = finalEnrichedPrompt.slice(0, 4000)
     } else {
       // Short/greeting — GPT-4o only
       send({ type: 'model_label', label: 'by GPT-4o' })
