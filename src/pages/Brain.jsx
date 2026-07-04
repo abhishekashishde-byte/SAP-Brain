@@ -328,10 +328,12 @@ function AnswerPipeline({ pipeline, dark }) {
     {
       id: 'gemini_answer',
       icon: '🤖',
-      label: 'Gemini Flash Answer',
+      label: `Gemini Flash Answer ${pipeline.geminiAnswer ? '(' + Math.round(pipeline.geminiAnswer.length/4) + ' tokens)' : ''}`,
       color: '#10B981',
-      empty: !pipeline.geminiAnswer,
-      content: pipeline.geminiAnswer || 'No Gemini answer',
+      empty: !pipeline.geminiAnswer || pipeline.geminiAnswer.length < 10,
+      content: pipeline.geminiAnswer && pipeline.geminiAnswer.length > 10
+        ? pipeline.geminiAnswer
+        : 'No Gemini answer — check Vercel logs for [GEMINI] error',
     },
     {
       id: 'merged',
