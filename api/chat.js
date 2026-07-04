@@ -287,7 +287,7 @@ async function tavilySearch(searchQuery, intent) {
     const results = (data.results || []).map(r => ({
       title:   r.title || '',
       url:     r.url   || '',
-      snippet: r.content?.slice(0, 1000) || '',
+      snippet: (r.raw_content || r.content)?.slice(0, 1000) || '',
       score:   r.score || 0,
       source:  r.url?.includes('community.sap.com') ? 'SAP Community'
              : r.url?.includes('blogs.sap.com')     ? 'SAP Blog'
