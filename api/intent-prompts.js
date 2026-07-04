@@ -535,14 +535,6 @@ IMPORTANT: Fiori app IDs change between releases. Only recommend apps you are ce
 If search results are provided below, use them as your primary source for app names and IDs.
 If no search results: state clearly "Please verify app IDs in your SAP Fiori Apps Library (fioriappslibrary.hana.ondemand.com)" — never invent IDs.
 
-IF THE GUI TRANSACTION HAS NO DIRECT FIORI EQUIVALENT — order your alternatives strictly as:
-1. Standard SAP-delivered Fiori/embedded capability in a current or recent release (check Fiori Apps Library — say "verify availability for your release" if unsure)
-2. Embedded Analytics / CDS-based timeline or list view (not a full replacement, but standard/native)
-3. SAP Analytics Cloud
-4. Custom SAPUI5/Fiori development — present LAST, as the fallback, never as option 1
-5. Third-party tool integration — only if nothing SAP-native fits
-Never lead with "build a custom app" — that is the last resort, not the headline recommendation.
-
 ## Fiori App Recommendations: [process/role]
 
 ### Recommended Apps
