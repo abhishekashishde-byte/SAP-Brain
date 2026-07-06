@@ -1516,6 +1516,8 @@ export default function Brain({ session }) {
   const [knowledgeEntries, setKnowledgeEntries] = useState([])
   const [showCapabilities, setShowCapabilities] = useState(false)
   const [pendingFinding, setPendingFinding]       = useState(null)
+  const [editedFindingText, setEditedFindingText] = useState('')
+  const [rejectedFindingKeys, setRejectedFindingKeys] = useState(() => new Set())
   const [pendingCorrection, setPendingCorrection] = useState(null)
   const [pendingMemorySave, setPendingMemorySave] = useState(null) // {summary, triggerMsgIndex}
   const [knowledgeToast, setKnowledgeToast]       = useState(null)
@@ -1639,19 +1641,29 @@ export default function Brain({ session }) {
   }
 
   const saveFinding = async (finding) => {
-    await chatFetch({ action: 'save_finding', ...finding })
+    await chatFetch({ action: 'save_finding', ...finding, finding: editedFindingText.trim() || finding.finding })
     setPendingFinding(null)
     setKnowledgeToast('💡 Finding saved to knowledge base')
     setTimeout(() => setKnowledgeToast(null), 3000)
   }
+
+  const findingKey = (f) => `${f.module || ''}|${f.topic || ''}|${f.object || ''}|${(f.finding || '').slice(0, 80)}`
 
   const checkForFindings = async (msgs) => {
     if (msgs.length < 4) return
     try {
       const res = await chatFetch({ action: 'suggest_finding', messages: msgs.slice(-10), module: activeConv?.module || browseModule })
       const data = await res.json()
-      if (data.found) setPendingFinding(data)
+      if (data.found && !rejectedFindingKeys.has(findingKey(data))) {
+        setPendingFinding(data)
+        setEditedFindingText(data.finding || '')
+      }
     } catch {}
+  }
+
+  const rejectFinding = () => {
+    if (pendingFinding) setRejectedFindingKeys(prev => new Set(prev).add(findingKey(pendingFinding)))
+    setPendingFinding(null)
   }
 
   // Document action buttons by type
@@ -2755,15 +2767,22 @@ export default function Brain({ session }) {
               </div>
             )}
 
-            {/* Pending finding confirmation */}
+            {/* Pending finding confirmation — editable before saving */}
             {pendingFinding && (
               <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:`1px solid rgba(79,70,229,0.3)`, borderRadius:14, padding:'14px 18px', fontSize:13, zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:420, width:'90vw' }}>
                 <div style={{ fontWeight:700, color:t.text, marginBottom:6 }}>💡 Save this finding?</div>
-                <div style={{ color:t.text2, marginBottom:4, fontSize:12 }}><span style={{ color:'#6366f1', fontWeight:600 }}>{pendingFinding.module} › {pendingFinding.topic} › {pendingFinding.object}</span></div>
-                <div style={{ color:t.text, marginBottom:12, lineHeight:1.5 }}>"{pendingFinding.finding}"</div>
-                <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={()=>setPendingFinding(null)} style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13 }}>Dismiss</button>
-                  <button onClick={()=>saveFinding(pendingFinding)} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background:'#4F46E5', color:'white', cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13, fontWeight:600 }}>✓ Save to Knowledge Base</button>
+                <div style={{ color:t.text2, marginBottom:6, fontSize:12 }}><span style={{ color:'#6366f1', fontWeight:600 }}>{pendingFinding.module} › {pendingFinding.topic} › {pendingFinding.object}</span></div>
+                <textarea
+                  value={editedFindingText}
+                  onChange={(e)=>setEditedFindingText(e.target.value)}
+                  rows={3}
+                  style={{ width:'100%', boxSizing:'border-box', color:t.text, background:dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.03)', border:`1px solid ${t.border}`, borderRadius:8, padding:'8px 10px', marginBottom:12, lineHeight:1.5, fontFamily:"'Inter',sans-serif", fontSize:13, resize:'vertical' }}
+                  placeholder="Edit the finding before saving, if needed"
+                />
+                <div style={{ display:'flex', gap:6 }}>
+                  <button onClick={()=>setPendingFinding(null)} style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:12 }}>Dismiss</button>
+                  <button onClick={rejectFinding} title="Don't suggest this again" style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:12 }}>Not needed</button>
+                  <button onClick={()=>saveFinding(pendingFinding)} disabled={!editedFindingText.trim()} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background: editedFindingText.trim() ? '#4F46E5' : '#9ca3af', color:'white', cursor: editedFindingText.trim() ? 'pointer' : 'not-allowed', fontFamily:"'Inter',sans-serif", fontSize:12, fontWeight:600 }}>✓ Save to Knowledge Base</button>
                 </div>
               </div>
             )}
