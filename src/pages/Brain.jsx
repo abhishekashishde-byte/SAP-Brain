@@ -1493,7 +1493,6 @@ function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, 
 export default function Brain({ session }) {
   const { dark, toggle } = useTheme()
   const t = dark ? T.dark : T.light
-  const bgTheme = BG_THEMES[profile?.theme] || BG_THEMES.aurora
 
   const [view, setView]                   = useState('home')
   const [browseModule, setBrowseModule]   = useState(null)
@@ -1524,6 +1523,7 @@ export default function Brain({ session }) {
   const [searchQuery, setSearchQuery]     = useState('')
   const [showProfile, setShowProfile]     = useState(false)
   const [profile, setProfile]             = useState(null)
+  const bgTheme = BG_THEMES[profile?.theme] || BG_THEMES.aurora
   const [showSummarise, setShowSummarise] = useState(false)
   const [isSummarising, setIsSummarising] = useState(false)
   const [autoCompacting, setAutoCompacting] = useState(false)
