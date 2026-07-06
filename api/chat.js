@@ -1076,7 +1076,11 @@ export default async function handler(req, res) {
       const { module, topic, object, finding, confidence } = body
       if (!finding) return res.status(400).json({ error: 'Missing finding' })
       const supabase = getSupabase()
-      const embedding = await embed(`${module} ${topic} ${object} ${finding}`)
+      // Embed the finding text alone — module/topic/object come from an automatic,
+      // sometimes-wrong classification (e.g. a routing/MAPL fact mistagged as "Migration").
+      // Prefixing the embedding with those labels pulls the vector away from what a future
+      // question will actually look like, and can push real matches below match_threshold.
+      const embedding = await embed(finding)
       const { error } = await supabase.from('wani_knowledge').insert({ user_id: userId, module, topic, object, finding, confidence: confidence || 'verified', embedding })
       if (error) throw error
       return res.status(200).json({ saved: true })
@@ -1810,6 +1814,16 @@ export default async function handler(req, res) {
       ...(bookChunks || []).map((c, i) =>
         `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`
       ),
+      '',
+      '3b. CONSULTANT KNOWLEDGE BASE (wani_knowledge — your saved/verified findings)',
+      '─────────────────────────────────────────────────────────',
+      `Entries matched: ${debugLog.knowledgeChunks || 0} (match_threshold 0.75)`,
+      ...(relevantKnowledge || []).map((k, i) =>
+        `[K${i+1}] ${k.module} > ${k.topic} > ${k.object}\n    Finding: ${k.finding}`
+      ),
+      (relevantKnowledge || []).length === 0
+        ? '(No saved findings matched this question — if you expected one to fire, check match_threshold or how it was tagged/embedded when saved.)'
+        : '',
       '',
       '4. TAVILY SEARCH',
       '─────────────────────────────────────────────────────────',
