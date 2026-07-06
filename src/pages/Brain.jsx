@@ -1409,9 +1409,9 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
                 height:'100%',
                 padding:'clamp(16px,2.2vh,28px) clamp(14px,2.3vw,26px) clamp(12px,1.8vh,22px)',
                 borderRadius:30,
-                border: dark?'1px solid rgba(255,255,255,0.08)':'1px solid #E8E8E8',
-                background: dark?'rgba(24,24,42,0.92)':'rgba(255,255,255,0.94)',
-                boxShadow: dark?'0 18px 38px rgba(0,0,0,0.34)':'0 14px 34px rgba(15,23,42,0.07)',
+                border: 'none',
+                background: 'transparent',
+                boxShadow: 'none',
                 cursor:'pointer',
                 display:'flex',
                 flexDirection:'column',
@@ -2535,9 +2535,6 @@ export default function Brain({ session }) {
               )}
             </>
           )}
-          <button onClick={toggle} style={{ width:isMobile?46:44,height:isMobile?28:24,borderRadius:14,border:'none',cursor:'pointer',position:'relative',background:dark?'linear-gradient(135deg,#4F46E5,#6366F1)':'#E2E2EA',transition:'background 0.3s',flexShrink:0 }}>
-            <div style={{ position:'absolute',top:isMobile?4:2,width:isMobile?20:20,height:isMobile?20:20,borderRadius:'50%',background:'#fff',transition:'left 0.3s',left:dark?(isMobile?22:22):(isMobile?4:2),boxShadow:'0 2px 4px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11 }}>{dark?'🌙':'☀️'}</div>
-          </button>
         </div>
 
         {/* Tone bar */}
