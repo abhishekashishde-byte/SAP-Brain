@@ -102,6 +102,15 @@ Question: "${question.slice(0, 500)}"
     // triggers Stage 2 nuanced check via GPT-4o mini. Intentionally broad; Stage 2 filters precision.
     const hasTabularSignal = /\b(compare|comparison|validate|validation|reconcil|mapping|map.*field|migrat|table.*by.*table|field.*by.*field|discrepanc|gap list|cross.?reference|two systems|source.*target|before.*after)\b/i.test(question)
 
+    // Signal that the question uses a WORD that is genuinely overloaded in SAP-consultant
+    // speech — most commonly "code", which can mean T-code (transaction) or ABAP/BAPI code.
+    // Broad and cheap on purpose; Stage 2 (classifyAmbiguity, GPT-4o mini) makes the real call.
+    // Only fires when the question gives NO disambiguating context either way.
+    const hasBareCodeWord = /\bcode\b/i.test(question)
+    const hasAbapContext  = /\b(abap|bapi|function module|f(?:unction)? ?module|class |report |program|badi|z-?program|rfc\b)\b/i.test(question)
+    const hasTcodeContext = /\b(t-?code|tcode|transaction)\b/i.test(question)
+    const hasOverloadedTermSignal = hasBareCodeWord && !hasAbapContext && !hasTcodeContext
+
     // User confirming or answering doc wizard
     const isDocConfirm = /\b(yes|go ahead|create it|generate it|proceed|do it|sure|yeah|correct|that's right)\b/i.test(question)
     const isDocDeny    = /\b(no|don't|stop|cancel|not now|not yet|wrong|incorrect)\b/i.test(question)
@@ -136,7 +145,7 @@ Question: "${question.slice(0, 500)}"
       isDocConfirm, isDocDeny,
       isTroubleshoot, isVersionSpecific,
       isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch,
-      hasTabularSignal,
+      hasTabularSignal, hasOverloadedTermSignal,
     }
   } catch {
     return {
@@ -145,7 +154,7 @@ Question: "${question.slice(0, 500)}"
       isDocConfirm: false, isDocDeny: false,
       isTroubleshoot: false, isVersionSpecific: false,
       isBapiSearch: false, isExitSearch: false, isNoteSearch: false, isErrorSearch: false,
-      hasTabularSignal: false,
+      hasTabularSignal: false, hasOverloadedTermSignal: false,
     }
   }
 }
@@ -222,6 +231,59 @@ Return ONLY valid JSON: {"isExcelIntent": true/false, "readyToGenerate": true/fa
   } catch (e) {
     console.error('[EXCEL CLASSIFY] Error:', e.message)
     return { isExcelIntent: false, readyToGenerate: false, reasoning: '' }
+  }
+}
+
+// ── 3c. AMBIGUITY CLASSIFIER — Stage 2 nuanced check for overloaded terms ────
+// Only fires when Groq flags a bare overloaded term (e.g. "code") with no
+// disambiguating context. Mirrors classifyExcelIntent — cheap Stage 1 signal,
+// then GPT-4o mini makes the actual judgment call so cost stays low on the
+// vast majority of questions that were never ambiguous to begin with.
+async function classifyAmbiguity(lastMsg, conversationHistory) {
+  try {
+    const convText = (conversationHistory || [])
+      .slice(-6)
+      .map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}: ${m.content.slice(0, 300)}`)
+      .join('\n')
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 150,
+        temperature: 0,
+        messages: [{
+          role: 'user',
+          content: `An SAP consultant sent a message containing a word that is genuinely overloaded in SAP-consultant speech — most commonly "code", which can mean either:
+(a) a T-code / transaction code (e.g. "what's the code for X" → MD50, ME21N, etc.), or
+(b) actual ABAP/BAPI program code to do something programmatically.
+These two interpretations require completely different answers, so guessing wrong wastes the consultant's time or produces a fabricated answer.
+
+Read the conversation and the latest message. Decide:
+1. isAmbiguous: Is it genuinely unclear which meaning is intended? Answer false if the conversation already disambiguates — e.g. the user pasted ABAP earlier, explicitly said "transaction"/"tcode"/"program"/"BAPI", or the context otherwise makes only one reading plausible.
+2. clarifyingQuestion: If ambiguous, write ONE short, friendly, specific clarifying question that names the two likely interpretations in plain terms (not just "can you clarify?"). If not ambiguous, return an empty string.
+
+Conversation:
+${convText}
+
+Latest message: "${lastMsg}"
+
+Return ONLY valid JSON: {"isAmbiguous": true/false, "clarifyingQuestion": "...", "reasoning": "one short sentence"}`
+        }]
+      })
+    })
+    const data = await res.json()
+    const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    return {
+      isAmbiguous: parsed.isAmbiguous === true,
+      clarifyingQuestion: parsed.clarifyingQuestion || '',
+      reasoning: parsed.reasoning || '',
+    }
+  } catch (e) {
+    console.error('[AMBIGUITY CLASSIFY] Error:', e.message)
+    return { isAmbiguous: false, clarifyingQuestion: '', reasoning: '' }
   }
 }
 
@@ -1149,7 +1211,7 @@ export default async function handler(req, res) {
 
     let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError,
           isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isDocConfirm, isDocDeny,
-          hasTabularSignal } = classification
+          hasTabularSignal, hasOverloadedTermSignal } = classification
 
     debugLog.intent     = intent
     debugLog.confidence = confidence
@@ -1164,6 +1226,24 @@ export default async function handler(req, res) {
       if (excelClassification.isExcelIntent) {
         intent = 'EXCEL_VALIDATION'
         confidence = 0.9
+      }
+    }
+
+    // ── STEP 1c: Stage 2 ambiguity classifier ───────────────────────────────
+    // Only fires when Groq flags a bare overloaded term (e.g. "code" with no
+    // ABAP/BAPI or T-code context) — keeps cost low on the vast majority of
+    // unambiguous questions. If genuinely ambiguous, ask rather than guess —
+    // skips the entire RAG/search/synthesis pipeline for a cheap one-line reply.
+    let ambiguityClassification = { isAmbiguous: false, clarifyingQuestion: '' }
+    if (hasOverloadedTermSignal && !isCode && intent !== 'SAVE_TO_MEMORY' && !isDocConfirm && !isDocDeny
+        && docWizardStage !== 'confirmed' && docWizardStage !== 'gathering' && docWizardStage !== 'generate') {
+      ambiguityClassification = await classifyAmbiguity(lastMsg, messages || []).catch(() => ambiguityClassification)
+      debugLog.ambiguityClassify = ambiguityClassification
+      if (ambiguityClassification.isAmbiguous && ambiguityClassification.clarifyingQuestion) {
+        send({ type: 'start', intent: 'CLARIFY' })
+        send({ type: 'chunk', text: ambiguityClassification.clarifyingQuestion })
+        send({ type: 'done', full: ambiguityClassification.clarifyingQuestion, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: null, messageCount: 0, dailyLimit: 50, isUnlimited: false })
+        return res.end()
       }
     }
 
