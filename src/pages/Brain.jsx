@@ -36,6 +36,23 @@ const T = {
   }
 }
 
+// Selectable animated background themes — profile-level choice, independent of
+// light/dark mode. Only affects the background layer behind the main chat panel
+// and the on-background greeting text; everything else (sidebar, bubbles, fonts,
+// layout) is untouched and keeps using the existing light/dark `t` object.
+const BG_THEMES = {
+  aurora:   { bgGrad:'linear-gradient(160deg,#140b1f 0%,#0c0a1a 100%)', blobA:'rgba(127,119,221,0.55)', blobB:'rgba(83,74,183,0.5)',  blobC:'rgba(175,169,236,0.3)', text:'#CECBF6', text2:'#AFA9EC' },
+  ember:    { bgGrad:'linear-gradient(160deg,#1c0f0a 0%,#140b08 100%)', blobA:'rgba(240,153,123,0.5)', blobB:'rgba(153,60,29,0.5)',  blobC:'rgba(216,90,48,0.3)',   text:'#F5C4B3', text2:'#F0997B' },
+  graphite: { bgGrad:'linear-gradient(160deg,#141412 0%,#0d0d0c 100%)', blobA:'rgba(136,135,128,0.4)', blobB:'rgba(95,94,90,0.4)',  blobC:'rgba(68,68,65,0.3)',    text:'#D3D1C7', text2:'#B4B2A9' },
+  light:    { bgGrad:'linear-gradient(160deg,#eaf1fb 0%,#f5f8fd 100%)', blobA:'rgba(133,183,235,0.45)',blobB:'rgba(175,169,236,0.4)',blobC:'rgba(133,183,235,0.25)',text:'#0C447C', text2:'#185FA5' },
+}
+const BG_THEME_LIST = [
+  { key:'aurora',   label:'Aurora' },
+  { key:'ember',    label:'Ember' },
+  { key:'graphite', label:'Graphite' },
+  { key:'light',    label:'Light' },
+]
+
 const MODULE_COLORS = {
   "PP – Production Planning":{ from:'#16a34a',to:'#059669',emoji:'⚙️' },
   "PM – Plant Maintenance":  { from:'#4f46e5',to:'#7c3aed',emoji:'🔧' },
@@ -1026,6 +1043,7 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
   const [name, setName] = useState(profile?.name||'')
   const [modules, setModules] = useState(profile?.modules||[])
   const [role, setRole] = useState(profile?.role||'')
+  const [selectedTheme, setSelectedTheme] = useState(profile?.theme || 'aurora')
   const [saving, setSaving] = useState(false)
   const [memories, setMemories] = useState([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
@@ -1130,7 +1148,23 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
                 ))}
               </div>
             </div>
-            <button onClick={async()=>{ setSaving(true); await onSave({name, role, modules}); setSaving(false); onClose() }}
+            <div style={{ marginBottom:20 }}>
+              <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Background theme</label>
+              <div style={{ display:'flex',gap:14,flexWrap:'wrap' }}>
+                {BG_THEME_LIST.map(({key,label}) => (
+                  <div key={key} onClick={()=>setSelectedTheme(key)} style={{ textAlign:'center',cursor:'pointer' }}>
+                    <div style={{
+                      width:44,height:44,borderRadius:'50%',
+                      background:`radial-gradient(circle at 35% 30%,${BG_THEMES[key].blobA},${BG_THEMES[key].bgGrad.match(/#[0-9a-fA-F]{6}/)?.[0] || '#141412'} 70%)`,
+                      border: selectedTheme===key ? '2px solid #4F46E5' : '1px solid rgba(255,255,255,0.15)',
+                      boxSizing:'border-box',
+                    }}/>
+                    <div style={{ fontSize:10,color:selectedTheme===key?'#a5b4fc':'rgba(255,255,255,0.5)',marginTop:4 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={async()=>{ setSaving(true); await onSave({name, role, modules, theme:selectedTheme}); setSaving(false); onClose() }}
               style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
               {saving?'Saving...':'Save Profile'}
             </button>
@@ -1459,6 +1493,7 @@ function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, 
 export default function Brain({ session }) {
   const { dark, toggle } = useTheme()
   const t = dark ? T.dark : T.light
+  const bgTheme = BG_THEMES[profile?.theme] || BG_THEMES.aurora
 
   const [view, setView]                   = useState('home')
   const [browseModule, setBrowseModule]   = useState(null)
@@ -2279,9 +2314,9 @@ export default function Brain({ session }) {
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         @keyframes cursorBlink{0%,100%{opacity:1}50%{opacity:0}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes blob1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.08)}66%{transform:translate(-20px,20px) scale(0.95)}}
-        @keyframes blob2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-35px,25px) scale(0.93)}66%{transform:translate(25px,-15px) scale(1.05)}}
-        @keyframes blob3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(20px,30px) scale(1.06)}}
+        @keyframes blob1{0%,100%{transform:translate(-15%,-15%) scale(1)}50%{transform:translate(20%,15%) scale(1.35)}}
+        @keyframes blob2{0%,100%{transform:translate(15%,20%) scale(1.1)}50%{transform:translate(-20%,-10%) scale(1.4)}}
+        @keyframes blob3{0%,100%{transform:translate(-5%,10%) scale(1)}50%{transform:translate(10%,-15%) scale(1.2)}}
         .tone-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-family:'Inter','DM Sans',sans-serif;cursor:pointer;transition:all 0.18s;font-weight:500;}
         .tone-btn.active{background:#4F46E5;border-color:transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 10px rgba(79,70,229,0.25);}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(79,70,229,0.25);border-radius:4px}
@@ -2465,10 +2500,10 @@ export default function Brain({ session }) {
 
       {/* Main */}
       <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0,position:'relative' }}>
-        <div style={{ position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0,background:t.bgGrad }}>
-          <div style={{ position:'absolute',width:600,height:600,borderRadius:'50%',background:`radial-gradient(circle,${t.blob1} 0%,transparent 65%)`,top:'-15%',right:'0%',animation:'blob1 12s ease-in-out infinite' }}/>
-          <div style={{ position:'absolute',width:500,height:500,borderRadius:'50%',background:`radial-gradient(circle,${t.blob2} 0%,transparent 65%)`,bottom:'-10%',left:'5%',animation:'blob2 15s ease-in-out infinite' }}/>
-          <div style={{ position:'absolute',width:380,height:380,borderRadius:'50%',background:`radial-gradient(circle,${t.blob3} 0%,transparent 65%)`,top:'35%',right:'25%',animation:'blob3 10s ease-in-out infinite' }}/>
+        <div style={{ position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0,background:bgTheme.bgGrad }}>
+          <div style={{ position:'absolute',width:600,height:600,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobA} 0%,transparent 65%)`,top:'-15%',right:'0%',animation:'blob1 9s ease-in-out infinite alternate' }}/>
+          <div style={{ position:'absolute',width:500,height:500,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobB} 0%,transparent 65%)`,bottom:'-10%',left:'5%',animation:'blob2 10s ease-in-out infinite alternate' }}/>
+          <div style={{ position:'absolute',width:380,height:380,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobC} 0%,transparent 65%)`,top:'35%',right:'25%',animation:'blob3 11s ease-in-out infinite alternate' }}/>
         </div>
 
         {/* Topbar */}
@@ -2552,8 +2587,8 @@ export default function Brain({ session }) {
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'40px 20px' }}>
                     <WaniLogo size={window.innerWidth<768?48:80} dark={dark}/>
                     <div style={{ marginTop:16,marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:40} dark={dark}/></div>
-                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:t.text,marginTop:12,marginBottom:4 }}>Hello, {profile.name.split(' ')[0]} 👋</div>)}
-                    <p style={{ fontSize:15,color:t.text3,maxWidth:300,lineHeight:1.7,marginBottom:22,marginTop:8 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
+                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:12,marginBottom:4 }}>Hello, {profile.name.split(' ')[0]} 👋</div>)}
+                    <p style={{ fontSize:15,color:bgTheme.text2,maxWidth:300,lineHeight:1.7,marginBottom:22,marginTop:8 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
                         {STARTERS[browseTopic].map((s,i)=>(<div key={i} onClick={()=>setInput(s)} style={{ padding:'7px 14px',background:t.surface,border:`1.5px solid ${t.border}`,borderRadius:20,fontSize:12,color:t.text3,cursor:'pointer',transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3;e.currentTarget.style.background=t.surface}}>{s}</div>))}
