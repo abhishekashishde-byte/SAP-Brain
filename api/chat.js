@@ -1442,8 +1442,11 @@ export default async function handler(req, res) {
     }
 
     // ── Inject verified knowledge ──────────────────────────────────────────
+    // These are findings THIS consultant previously confirmed as correct (via the
+    // Knowledge Base save flow) — not generic training data or search results.
+    // Wani must surface that provenance explicitly rather than blending it in silently.
     if (relevantKnowledge.length > 0) {
-      systemPrompt += `\n\n📌 VERIFIED FROM REAL PROJECTS (prioritise over generic docs):\n${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}`
+      systemPrompt += `\n\n📌 VERIFIED FROM REAL PROJECTS — CONFIRMED BY THIS CONSULTANT EARLIER:\n${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}\n\nATTRIBUTION RULE — MANDATORY: These findings came from this consultant's own earlier confirmed discussion, not from books, web search, or your training. Treat them as the highest-priority, authoritative source — they override generic documentation or training knowledge on the same topic. When you use one, say so explicitly and naturally, e.g. "Based on our earlier discussion, this is correct: ..." or "You confirmed this before — ...". Do not present it as if it were a fresh answer or a generic citation.`
     }
 
     // ── Inject personal memories ───────────────────────────────────────────
