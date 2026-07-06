@@ -44,15 +44,11 @@ export default function App() {
   const [session, setSession]       = useState(null)
   const [loading, setLoading]       = useState(true)
   const [approved, setApproved]     = useState(null) // null=checking, true=approved, false=pending
-  const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem('wani-theme') === 'dark' } catch { return false }
-  })
-
-  const toggle = () => setDark(d => {
-    const next = !d
-    try { localStorage.setItem('wani-theme', next ? 'dark' : 'light') } catch {}
-    return next
-  })
+  // Light/dark mode toggle removed — Wani is dark-mode only now (the profile
+  // background theme picker replaces it). `dark` and `toggle` are kept as a
+  // constant + no-op so useTheme() consumers elsewhere don't need changes.
+  const dark = true
+  const toggle = () => {}
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
