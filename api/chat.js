@@ -91,7 +91,12 @@ Question: "${question.slice(0, 500)}"
     const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop)\b/i.test(question)
     const isCustomizing  = /\b(spro|customiz|IMG|where.*config|config.*where|how.*config|configure.*path|where.*set up|where.*maintain)\b/i.test(question)
     const isBestPractice = /\b(best practice|sap activate|fit.to.standard|scope item|standard process|activate methodology)\b/i.test(question)
-    const isNoteSearch   = /\b(sap note|note \d{5,}|oss note|known issue|patch|correction note)\b/i.test(question)
+    const isNoteSearch   = /\b(sap note|oss note|correction note|note\s*\d{5,}|known issue|patch)\b/i.test(question) ||
+      /\bnotes?\b/i.test(question) && /\b(find|search|any|look up|look for|check|got|is there|which|show)\b/i.test(question)
+    // General explicit lookup/search intent — independent of topic (blogs, release notes, latest updates, etc.)
+    // Without this, a request like "find me a blog about X" or "latest PP notes" could fall through
+    // intent classification as GENERAL and never trigger search at all (needsSearch=false).
+    const isExplicitSearchRequest = /\b(search for|find (me|a|any)|look up|look for|any (blog|note|article|post)|latest|recent|show me (a|any))\b/i.test(question)
     const isErrorSearch  = /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW)\b/i.test(question)
     const isNewFeature   = /\b(2024|2025|2026|S\/4HANA 2|latest|new in|what changed|release note)\b/i.test(question)
     const isTroubleshoot = /\b(not working|doesn't work|missing|error|wrong|incorrect|failed|why is|why does|not found|not appearing|problem|issue)\b/i.test(question)
@@ -136,15 +141,15 @@ Question: "${question.slice(0, 500)}"
 
     // Tavily fires by default for all SAP questions
     // Only skip for pure conversational messages and memory saves
-    const isNonSAPMessage = intent === 'GENERAL' && !isBapiSearch && !isExitSearch && !isNoteSearch
-    const needsSearch = !isNonSAPMessage && intent !== 'SAVE_TO_MEMORY'
+    const isNonSAPMessage = intent === 'GENERAL' && !isBapiSearch && !isExitSearch && !isNoteSearch && !isExplicitSearchRequest
+    const needsSearch = (!isNonSAPMessage || isExplicitSearchRequest) && intent !== 'SAVE_TO_MEMORY'
 
     return {
       intent, confidence, secondaryIntent,
       isCode, isError, isCorrection, needsSearch,
       isDocConfirm, isDocDeny,
       isTroubleshoot, isVersionSpecific,
-      isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch,
+      isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isExplicitSearchRequest,
       hasTabularSignal, hasOverloadedTermSignal,
     }
   } catch {
@@ -153,7 +158,7 @@ Question: "${question.slice(0, 500)}"
       isCode: false, isError: false, isCorrection: false, needsSearch: false,
       isDocConfirm: false, isDocDeny: false,
       isTroubleshoot: false, isVersionSpecific: false,
-      isBapiSearch: false, isExitSearch: false, isNoteSearch: false, isErrorSearch: false,
+      isBapiSearch: false, isExitSearch: false, isNoteSearch: false, isErrorSearch: false, isExplicitSearchRequest: false,
       hasTabularSignal: false, hasOverloadedTermSignal: false,
     }
   }
@@ -1052,15 +1057,38 @@ export default async function handler(req, res) {
 
   if (body.action === 'retrieve_chunks') {
     try {
-      const { question } = body
+      const { question, docName } = body
       if (!question) return res.status(200).json({ chunks: [] })
       const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
       const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
       const userClient = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${userToken}` } } })
-      const queryEmbedding = await embed(question)
-      if (!queryEmbedding) return res.status(200).json({ chunks: [] })
-      const { data } = await userClient.rpc('match_wani_chunks', { query_embedding: queryEmbedding, match_threshold: 0.70, match_count: 6 })
-      return res.status(200).json({ chunks: (data || []).map(d => d.chunk_text) })
+
+      // Broad/summary questions ("what is this about", "summarize this") don't map well
+      // to semantic similarity against any single chunk — go straight to ordered fallback.
+      const isBroadSummaryQuestion = /\b(what is this (document|file)?\s*about|summar(y|ize|ise)|overview|what does this (document|file) (say|cover|contain)|main (points|topics)|tell me about this)\b/i.test(question)
+
+      let chunks = []
+      if (!isBroadSummaryQuestion) {
+        const queryEmbedding = await embed(question)
+        if (queryEmbedding) {
+          const { data } = await userClient.rpc('match_wani_chunks', { query_embedding: queryEmbedding, match_threshold: 0.70, match_count: 6 })
+          chunks = (data || []).map(d => d.chunk_text)
+        }
+      }
+
+      // Fallback: broad question OR semantic search found nothing — pull the first
+      // several chunks in document order instead of leaving the model with nothing.
+      if (chunks.length === 0 && docName) {
+        const { data: orderedData } = await userClient
+          .from('wani_doc_chunks')
+          .select('chunk_text')
+          .eq('doc_name', docName)
+          .order('chunk_index', { ascending: true })
+          .limit(6)
+        chunks = (orderedData || []).map(d => d.chunk_text)
+      }
+
+      return res.status(200).json({ chunks, fallbackUsed: chunks.length > 0 && (isBroadSummaryQuestion || chunks.length === 6) })
     } catch { return res.status(200).json({ chunks: [] }) }
   }
 
@@ -1214,7 +1242,7 @@ export default async function handler(req, res) {
     ])
 
     let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError,
-          isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isDocConfirm, isDocDeny,
+          isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isExplicitSearchRequest, isDocConfirm, isDocDeny,
           hasTabularSignal, hasOverloadedTermSignal } = classification
 
     debugLog.intent     = intent
@@ -1331,7 +1359,7 @@ export default async function handler(req, res) {
       // Tavily fires by default for all SAP questions
       tavilyResultsPromise = searchQueryPromise.then(q => tavilySearch(q, intent).catch(() => []))
       // OpenAI search fires for complex questions and error/note lookups
-      if (isNoteSearch || isErrorSearch || intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') {
+      if (isNoteSearch || isErrorSearch || isExplicitSearchRequest || intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') {
         openAIResultPromise = callOpenAISearch(lastMsg).catch(() => null)
       }
     }
@@ -1479,11 +1507,19 @@ export default async function handler(req, res) {
     const { documentChunks, documentName, documentType } = body
     if (documentChunks?.length > 0) {
       systemPrompt += `\n\n📄 DOCUMENT CONTEXT: User uploaded "${documentName}" (${documentType})\n${documentChunks.map((c, i) => `[${i+1}] ${c}`).join('\n\n')}`
+    } else if (documentName) {
+      // A document was uploaded but no chunks came back for this question — say so
+      // explicitly instead of leaving the model with zero signal a document exists
+      // (which previously led it to silently fabricate an answer).
+      systemPrompt += `\n\n📄 DOCUMENT STATUS: User uploaded "${documentName}" but no relevant sections could be retrieved for this question. Do NOT guess or invent what the document contains. Tell the user plainly that you couldn't retrieve relevant content from the document for this question, and ask them to paste the relevant section or rephrase.`
     }
 
     // ── Anti-hallucination rules ───────────────────────────────────────────
     if (isNoteSearch || intent === 'ERROR_ANALYSIS') {
       systemPrompt += `\n\n⚠️ SAP NOTE RULE: NEVER invent note numbers. Only cite note numbers found in search results above. If none found, tell user to search support.sap.com/notes.`
+    }
+    if (isExplicitSearchRequest) {
+      systemPrompt += `\n\n⚠️ SEARCH RESULT RULE: The user explicitly asked you to find/search for something. Only report items (notes, blogs, articles, links) that actually appear in the search results injected above. Do NOT invent or guess plausible-sounding results dressed up as matches (no "the timing and context match" type hedges). If the search results above are empty or don't contain a real match, say plainly that the search didn't return a relevant result — don't substitute your own guess.`
     }
     if (noteRefs.length > 0) {
       systemPrompt += `\n\n📋 SAP NOTES FOUND:\n${noteRefs.map(n => `- SAP Note ${n.number}: ${n.url}`).join('\n')}`
@@ -1503,9 +1539,9 @@ export default async function handler(req, res) {
     if (firstName) {
       systemPrompt += `\n\nConsultant: ${firstName}${userRole ? `, ${userRole}` : ''}${userModules?.length ? `, SAP: ${userModules.join('/')}` : ''}.`
     }
-    if (isFirstMessage && firstName) {
-      systemPrompt += ` Greet with "${timeGreeting}, ${firstName}." then proceed. Only once.`
-    }
+    // Note: no scripted greeting injected here — see NO SCRIPTED GREETING /
+    // REACT LIKE A COLLEAGUE rules in BASE_SYSTEM_PROMPT (_shared.js).
+    // timeGreeting is retained only in case other logic references it.
 
     // ── Build valid messages ───────────────────────────────────────────────
     const validMessages = recentMsgs
@@ -1565,6 +1601,10 @@ export default async function handler(req, res) {
       fullAnswer = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (deliverable)'
+      debugLog.rawClaudeAnswer = fullAnswer
+      debugLog.rawMergedAnswer = fullAnswer
+      debugLog.enrichedPromptSnippet = systemPrompt.slice(0, 2000)
+      debugLog.geminiNotCalled = true // this route is Sonnet-only by design — Gemini is never invoked here
 
     } else if (isMeaningfulQuery) {
       // ALL SAP Q&A → Sonnet answers directly with books + Tavily injected
@@ -1847,7 +1887,7 @@ export default async function handler(req, res) {
       `You are a senior SAP consultant. Answer: ${lastMsg}`,
       '',
       '← ANSWER RECEIVED:',
-      debugLog.geminiRawAnswer || 'No answer (check Vercel logs for [GEMINI] error)',
+      debugLog.geminiRawAnswer || (debugLog.geminiNotCalled ? 'N/A — Gemini is not called on this routing path (Sonnet-only route)' : 'No answer (check Vercel logs for [GEMINI] error)'),
       '',
       '7. GPT-4o ANALYST (removed from Q&A pipeline)',
       '─────────────────────────────────────────────────────────',
