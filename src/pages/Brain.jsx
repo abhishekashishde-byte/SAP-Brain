@@ -1038,6 +1038,45 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
   )
 }
 
+function SaveFindingModal({ t, dark, onClose, onSave }) {
+  const [module, setModule]   = useState('')
+  const [topic, setTopic]     = useState('')
+  const [object, setObject]   = useState('')
+  const [finding, setFinding] = useState('')
+  const [saving, setSaving]   = useState(false)
+
+  const fieldStyle = { width:'100%', boxSizing:'border-box', color:t.text, background:dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.03)', border:`1px solid ${t.border}`, borderRadius:8, padding:'8px 10px', marginBottom:10, lineHeight:1.5, fontFamily:"'Inter',sans-serif", fontSize:13 }
+
+  const handleSave = async () => {
+    if (!finding.trim() || saving) return
+    setSaving(true)
+    await onSave({ module, topic, object, finding })
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:t.surface, border:`1px solid ${t.border}`, borderRadius:14, padding:'18px 20px', maxWidth:440, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.35)' }}>
+        <div style={{ fontWeight:700, color:t.text, marginBottom:2, fontSize:15 }}>💡 Save Finding to Knowledge</div>
+        <div style={{ color:t.text3, fontSize:12, marginBottom:14 }}>Goes straight into your knowledge base — no chat reply, no model call.</div>
+
+        <input value={module} onChange={e=>setModule(e.target.value)} placeholder="Module (optional, e.g. PM)" style={fieldStyle} />
+        <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="Topic (optional, e.g. Maintenance Orders)" style={fieldStyle} />
+        <input value={object} onChange={e=>setObject(e.target.value)} placeholder="Object (optional, e.g. F3567)" style={fieldStyle} />
+        <textarea value={finding} onChange={e=>setFinding(e.target.value)} rows={4} placeholder="What did you learn? e.g. 'Actual Maintenance Cost Analysis app (F3567) cannot show itemized costing — no labor/material cost split.'" style={{ ...fieldStyle, resize:'vertical' }} />
+
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'8px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13 }}>Cancel</button>
+          <button onClick={handleSave} disabled={!finding.trim() || saving}
+            style={{ flex:2, padding:'8px', borderRadius:8, border:'none', background: finding.trim() ? '#4F46E5' : '#9ca3af', color:'white', cursor: finding.trim() ? 'pointer' : 'not-allowed', fontFamily:"'Inter',sans-serif", fontSize:13, fontWeight:600 }}>
+            {saving ? 'Saving…' : '✓ Save to Knowledge Base'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
   const [activeTab, setActiveTab] = useState('profile') // 'profile' | 'memory'
   const [name, setName] = useState(profile?.name||'')
@@ -1257,7 +1296,7 @@ function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
 
-function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, attachedCode, isLoading, isStreaming }) {
+function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming }) {
   return (
     <div className="home-input-dock" style={{
       position:'absolute',
@@ -1278,9 +1317,9 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
           onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow=dark?'0 14px 34px rgba(0,0,0,0.28)':'0 16px 34px rgba(15,23,42,0.10)'}}
         >
           <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
-            title="Upload document"
+            title={docUploadStage==='extracting'?'Extracting text…':docUploadStage==='indexing'?'Indexing document…':docUploadStage==='failed'?'Indexing failed — click to retry':'Upload document'}
             style={{ width:42,height:42,borderRadius:12,border:`1px solid ${t.border}`,background:'transparent',color:t.text4,cursor:'pointer',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-            {docUploading ? '⏳' : '📎'}
+            {docUploadStage==='extracting'?'📄':docUploadStage==='indexing'?'⏳':docUploadStage==='failed'?'⚠️':'📎'}
           </button>
           <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
           <textarea ref={inputRef} value={input}
@@ -1522,6 +1561,7 @@ export default function Brain({ session }) {
   const [dbLoading, setDbLoading]         = useState(true)
   const [searchQuery, setSearchQuery]     = useState('')
   const [showProfile, setShowProfile]     = useState(false)
+  const [showSaveFinding, setShowSaveFinding] = useState(false)
   const [profile, setProfile]             = useState(null)
   const bgTheme = BG_THEMES[profile?.theme] || BG_THEMES.aurora
   const [showSummarise, setShowSummarise] = useState(false)
@@ -1547,6 +1587,7 @@ export default function Brain({ session }) {
   // Document upload state
   const [uploadedDoc, setUploadedDoc]         = useState(null) // { name, content, type, docType }
   const [docUploading, setDocUploading]       = useState(false)
+  const [docUploadStage, setDocUploadStage]   = useState(null) // 'extracting' | 'indexing' | 'ready' | 'failed' | null
   const [showKnowledge, setShowKnowledge]     = useState(false)
   const [knowledgeEntries, setKnowledgeEntries] = useState([])
   const [showCapabilities, setShowCapabilities] = useState(false)
@@ -1639,16 +1680,34 @@ export default function Brain({ session }) {
     if (!file) return
     if (file.size > 10 * 1024 * 1024) { alert('Max file size is 10MB'); return }
     setDocUploading(true)
+    setDocUploadStage('extracting')
     try {
       const content = await extractDocText(file)
-      if (!content.trim()) { alert('Could not extract text from this file'); setDocUploading(false); return }
+      if (!content.trim()) { alert('Could not extract text from this file'); setDocUploading(false); setDocUploadStage(null); return }
+
       // Classify document type
       const classRes = await chatFetch({ action: 'classify_doc', content: content.slice(0, 2000) })
       const { docType } = await classRes.json()
-      // Store chunks with embeddings in background
-      chatFetch({ action: 'store_chunks', content, docName: file.name, docType }).catch(() => {})
-      setUploadedDoc({ name: file.name, content, type: file.type, docType })
-    } catch (err) { alert('Upload failed: ' + err.message) }
+
+      // Indexing (chunk + embed + store) — AWAITED. The doc is only marked ready
+      // once storage genuinely completes, so a question asked immediately after
+      // upload can never race ahead of indexing and find nothing.
+      setDocUploadStage('indexing')
+      const storeRes = await chatFetch({ action: 'store_chunks', content, docName: file.name, docType })
+      const storeData = await storeRes.json()
+
+      if (!storeRes.ok || (storeData?.stored ?? 0) === 0) {
+        alert(`Could not index "${file.name}" for search. You can still ask about it, but answers may be incomplete — try re-uploading if this persists.`)
+        setDocUploadStage('failed')
+        setUploadedDoc({ name: file.name, content, type: file.type, docType, indexed: false })
+      } else {
+        setDocUploadStage('ready')
+        setUploadedDoc({ name: file.name, content, type: file.type, docType, indexed: true })
+      }
+    } catch (err) {
+      alert('Upload failed: ' + err.message)
+      setDocUploadStage('failed')
+    }
     setDocUploading(false)
     e.target.value = ''
   }
@@ -1656,7 +1715,7 @@ export default function Brain({ session }) {
   const getDocChunks = async (question) => {
     if (!uploadedDoc) return []
     try {
-      const res = await chatFetch({ action: 'retrieve_chunks', question })
+      const res = await chatFetch({ action: 'retrieve_chunks', question, docName: uploadedDoc.name })
       const { chunks } = await res.json()
       return chunks || []
     } catch { return [] }
@@ -1679,6 +1738,17 @@ export default function Brain({ session }) {
     await chatFetch({ action: 'save_finding', ...finding, finding: editedFindingText.trim() || finding.finding })
     setPendingFinding(null)
     setKnowledgeToast('💡 Finding saved to knowledge base')
+    setTimeout(() => setKnowledgeToast(null), 3000)
+  }
+
+  // Direct manual knowledge capture — triggered by an explicit "Save Finding" button,
+  // not by parsing a typed statement. Goes straight to the knowledge base: no Sonnet,
+  // no GPT-4o, no Gemini call, no chat reply generated.
+  const saveManualFinding = async ({ module, topic, object, finding }) => {
+    if (!finding?.trim()) return
+    await chatFetch({ action: 'save_finding', module: module || '', topic: topic || '', object: object || '', finding: finding.trim(), confidence: 'verified' })
+    setShowSaveFinding(false)
+    setKnowledgeToast('💡 Saved to knowledge base')
     setTimeout(() => setKnowledgeToast(null), 3000)
   }
 
@@ -2566,7 +2636,7 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, attachedCode, isLoading, isStreaming }} profile={profile} session={session} />}
+        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming }} profile={profile} session={session} />}
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat'&&(
@@ -2679,7 +2749,13 @@ export default function Brain({ session }) {
                   <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'rgba(79,70,229,0.1)', border:'1px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:12 }}>
                     <span style={{ fontSize:14 }}>📄</span>
                     <span style={{ flex:1, color:t.text, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uploadedDoc.name}</span>
-                    <span style={{ color:'#6366f1', fontSize:11, fontWeight:600, background:'rgba(99,102,241,0.15)', padding:'2px 7px', borderRadius:6 }}>{uploadedDoc.docType?.replace('_',' ')}</span>
+                    {docUploadStage==='indexing' ? (
+                      <span style={{ color:'#D97706', fontSize:11, fontWeight:600, background:'rgba(217,119,6,0.15)', padding:'2px 7px', borderRadius:6 }}>⏳ Indexing…</span>
+                    ) : uploadedDoc.indexed===false ? (
+                      <span title="Search-based retrieval may not work — full text is still used as fallback" style={{ color:'#DC2626', fontSize:11, fontWeight:600, background:'rgba(220,38,38,0.15)', padding:'2px 7px', borderRadius:6 }}>⚠️ Not indexed</span>
+                    ) : (
+                      <span style={{ color:'#6366f1', fontSize:11, fontWeight:600, background:'rgba(99,102,241,0.15)', padding:'2px 7px', borderRadius:6 }}>{uploadedDoc.docType?.replace('_',' ')}</span>
+                    )}
                     <button onClick={()=>setUploadedDoc(null)} style={{ background:'none', border:'none', color:t.text4, cursor:'pointer', fontSize:16, lineHeight:1, padding:0 }}>✕</button>
                   </div>
                 )}
@@ -2703,11 +2779,18 @@ export default function Brain({ session }) {
                 >
                   {/* Upload button */}
                   <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
-                    title="Upload document (PDF, DOCX, TXT)"
+                    title={docUploadStage==='extracting'?'Extracting text…':docUploadStage==='indexing'?'Indexing document — please wait before asking about it':docUploadStage==='failed'?'Indexing failed — click to retry':'Upload document (PDF, DOCX, TXT)'}
                     style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:uploadedDoc?'#6366f1':t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    {docUploading ? '⏳' : '📎'}
+                    {docUploadStage==='extracting'?'📄':docUploadStage==='indexing'?'⏳':docUploadStage==='failed'?'⚠️':'📎'}
                   </button>
                   <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
+
+                  {/* Save Finding button — direct manual knowledge capture, bypasses chat/model pipeline */}
+                  <button onClick={()=>setShowSaveFinding(true)}
+                    title="Save a finding directly to your knowledge base (no chat reply)"
+                    style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    💡
+                  </button>
 
                   {/* Attached code card */}
                   {attachedCode && (
@@ -2823,6 +2906,7 @@ export default function Brain({ session }) {
       </div>
 
       {showProfile&&<ProfileModal session={session} profile={profile} t={t} onClose={()=>setShowProfile(false)} onSave={async(u)=>{await upsertProfile(session.user.id,u);setProfile(p=>({...p,...u}))}} onSignOut={signOut}/>}
+      {showSaveFinding&&<SaveFindingModal t={t} dark={dark} onClose={()=>setShowSaveFinding(false)} onSave={saveManualFinding}/>}
       {showExport&&<ExportModal conversation={activeConv} messages={messages} t={t} dark={dark} onClose={()=>setShowExport(false)}/>}
 
       {/* ── ADMIN DEBUG PANEL — only visible to admin emails ── */}
