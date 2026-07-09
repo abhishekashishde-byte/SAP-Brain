@@ -1819,6 +1819,7 @@ export default function Brain({ session }) {
     { key: 'TEST_CASES',    label: 'Test Cases',          group: 'Deliverables' },
     { key: 'GAP_ANALYSIS',  label: 'Gap Analysis',        group: 'Deliverables' },
     { key: 'FORMS_SPEC',    label: 'Forms',               group: 'Deliverables' },
+    { key: 'GENERAL_DOC',   label: 'Write-up / Summary Doc', group: 'Deliverables' },
     // ── Planning ─────────────────────────────────────────────────────────────
     { key: 'WORKSHOP_PLAN', label: 'Workshop Plan',       group: 'Planning' },
     { key: 'WORKSHOP_PPT',  label: 'Workshop PPT',        group: 'Planning' },
