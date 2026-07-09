@@ -45,14 +45,15 @@ CODE_ANALYSIS  = user pasted ABAP/code for analysis
 ERROR_ANALYSIS = user pasted SAP error, dump, SM21/ST22 log
 PROBLEM_ANALYSIS = complex scenario with unexpected system behaviour
 SAVE_TO_MEMORY  = user wants to save conversation to memory
-FS_SPEC        = generate functional specification document
+FS_SPEC        = generate functional specification document (for a development requirement/Z-program)
 TECH_SPEC      = generate technical/developer specification
 TEST_CASES     = generate test cases or test script
 GAP_ANALYSIS   = find gaps, missing items
 WORKSHOP_PLAN  = create workshop plan or agenda
 WORKSHOP_TOPICS= what topics to cover for a module/phase
 WORKSHOP_PPT   = create PowerPoint for a workshop
-FORMS_SPEC     = SAP output forms specification
+FORMS_SPEC     = SAP output/print forms specification (Smart Forms/Adobe Forms development — NOT a general write-up)
+GENERAL_DOC    = user wants the conversation/technical content discussed so far compiled into a document, with no specific structured type requested (not a dev spec, not test cases, not a workshop deck, not a print form). Use this whenever the request is just "write this up", "create a document with what we discussed", "put this in a Word doc" — do NOT default to FS_SPEC or FORMS_SPEC just because the word "document" or "specification" appears loosely.
 FIORI_REC      = recommend Fiori apps
 SLIDE_CONTENT  = create presentation content
 BEST_PRACTICES = SAP best practices, Activate methodology
@@ -86,6 +87,11 @@ Question: "${question.slice(0, 500)}"
     const isCorrection = result.isCorrection === true || isCorrectionRegex
 
     const isFsKeyword    = /\b(functional spec|FS|create.*spec|write.*spec|generate.*spec|specification for)\b/i.test(question)
+    // Generic "turn what we discussed into a document" request — has no natural home in the
+    // specific deliverable types below (FS_SPEC is for dev requirements, FORMS_SPEC is for SAP
+    // print/output form development, TECH_SPEC is a developer handoff doc, etc.). Without this,
+    // the LLM classifier has to force-fit a generic doc request into the closest wrong bucket.
+    const isGeneralDocKeyword = /\b(create a document|make (me )?a document|put (this|it|everything) (in|into) a (word|doc)|write (this |it |everything )?up (as|into) a doc|compile (this|everything|it) into|document (this|the above|everything|what we)|turn this into a document|save this as a document)\b/i.test(question)
     const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
     const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
     const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop)\b/i.test(question)
@@ -132,8 +138,11 @@ Question: "${question.slice(0, 500)}"
     if (isWorkshopPPT && !isCode && !isError)  { intent = 'WORKSHOP_PPT';   confidence = 1.0  }
     if (isCustomizing && !isCode && !isError)  { intent = 'CUSTOMIZING';    confidence = 0.95 }
     if (isBestPractice && !isCode && !isError) { intent = 'BEST_PRACTICES'; confidence = 0.95 }
+    // Only applies when nothing more specific matched — a generic "write this up as a document"
+    // request should not be force-fit into FS_SPEC/FORMS_SPEC/TECH_SPEC.
+    if (isGeneralDocKeyword && !isCode && !isError && !isFsKeyword && !isTestKeyword && !isWorkshopPPT) { intent = 'GENERAL_DOC'; confidence = 0.9 }
 
-    const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','WORKSHOP_PPT'])
+    const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','WORKSHOP_PPT','GENERAL_DOC'])
     if (DELIVERABLE_INTENTS_SET.has(intent) && confidence < 0.75) {
       intent = 'SAP_QA'
       secondaryIntent = null
@@ -698,6 +707,7 @@ async function buildDocConfirmMessage(intent, conversationHistory) {
     GAP_ANALYSIS: 'Gap Analysis',
     FORMS_SPEC:   'Forms Specification',
     EXCEL_VALIDATION: 'Excel validation/comparison file',
+    GENERAL_DOC:  'Document summarizing what we discussed',
   }
   const docName = docNames[intent] || 'Document'
   return `I've understood that you need a **${docName}**. Should I go ahead and create it?`
@@ -718,6 +728,7 @@ async function gatherDocRequirements(intent, conversationHistory, userConfirmati
       WORKSHOP_PLAN:'Workshop Plan',
       GAP_ANALYSIS: 'Gap Analysis',
       EXCEL_VALIDATION: 'Excel validation/comparison file',
+      GENERAL_DOC:  'Document summarizing what we discussed',
     }
     const docName = docNames[intent] || 'Document'
 
@@ -1295,8 +1306,8 @@ export default async function handler(req, res) {
       }
     }
 
-    const isDeliverable = ['FS_SPEC', 'FS_EDIT', 'TECH_SPEC', 'WORKSHOP_PPT', 'EXCEL_VALIDATION'].includes(intent)
-    const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','WORKSHOP_PPT','EXCEL_VALIDATION'])
+    const isDeliverable = ['FS_SPEC', 'FS_EDIT', 'TECH_SPEC', 'WORKSHOP_PPT', 'EXCEL_VALIDATION', 'GENERAL_DOC'].includes(intent)
+    const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','WORKSHOP_PPT','EXCEL_VALIDATION','GENERAL_DOC'])
 
     console.log('CLASSIFICATION:', JSON.stringify({ q: lastMsg.slice(0, 60), intent, confidence, needsSearch }))
 
@@ -1465,7 +1476,7 @@ export default async function handler(req, res) {
       systemPrompt += `\n\nADDITIONAL REQUEST: After completing the primary task, also provide a ${secondaryIntent.replace(/_/g, ' ')} section. Keep it clearly separated with a "---" divider and heading.`
     }
 
-    const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','EXCEL_VALIDATION'])
+    const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','EXCEL_VALIDATION','GENERAL_DOC'])
     const SHORT_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','FIORI_REC','GENERAL'])
     if (SHORT_INTENTS.has(intent))  systemPrompt += `\n\nAUDIENCE AND TONE: You are speaking to a senior SAP consultant with 10+ years experience. They are mid-project and need the insight, not the manual.
 - Skip obvious steps like "enter material number" or "go to transaction"
@@ -1596,7 +1607,7 @@ export default async function handler(req, res) {
       /\b(CLASS|INTERFACE|BADI|ENHANCEMENT|METHOD\s+\w+|CALL METHOD)\b/i.test(systemPrompt) ||
       /\b(risk|vulnerabilit|impact|performance|optimi[sz]e)\b/i.test(lastMsg)
     )
-    const isComplexDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT'].includes(intent)
+    const isComplexDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT', 'GENERAL_DOC'].includes(intent)
     const isMeaningfulQuery = lastMsg.trim().split(/\s+/).length >= 4
 
     if (isRealCode || isComplexAbap) {
@@ -1846,7 +1857,7 @@ export default async function handler(req, res) {
     }
 
     // ── STEP 14: Send done ────────────────────────────────────────────────
-    const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION'])
+    const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION','GENERAL_DOC'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'
 
     // ── Build full debug document ─────────────────────────────────────────
