@@ -660,7 +660,10 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         }
         continue
       }
-      if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600,fontSize:16,color:t.text,margin:'10px 0 4px' }}>{line.slice(4)}</div>); i++; continue }
+      if (line.startsWith('# '))      { els.push(<div key={i} style={{ fontWeight:700,fontSize:20,color:t.text,margin:'16px 0 8px',letterSpacing:'-0.01em' }}>{inlineFormat(line.slice(2).replace(/^#+\s*/,''))}</div>); i++; continue }
+      if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700,fontSize:18,color:t.text,margin:'14px 0 6px',letterSpacing:'-0.01em' }}>{inlineFormat(line.slice(3).replace(/^#+\s*/,''))}</div>); i++; continue }
+      if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600,fontSize:16,color:t.text,margin:'10px 0 4px' }}>{inlineFormat(line.slice(4).replace(/^#+\s*/,''))}</div>); i++; continue }
+      if (/^\d+\.\s/.test(line))     { const m = line.match(/^(\d+)\.\s(.*)$/); els.push(<div key={i} style={{ display:'flex',gap:8,margin:'6px 0 2px',paddingLeft:2 }}><span style={{ color:'#4F46E5',fontWeight:700,fontSize:15,flexShrink:0,minWidth:18 }}>{m[1]}.</span><span style={{ fontWeight:600,color:t.text,fontSize:16,lineHeight:1.7 }}>{inlineFormat(m[2])}</span></div>); i++; continue }
       if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex',gap:8,margin:'4px 0',paddingLeft:4 }}><span style={{ color:'#4F46E5',marginTop:1,flexShrink:0,fontSize:14 }}>•</span><span style={{ lineHeight:1.7,color:t.text2,fontSize:16 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
       if (/^\s+[\+\-\*] /.test(line)) {
         const txt = line.replace(/^\s+[\+\-\*] /,'')
