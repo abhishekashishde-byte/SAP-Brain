@@ -204,7 +204,7 @@ export async function callOpenAISearch(question) {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         tools: [{ type: 'web_search_preview' }],
-        input: `Search for SAP Notes, SAP Community discussions, and SAP Help documentation for this question. For each SAP Note found provide the full note number, complete title, and description of what it fixes:\n\n${question}`,
+        input: `Search the web for SAP documentation, SAP Notes/KBAs, SAP Community discussions, and SAP Help pages relevant to this question. Prioritize official SAP sources (help.sap.com, me.sap.com, community.sap.com) and well-regarded SAP consulting blogs. If the question is about a specific error, SAP Note, or "does a standard tool/report exist for X" — find and cite the actual specific note numbers, transaction codes, or app IDs if they exist, don't just describe the general topic. If you can't find a specific answer, say so plainly rather than describing generalities.\n\nQuestion: ${question}`,
       }),
     })
 
