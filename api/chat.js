@@ -194,10 +194,24 @@ function detectModule(question, intent) {
   // Word-boundary matching — a plain .includes() check let short patterns like 'PP '
   // match inside ordinary words (e.g. "the Fiori APP" silently matched module PP).
   // \b ensures the pattern is a standalone word/phrase, not a substring of something else.
+  //
+  // Score-based, not first-match-wins — a generic single word (e.g. "MATERIAL", which
+  // appears in almost any SAP question) shouldn't beat a specific, decisive T-code or
+  // multi-word phrase (e.g. "VF01", "BILLING") just because its module happens to be
+  // earlier in the list above. Weight specific signals higher than generic ones.
+  let best = null, bestScore = 0
   for (const { module, patterns } of modulePatterns) {
-    if (patterns.some(p => new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(q))) return module
+    let score = 0
+    for (const p of patterns) {
+      if (new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(q)) {
+        const isTcodeLike = /\d/.test(p)          // e.g. VF01, MM01, IW31 — very specific
+        const isPhrase     = p.includes(' ')       // e.g. "SALES ORDER" — fairly specific
+        score += isTcodeLike ? 3 : isPhrase ? 2 : 1
+      }
+    }
+    if (score > bestScore) { bestScore = score; best = module }
   }
-  return null
+  return best
 }
 
 // ── 3. CONVERSATION CONTEXT — keep last 12 messages, no compression ──────────
