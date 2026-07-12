@@ -182,17 +182,20 @@ Question: "${question.slice(0, 500)}"
 function detectModule(question, intent) {
   const q = question.toUpperCase()
   const modulePatterns = [
-    { module: 'PM', patterns: ['PM ', 'PLANT MAINT', 'MAINTENANCE ORDER', 'IW31', 'IW32', 'IW33', 'IP10', 'IP11', 'EQUI', 'IFLOT', 'MPLA', 'STRATEGY GROUP', 'MAINTENANCE PLAN', 'FUNCTIONAL LOCATION', 'EQUIPMENT MASTER', 'MEASUREM', 'MEASUR', 'MEASUREMENT POINT', 'COUNTER READING', 'IMRG', 'IMRC', 'IMPT', 'IK01', 'IK11', 'IK21', 'PYEAR'] },
-    { module: 'PP', patterns: ['PP ', 'PRODUCTION', 'CO01', 'CO02', 'CO03', 'MD01', 'MD04', 'PRODUCTION ORDER', 'PLANNED ORDER', 'BOM', 'ROUTING', 'WORK CENTER', 'MRP', 'PRODUCTION VERSION'] },
-    { module: 'MM', patterns: ['MM ', 'MATERIAL', 'MM01', 'MM02', 'ME21N', 'ME51N', 'MIGO', 'PURCHASE ORDER', 'GOODS RECEIPT', 'MATERIAL MASTER', 'VENDOR', 'PURCHASING'] },
-    { module: 'SD', patterns: ['SD ', 'SALES', 'VA01', 'VA02', 'VF01', 'VL01N', 'SALES ORDER', 'DELIVERY', 'BILLING', 'CUSTOMER ORDER'] },
-    { module: 'QM', patterns: ['QM ', 'QUALITY', 'QA01', 'QA32', 'MIC', 'INSPECTION LOT', 'INSPECTION POINT', 'CALIBRATION'] },
-    { module: 'FI', patterns: ['FI ', 'FINANCE', 'FB01', 'F-02', 'GENERAL LEDGER', 'ACCOUNTS PAYABLE', 'ACCOUNTS RECEIVABLE'] },
-    { module: 'CO', patterns: ['CO ', 'CONTROLLING', 'KS01', 'KP26', 'COST CENTER', 'COST ELEMENT', 'SETTLEMENT', 'COSTING'] },
-    { module: 'WM', patterns: ['WM ', 'WAREHOUSE', 'LT01', 'LT0A', 'TRANSFER ORDER', 'STORAGE LOCATION'] },
+    { module: 'PM', patterns: ['PM', 'PLANT MAINT', 'MAINTENANCE ORDER', 'IW31', 'IW32', 'IW33', 'IP10', 'IP11', 'EQUI', 'IFLOT', 'MPLA', 'STRATEGY GROUP', 'MAINTENANCE PLAN', 'FUNCTIONAL LOCATION', 'EQUIPMENT MASTER', 'MEASUREM', 'MEASUR', 'MEASUREMENT POINT', 'COUNTER READING', 'IMRG', 'IMRC', 'IMPT', 'IK01', 'IK11', 'IK21', 'PYEAR'] },
+    { module: 'PP', patterns: ['PP', 'PRODUCTION', 'CO01', 'CO02', 'CO03', 'MD01', 'MD04', 'PRODUCTION ORDER', 'PLANNED ORDER', 'BOM', 'ROUTING', 'WORK CENTER', 'MRP', 'PRODUCTION VERSION'] },
+    { module: 'MM', patterns: ['MM', 'MATERIAL', 'MM01', 'MM02', 'ME21N', 'ME51N', 'MIGO', 'PURCHASE ORDER', 'GOODS RECEIPT', 'MATERIAL MASTER', 'VENDOR', 'PURCHASING'] },
+    { module: 'SD', patterns: ['SD', 'SALES', 'VA01', 'VA02', 'VF01', 'VL01N', 'SALES ORDER', 'DELIVERY', 'BILLING', 'CUSTOMER ORDER'] },
+    { module: 'QM', patterns: ['QM', 'QUALITY', 'QA01', 'QA32', 'MIC', 'INSPECTION LOT', 'INSPECTION POINT', 'CALIBRATION'] },
+    { module: 'FI', patterns: ['FI', 'FINANCE', 'FB01', 'F-02', 'GENERAL LEDGER', 'ACCOUNTS PAYABLE', 'ACCOUNTS RECEIVABLE'] },
+    { module: 'CO', patterns: ['CO', 'CONTROLLING', 'KS01', 'KP26', 'COST CENTER', 'COST ELEMENT', 'SETTLEMENT', 'COSTING'] },
+    { module: 'WM', patterns: ['WM', 'WAREHOUSE', 'LT01', 'LT0A', 'TRANSFER ORDER', 'STORAGE LOCATION'] },
   ]
+  // Word-boundary matching — a plain .includes() check let short patterns like 'PP '
+  // match inside ordinary words (e.g. "the Fiori APP" silently matched module PP).
+  // \b ensures the pattern is a standalone word/phrase, not a substring of something else.
   for (const { module, patterns } of modulePatterns) {
-    if (patterns.some(p => q.includes(p))) return module
+    if (patterns.some(p => new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(q))) return module
   }
   return null
 }
