@@ -57,13 +57,13 @@ const MODULES = {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const { message } = req.body
+  const { message, answer } = req.body
   if (!message) return res.status(400).json({ error: 'No message' })
 
-  const prompt = `You are an SAP expert. Analyse this SAP question and return a JSON object.
+  const prompt = `You are an SAP expert. Analyse this SAP question${answer ? ' and the answer given' : ''} and return a JSON object.
 
 Question: "${message}"
-
+${answer ? `\nAnswer given (use this for context — the question alone can be ambiguous, e.g. a bare T-code or config parameter; the answer usually makes the actual SAP module clear):\n"${answer}"\n` : ''}
 Rules for the title:
 - Write a clean, descriptive topic title (4-6 words max)
 - DO NOT include transaction codes (like IW31, CO01, ME21N etc.) in the title
