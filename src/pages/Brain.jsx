@@ -202,8 +202,6 @@ function SourceInfoPanel({ info, t, dark }) {
 
   const modelLabel = info.routing?.includes('sonnet-direct')
     ? 'Claude Sonnet'
-    : info.routing?.includes('gemini') && info.routing?.includes('sonnet')
-    ? 'Sonnet + Gemini → GPT-4o'
     : info.routing?.includes('sonnet') && info.routing?.includes('gpt4o')
     ? 'GPT-4o + Claude Sonnet'
     : info.routing?.includes('sonnet') ? 'Claude Sonnet'
@@ -211,15 +209,9 @@ function SourceInfoPanel({ info, t, dark }) {
     : info.routing || 'Claude Sonnet'
 
   const pills = [
-    info.bookChunks > 0   && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
-    info.tavilyFiltered > 0 && { icon:'🔍', label:`Tavily: ${info.tavilyFiltered}/${info.tavilyRaw}`, color:'#D97706' },
-    info.openAISources > 0  && { icon:'🌐', label:`Web: ${info.openAISources}`, color:'#2563EB' },
-    !info.needsSearch       && { icon:'⚡', label:'No search', color:'#6B7280' },
-    info.geminiCorrections > 0
-      ? { icon:'⚠️', label:`Gemini: ${info.geminiCorrections} correction${info.geminiCorrections>1?'s':''}`, color:'#DC2626' }
-      : info.pipeline?.geminiAnswer
-      ? { icon:'✅', label:'Gemini answered', color:'#059669' }
-      : { icon:'⚫', label:'Gemini unavailable', color:'#6B7280' },
+    info.bookChunks > 0     && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
+    info.openAISources > 0  && { icon:'🌐', label:`Web search: ${info.openAISources}`, color:'#2563EB' },
+    !info.needsSearch        && { icon:'⚡', label:'No search', color:'#6B7280' },
   ].filter(Boolean)
 
   return (
@@ -271,15 +263,9 @@ function SourceInfoPanel({ info, t, dark }) {
               <span style={{ color:'#059669' }}>{info.bookSources.join(' · ')}</span>
             </div>
           )}
-          {info.tavilyFiltered > 0 && (
-            <div style={{ marginTop:4 }}>
-              <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Tavily: </span>
-              <span style={{ color:'#D97706' }}>{info.tavilyFiltered} results kept from {info.tavilyRaw} found</span>
-            </div>
-          )}
           {info.openAISources > 0 && (
             <div style={{ marginTop:4 }}>
-              <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>OpenAI web: </span>
+              <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Web search: </span>
               <span style={{ color:'#2563EB' }}>{info.openAISources} sources</span>
             </div>
           )}
@@ -315,24 +301,12 @@ function AnswerPipeline({ pipeline, dark }) {
         : 'No book chunks found for this question',
     },
     {
-      id: 'tavily',
-      icon: '🔍',
-      label: `Tavily (${pipeline.tavilyResults?.length || 0} results)`,
-      color: '#D97706',
-      empty: !pipeline.tavilyResults?.length,
-      content: pipeline.tavilyResults?.length
-        ? pipeline.tavilyResults.map((r,i) =>
-            `[${i+1}] ${r.source} — ${r.title}\n${r.url}\n${r.snippet}`
-          ).join('\n\n---\n\n')
-        : 'Tavily did not fire or returned no results',
-    },
-    {
       id: 'openai_search',
       icon: '🌐',
-      label: 'OpenAI Search',
+      label: 'Web Search (OpenAI)',
       color: '#2563EB',
       empty: !pipeline.openAISnippet,
-      content: pipeline.openAISnippet || 'OpenAI search did not fire',
+      content: pipeline.openAISnippet || 'Web search did not fire or returned no results',
     },
     {
       id: 'claude',
@@ -341,16 +315,6 @@ function AnswerPipeline({ pipeline, dark }) {
       color: '#8B5CF6',
       empty: !pipeline.claudeAnswer,
       content: pipeline.claudeAnswer || 'No Claude Sonnet answer',
-    },
-    {
-      id: 'gemini_answer',
-      icon: '🤖',
-      label: `Gemini Flash Answer ${pipeline.geminiAnswer ? '(' + Math.round(pipeline.geminiAnswer.length/4) + ' tokens)' : ''}`,
-      color: '#10B981',
-      empty: !pipeline.geminiAnswer || pipeline.geminiAnswer.length < 10,
-      content: pipeline.geminiAnswer && pipeline.geminiAnswer.length > 10
-        ? pipeline.geminiAnswer
-        : 'No Gemini answer — check Vercel logs for [GEMINI] error',
     },
     {
       id: 'merged',
@@ -2956,8 +2920,7 @@ export default function Brain({ session }) {
               {/* Sources */}
               <div style={{ marginBottom:8, display:'flex', gap:12, flexWrap:'wrap' }}>
                 <span><span style={{ color:'#6366f1' }}>Book chunks: </span><span style={{ color: debugData.bookChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.bookChunks}</span></span>
-                <span><span style={{ color:'#6366f1' }}>Tavily: </span><span style={{ color: debugData.tavilyFiltered > 0 ? '#34d399' : '#ef4444' }}>{debugData.tavilyFiltered}/{debugData.tavilyRaw}</span></span>
-                <span><span style={{ color:'#6366f1' }}>OpenAI: </span><span style={{ color: debugData.openAISources > 0 ? '#34d399' : '#ef4444' }}>{debugData.openAISources}</span></span>
+                <span><span style={{ color:'#6366f1' }}>Web search: </span><span style={{ color: debugData.openAISources > 0 ? '#34d399' : '#ef4444' }}>{debugData.openAISources}</span></span>
                 <span><span style={{ color:'#6366f1' }}>Knowledge: </span><span style={{ color: debugData.knowledgeChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.knowledgeChunks}</span></span>
               </div>
 
