@@ -2245,7 +2245,7 @@ export default function Brain({ session }) {
       setDualLabel('')
 
       if (currentMsgs.length===1) {
-        fetch('/api/categorise',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:msgText }) })
+        fetch('/api/categorise',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:msgText, answer:(finalReply||'').slice(0,800) }) })
           .then(r=>r.json()).then(({ module,topic,title })=>{ if(module){ updateConversation(convId,{ module,topic,title });setConversations(prev=>prev.map(c=>c.id===convId?{...c,module,topic,title}:c)) } }).catch(()=>{})
       }
 
