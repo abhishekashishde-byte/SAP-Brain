@@ -55,6 +55,7 @@ WORKSHOP_PPT   = create PowerPoint for a workshop
 FORMS_SPEC     = SAP output/print forms specification (Smart Forms/Adobe Forms development — NOT a general write-up)
 GENERAL_DOC    = user wants the conversation/technical content discussed so far compiled into a document, with no specific structured type requested (not a dev spec, not test cases, not a workshop deck, not a print form). Use this whenever the request is just "write this up", "create a document with what we discussed", "put this in a Word doc" — do NOT default to FS_SPEC or FORMS_SPEC just because the word "document" or "specification" appears loosely.
 FIORI_REC      = recommend Fiori apps
+TEACH_ME       = user explicitly wants a deeper conceptual/mentor-style explanation of a topic, app, or process — not a quick fact. Trigger phrases: "tell me more about X", "explain X to me", "help me understand X", "what's the idea/purpose behind X", "walk me through X", especially when asked on behalf of teaching someone junior/new. This is different from SAP_QA (which is a quick precise answer) — TEACH_ME means the user explicitly wants depth, context, and the "why", not a minimal answer.
 SLIDE_CONTENT  = create presentation content
 BEST_PRACTICES = SAP best practices, Activate methodology
 CUSTOMIZING    = SPRO configuration paths and settings
@@ -94,6 +95,7 @@ Question: "${question.slice(0, 500)}"
     const isGeneralDocKeyword = /\b(create a document|make (me )?a document|put (this|it|everything) (in|into) a (word|doc)|write (this |it |everything )?up (as|into) a doc|compile (this|everything|it) into|document (this|the above|everything|what we)|turn this into a document|save this as a document)\b/i.test(question)
     const isTestKeyword  = /\b(test case|test script|test scenario|UAT|SIT|generate.*test|write.*test)\b/i.test(question)
     const isFioriKeyword = /\b(fiori|app.*recommendation|recommend.*app|which.*app|tile)\b/i.test(question)
+    const isTeachMeKeyword = /\b(tell me more about|explain (this|that|to me)?|help (me|him|her|them) understand|what'?s the (purpose|idea|point|prospect) (of|behind)|walk me through|can you elaborate|dig deeper into|understand.*(better|deeper|more))\b/i.test(question)
     const isWorkshopPPT  = /\b(workshop.*ppt|workshop.*presentation|workshop.*slides|ppt.*workshop)\b/i.test(question)
     const isCustomizing  = /\b(spro|customiz|IMG|where.*config|config.*where|how.*config|configure.*path|where.*set up|where.*maintain)\b/i.test(question)
     const isBestPractice = /\b(best practice|sap activate|fit.to.standard|scope item|standard process|activate methodology)\b/i.test(question)
@@ -138,6 +140,9 @@ Question: "${question.slice(0, 500)}"
     if (isWorkshopPPT && !isCode && !isError)  { intent = 'WORKSHOP_PPT';   confidence = 1.0  }
     if (isCustomizing && !isCode && !isError)  { intent = 'CUSTOMIZING';    confidence = 0.95 }
     if (isBestPractice && !isCode && !isError) { intent = 'BEST_PRACTICES'; confidence = 0.95 }
+    // Checked after the more specific overrides above so explicit teaching phrasing ("tell me
+    // more about X", "explain X to me") wins even when X happens to also mention an app/table/etc.
+    if (isTeachMeKeyword && !isCode && !isError) { intent = 'TEACH_ME'; confidence = 0.9 }
     // Only applies when nothing more specific matched — a generic "write this up as a document"
     // request should not be force-fit into FS_SPEC/FORMS_SPEC/TECH_SPEC.
     if (isGeneralDocKeyword && !isCode && !isError && !isFsKeyword && !isTestKeyword && !isWorkshopPPT) { intent = 'GENERAL_DOC'; confidence = 0.9 }
@@ -642,6 +647,7 @@ async function geminiAnswer(question) {
 Answer the following question directly and concisely. 
 No greetings. No preamble. Start immediately with the answer.
 Write in consultant-to-consultant tone — skip basics, focus on mechanisms, gotchas, and edge cases.
+Only state SAP T-codes, tables, parameters, or objects you are genuinely confident exist — if you're not certain a specific object/parameter is real, say so plainly rather than inventing a plausible-sounding one. Do not invent technical detail to sound authoritative.
 
 Question: ${question}`
 
@@ -1678,7 +1684,7 @@ export default async function handler(req, res) {
       // Inject Gemini answer into Sonnet prompt as additional expert perspective
       let finalEnrichedPrompt = enrichedSystemPrompt
       if (geminiAns && geminiAns.length > 100) {
-        finalEnrichedPrompt += `\n\n🤖 ADDITIONAL EXPERT PERSPECTIVE (use insights not already in your answer, do not repeat yourself, do not mention this is from another model):\n${geminiAns.slice(0, 2000)}`
+        finalEnrichedPrompt += `\n\n🤖 ADDITIONAL EXPERT PERSPECTIVE (unverified — from a second model, not a trusted source):\n${geminiAns.slice(0, 2000)}\n\nTreat the above the same as you would treat an uncertain web result: only use a detail from it if it's consistent with what you actually know to be true, and if you can state it with the same confidence as the GENUINE UNKNOWN RULE and ANSWER SCOPE RULE require elsewhere in this prompt. If it conflicts with your own knowledge, contains a specific object/parameter/T-code you can't independently verify, or reads as speculative — disregard that part of it entirely rather than repeating it. Never surface something from this section that you wouldn't be willing to state on your own authority. Do not mention this is from another model.`
       }
 
       // Sonnet answers directly — streaming to user — THIS is the final answer
