@@ -637,72 +637,9 @@ RULES — non-negotiable:
 }
 
 
-// ── 8b. GEMINI — parallel answerer ───────────────────────────────────────────
-async function geminiAnswer(question) {
-  try {
-    const key = process.env.GEMINI_API_KEY
-    if (!key) { console.error('[GEMINI] No API key'); return '' }
-
-    // Only pass the question — NOT the full system prompt
-    // systemPrompt is too large (books + Tavily + history) and causes Gemini to return empty
-    // Gemini answers independently — GPT-4o analyst combines all sources
-    const prompt = `You are a senior SAP consultant with deep expertise across all SAP modules.
-Answer the following question directly and concisely. 
-No greetings. No preamble. Start immediately with the answer.
-Write in consultant-to-consultant tone — skip basics, focus on mechanisms, gotchas, and edge cases.
-Only state SAP T-codes, tables, parameters, or objects you are genuinely confident exist — if you're not certain a specific object/parameter is real, say so plainly rather than inventing a plausible-sounding one. Do not invent technical detail to sound authoritative.
-
-Question: ${question}`
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 8192,  // Must be high — thinking tokens consume this budget
-          thinkingConfig: {
-            thinkingBudget: 0     // Disable thinking — we need fast answers not deep reasoning
-          }
-        }
-      })
-    })
-
-    if (!res.ok) {
-      const errText = await res.text()
-      console.error('[GEMINI] Error:', res.status, errText.slice(0, 300))
-      return ''
-    }
-
-    const data = await res.json()
-    
-    // Log full response for debugging
-    if (data.promptFeedback?.blockReason) {
-      console.error('[GEMINI] Blocked:', data.promptFeedback.blockReason)
-      return ''
-    }
-    
-    // Gemini 2.5 Flash uses thinking mode — response has multiple parts
-    // parts[0] may be the thinking part (thought: true), parts[1] is the actual answer
-    const parts = data.candidates?.[0]?.content?.parts || []
-    const answer = parts
-      .filter(p => !p.thought)  // skip thinking parts
-      .map(p => p.text || '')
-      .join('')
-      .trim()
-    
-    console.log('[GEMINI] Parts count:', parts.length, '| Answer length:', answer.length)
-    if (!answer) {
-      console.error('[GEMINI] Empty answer. Finish reason:', data.candidates?.[0]?.finishReason)
-      console.error('[GEMINI] Full response:', JSON.stringify(data).slice(0, 500))
-    }
-    return answer
-  } catch (e) {
-    console.error('[GEMINI] Exception:', e.message)
-    return ''
-  }
-}
+// ── 8b. GEMINI removed from pipeline — confirmed across multiple tests to fabricate specific
+// technical claims (wrong field names, invented SAP Notes, invented mechanisms) that got absorbed
+// into Sonnet's own answers. Replaced by expanded OpenAI search (see callOpenAISearch in _shared.js).
 
 // ── 9. DOCUMENT WIZARD — gather requirements before generating ────────────────
 // Stage tracking: 'confirm' → 'gather' → 'generate'
@@ -1392,12 +1329,11 @@ export default async function handler(req, res) {
     let openAIResultPromise   = Promise.resolve(null)
 
     if (!isDeliverable && needsSearch) {
-      // Tavily fires by default for all SAP questions
-      tavilyResultsPromise = searchQueryPromise.then(q => tavilySearch(q, intent).catch(() => []))
-      // OpenAI search fires for complex questions and error/note lookups
-      if (isNoteSearch || isErrorSearch || isExplicitSearchRequest || intent === 'PROBLEM_ANALYSIS' || intent === 'ERROR_ANALYSIS') {
-        openAIResultPromise = callOpenAISearch(lastMsg).catch(() => null)
-      }
+      // OpenAI web search is now the primary search source for all questions (replaces Tavily —
+      // confirmed across multiple tests to find real, verifiable SAP Notes/sources that Tavily's
+      // query construction was missing). Tavily is no longer called; tavilyResultsPromise stays
+      // as its initialized empty-array promise.
+      openAIResultPromise = callOpenAISearch(lastMsg).catch(() => null)
     }
 
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
@@ -1451,7 +1387,7 @@ export default async function handler(req, res) {
 
     // Combine search sources
     const openAISources = openAIResult?.sources || []
-    const geminiSearchText = openAIResult?.text || ''
+    const openAISearchText = openAIResult?.text || ''
     const allSearchResults = [...tavilyFiltered, ...openAISources]
 
     debugLog.tavilyRaw      = tavilyRaw.length
@@ -1527,8 +1463,8 @@ export default async function handler(req, res) {
     }
 
     // ── Inject search results ──────────────────────────────────────────────
-    if (geminiSearchText) {
-      systemPrompt += `\n\nWEB SEARCH RESULTS (from OpenAI search):\n${geminiSearchText.slice(0, 2000)}`
+    if (openAISearchText) {
+      systemPrompt += `\n\nWEB SEARCH RESULTS (from OpenAI search):\n${openAISearchText.slice(0, 2000)}`
     }
 
     if (tavilyFiltered.length > 0) {
@@ -1644,7 +1580,6 @@ export default async function handler(req, res) {
       debugLog.rawClaudeAnswer = fullAnswer
       debugLog.rawMergedAnswer = fullAnswer
       debugLog.enrichedPromptSnippet = systemPrompt.slice(0, 2000)
-      debugLog.geminiNotCalled = true // this route is Sonnet-only by design — Gemini is never invoked here
 
     } else if (isMeaningfulQuery) {
       // ALL SAP Q&A → Sonnet answers directly with books + Tavily injected
@@ -1663,7 +1598,8 @@ export default async function handler(req, res) {
         enrichedSystemPrompt += `\n\n📚 SAP BOOK DOCUMENTATION — cite these with page numbers inline:\n${bookText}\n\nWhen using book content, cite it as: (${bookChunks[0]?.source_book || 'Book'}, p.XX)`
       }
 
-      // Inject Tavily results directly into Sonnet's prompt
+      // Inject Tavily results directly into Sonnet's prompt (Tavily currently disabled — see
+      // search orchestration above; tavilyFiltered will be empty, this block is a safe no-op)
       if (tavilyFiltered.length > 0) {
         const tavilyText = tavilyFiltered.map((r, i) =>
           `[Web ${i+1}] ${r.title}\nURL: ${r.url}\n${(r.snippet || '').slice(0, 1000)}`
@@ -1671,29 +1607,15 @@ export default async function handler(req, res) {
         enrichedSystemPrompt += `\n\n🔍 WEB SEARCH RESULTS — cite relevant ones with URL inline:\n${tavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
       }
 
-      // Fire Gemini first (non-streaming, runs while we build Sonnet prompt)
       send({ type: 'model_label', label: '' })
 
-      // Start Gemini immediately in parallel
-      const geminiPromise = geminiAnswer(lastMsg).catch(e => {
-        console.error('[GEMINI] Exception:', e.message)
-        return ''
-      })
-
-      // Wait for Gemini to complete (usually 3-6s, same as Sonnet setup time)
-      const geminiAns = await geminiPromise
-      console.log('[GEMINI] Answer length for injection:', geminiAns.length)
-
-      // Inject Gemini answer into Sonnet prompt as additional expert perspective
-      let finalEnrichedPrompt = enrichedSystemPrompt
-      if (geminiAns && geminiAns.length > 100) {
-        finalEnrichedPrompt += `\n\n🤖 ADDITIONAL EXPERT PERSPECTIVE (unverified — from a second model, not a trusted source):\n${geminiAns.slice(0, 2000)}\n\nTreat the above the same as you would treat an uncertain web result: only use a detail from it if it's consistent with what you actually know to be true, and if you can state it with the same confidence as the GENUINE UNKNOWN RULE and ANSWER SCOPE RULE require elsewhere in this prompt. If it conflicts with your own knowledge, contains a specific object/parameter/T-code you can't independently verify, or reads as speculative — disregard that part of it entirely rather than repeating it. Never surface something from this section that you wouldn't be willing to state on your own authority. Do not mention this is from another model.`
-      }
-
-      // Sonnet answers directly — streaming to user — THIS is the final answer
+      // Sonnet answers directly — streaming to user — THIS is the final answer.
+      // No second-model injection: OpenAI search results are already baked into systemPrompt
+      // above (book chunks + web search results), and Sonnet reasons from those directly rather
+      // than from an unverified second model's guess.
       fullAnswer = await streamClaude(
         'claude-sonnet-4-5',
-        finalEnrichedPrompt,
+        enrichedSystemPrompt,
         validMessages,
         chunk => send({ type: 'chunk', text: chunk }),
         4096
@@ -1701,15 +1623,12 @@ export default async function handler(req, res) {
 
       debugLog.rawClaudeAnswer = fullAnswer
       debugLog.rawMergedAnswer = fullAnswer
-      debugLog.geminiRawAnswer = geminiAns || ''
-      console.log('[GEMINI] Stored in pipeline:', (geminiAns || '').length, 'chars')
       debugLog.rawGptAnswer    = ''
 
       const t4 = Date.now()
       debugLog.modelsMs    = t4 - t3
       debugLog.synthesisMs = 0
-      debugLog.geminiCorrections = 0
-      debugLog.enrichedPromptSnippet = finalEnrichedPrompt.slice(0, 4000)
+      debugLog.enrichedPromptSnippet = enrichedSystemPrompt.slice(0, 4000)
     } else {
       // Short/greeting — GPT-4o only
       send({ type: 'model_label', label: 'by GPT-4o' })
@@ -1853,13 +1772,10 @@ export default async function handler(req, res) {
               url:     r.url || '',
               snippet: r.snippet?.slice(0, 200) || '',
             })),
-            openAISnippet: geminiSearchText?.slice(0, 400) || '',
+            openAISnippet: openAISearchText?.slice(0, 400) || '',
             gptAnswer:     '',  // GPT-4o is now analyst not answerer
-            geminiAnswer:  debugLog.geminiRawAnswer || '',
             claudeAnswer:  debugLog.rawClaudeAnswer || '',
             mergedAnswer:  debugLog.rawMergedAnswer || '',
-            geminiCorrections: debugLog.geminiCorrections || 0,
-            geminiDetails: debugLog.geminiDetails   || [],
           }
         }
       })
@@ -1905,42 +1821,34 @@ export default async function handler(req, res) {
         ? '(No saved findings matched this question — if you expected one to fire, check match_threshold or how it was tagged/embedded when saved.)'
         : '',
       '',
-      '4. TAVILY SEARCH',
+      '4. WEB SEARCH (OpenAI)',
       '─────────────────────────────────────────────────────────',
-      `Search query sent: ${debugLog.searchQuery || lastMsg}`,
-      `Raw results: ${debugLog.tavilyRaw || 0} | After filtering: ${debugLog.tavilyFiltered || 0}`,
-      ...(tavilyFiltered || []).map((r, i) =>
-        `[T${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}\n    Snippet: ${r.snippet?.slice(0, 400) || ''}`
+      `Search query sent: ${lastMsg}`,
+      `OpenAI search sources: ${(debugLog.openAISources ?? 0)}`,
+      openAISearchText ? `Search summary text:\n${openAISearchText.slice(0, 1500)}` : '(No search results — either needsSearch was false, or OpenAI search returned nothing)',
+      ...(openAISources || []).map((r, i) =>
+        `[W${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}`
       ),
       '',
       '5. CLAUDE SONNET (PRIMARY ANSWERER — FINAL ANSWER)',
       '─────────────────────────────────────────────────────────',
-      '→ FULL ENRICHED PROMPT SENT TO SONNET (includes books + Tavily):',
+      '→ FULL ENRICHED PROMPT SENT TO SONNET (includes books + web search):',
       (debugLog.enrichedPromptSnippet || systemPrompt || '').slice(0, 4000),
       '',
       '← ANSWER RECEIVED:',
       debugLog.rawClaudeAnswer || 'No answer',
       '',
-      '6. GEMINI 2.5 FLASH',
-      '─────────────────────────────────────────────────────────',
-      '→ PROMPT SENT:',
-      `You are a senior SAP consultant. Answer: ${lastMsg}`,
-      '',
-      '← ANSWER RECEIVED:',
-      debugLog.geminiRawAnswer || (debugLog.geminiNotCalled ? 'N/A — Gemini is not called on this routing path (Sonnet-only route)' : 'No answer (check Vercel logs for [GEMINI] error)'),
-      '',
-      '7. GPT-4o ANALYST (removed from Q&A pipeline)',
+      '6. GPT-4o ANALYST (removed from Q&A pipeline)',
       '─────────────────────────────────────────────────────────',
       '→ NOT USED — Sonnet answers directly. GPT-4o only used for short greetings.',
       `  Book chunks: ${(bookChunks || []).length}`,
-      `  Tavily results: ${(tavilyFiltered || []).length}`,
-      `  Expert Answer 1 (Sonnet): ${(debugLog.rawClaudeAnswer || '').length} chars`,
-      `  Expert Answer 2 (Gemini): ${(debugLog.geminiRawAnswer || '').length} chars`,
+      `  Web search sources: ${(openAISources || []).length}`,
+      `  Answer (Sonnet): ${(debugLog.rawClaudeAnswer || '').length} chars`,
       '',
       '← FINAL ANSWER RECEIVED:',
       debugLog.rawMergedAnswer || fullAnswer || '',
       '',
-      '8. FINAL OUTPUT TO USER',
+      '7. FINAL OUTPUT TO USER',
       '─────────────────────────────────────────────────────────',
       chatAnswer || fullAnswer || '',
       '',
@@ -1972,7 +1880,6 @@ export default async function handler(req, res) {
         needsSearch,
         detectedModule:      debugLog.detectedModule || null,
         totalMs:             debugLog.totalMs || null,
-        geminiCorrections:   debugLog.geminiCorrections || 0,
         // Full pipeline — always sent, collapsed by default in UI
         pipeline: {
           bookChunkDetails: (bookChunks || []).map(c => ({
@@ -1987,12 +1894,10 @@ export default async function handler(req, res) {
             url:     r.url || '',
             snippet: r.snippet?.slice(0, 300) || '',
           })),
-          openAISnippet:     geminiSearchText?.slice(0, 500) || '',
+          openAISnippet:     openAISearchText?.slice(0, 500) || '',
           gptAnswer:         debugLog.rawGptAnswer    || '',
           claudeAnswer:      debugLog.rawClaudeAnswer || '',
           mergedAnswer:      debugLog.rawMergedAnswer || '',
-          geminiCorrections: debugLog.geminiCorrections || 0,
-          geminiDetails:     debugLog.geminiDetails   || [],
         },
       },
     })
