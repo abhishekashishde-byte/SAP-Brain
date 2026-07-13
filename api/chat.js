@@ -63,6 +63,8 @@ DOC_CONFIRM    = user is confirming or denying a document generation request (ye
 DOC_REQUIREMENTS = user is answering requirement questions for document generation
 GENERAL        = anything else
 
+CRITICAL DISAMBIGUATION: Deliverable-generation intents (FS_SPEC, TECH_SPEC, TEST_CASES, GAP_ANALYSIS, WORKSHOP_PLAN, WORKSHOP_TOPICS, WORKSHOP_PPT, FORMS_SPEC, GENERAL_DOC, SLIDE_CONTENT) apply ONLY when the user is explicitly asking to create/generate/draft/build that deliverable. A genuine functional or conceptual question — "can we do X", "what happens if Y", "is it possible to Z", especially when it's a real question ending in a question mark — is SAP_QA or PROCESS_QA, even if the question's subject matter happens to touch on a related word. For example: a question asking whether an order can be costed when an operation is "not confirmed" is asking about SAP's confirmation status/settlement behavior — it has nothing to do with generating test cases, even though the word "confirm" appears. Do not let a single word association override the actual intent of the message. When in doubt between a deliverable intent and SAP_QA/PROCESS_QA, prefer SAP_QA/PROCESS_QA — answering a question directly is always safe; misfiring into a deliverable-generation wizard interrupts the user and is a worse failure.
+
 confidence: 0.0-1.0
 flags:
 isCode: true if ABAP keywords present
