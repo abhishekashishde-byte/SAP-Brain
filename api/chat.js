@@ -326,7 +326,7 @@ Return ONLY valid JSON: {"isAmbiguous": true/false, "clarifyingQuestion": "...",
 }
 
 // ── 4. QUERY REWRITING for search — context-aware ────────────────────────────
-async function rewriteForSearch(question, conversationSummary) {
+async function rewriteForSearch(question, recentContext) {
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -345,7 +345,7 @@ Rules:
 - Connect follow-up questions to the conversation context below
 - Return ONLY the search query, 5-10 words, nothing else
 
-Conversation context: ${conversationSummary || 'No previous context'}`
+Conversation context: ${recentContext || 'No previous context'}`
         }, {
           role: 'user',
           content: question
@@ -1312,13 +1312,17 @@ export default async function handler(req, res) {
     // docWizardStage === 'generate' means we should now generate the document
     const shouldGenerateDoc = docWizardStage === 'generate' || docWizardStage === 'gathering'
 
-    // ── STEP 3: Conversation compression (rolling summary) ─────────────────
+    // ── STEP 3: Conversation context — last 12 messages, no summarization ──
     const allMessages = (messages || []).filter(m => m.role && m.content?.trim())
-    const { recentMsgs, summary: conversationSummary } = getConversationContext(allMessages)
+    const { recentMsgs } = getConversationContext(allMessages)
+    // Lightweight, non-LLM context string for search rewriting/module detection —
+    // just the last real exchange verbatim. Deliberately not a summarized/compressed
+    // version: that approach was removed earlier for causing context loss and wrong
+    // answers. Raw recent text can't drift or hallucinate the way a summary can.
+    const recentContext = recentMsgs.slice(-2).map(m => `${m.role}: ${m.content.slice(0, 300)}`).join('\n')
 
-    
     // ── STEP 4: Detect module for RAG filtering ────────────────────────────
-    const detectedModule = detectModule(lastMsg + ' ' + (conversationSummary || ''), intent)
+    const detectedModule = detectModule(lastMsg + ' ' + recentContext, intent)
     debugLog.detectedModule = detectedModule
 
     // ── STEP 5: Fire parallel async operations ─────────────────────────────
@@ -1331,9 +1335,9 @@ export default async function handler(req, res) {
       ? fetchBookChunks(lastMsg, detectedModule, userToken).catch(() => [])
       : Promise.resolve([])
 
-    // 5b. Search query rewrite (context-aware, uses summary)
+    // 5b. Search query rewrite (context-aware, uses recent real messages)
     const searchQueryPromise = (!isDeliverable && needsSearch)
-      ? rewriteForSearch(lastMsg, conversationSummary).catch(() => lastMsg)
+      ? rewriteForSearch(lastMsg, recentContext).catch(() => lastMsg)
       : Promise.resolve(lastMsg)
 
     // 5c. User knowledge + memories
@@ -1448,11 +1452,6 @@ export default async function handler(req, res) {
 - If you are uncertain about a T-code or technical term — say "verify in your system" rather than guessing`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable. Be thorough and complete all sections.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nNever invent SAP T-codes, table names, BAdI names, or Fiori app IDs. Write "verify in your system" when uncertain.`
-
-    // ── Inject conversation summary (rolling memory) ───────────────────────
-    if (conversationSummary) {
-      systemPrompt += `\n\n📋 CONVERSATION HISTORY (compressed — treat as confirmed context):\n${conversationSummary}\n\nThe recent messages below continue from this context. Never say you cannot access earlier conversation — the summary above contains it.`
-    }
 
     // ── Inject Book RAG chunks ─────────────────────────────────────────────
     if (bookChunks.length > 0) {
