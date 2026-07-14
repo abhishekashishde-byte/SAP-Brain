@@ -1280,7 +1280,7 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
       position:'absolute',
       left:'clamp(14px,4vw,34px)',
       right:'clamp(14px,4vw,34px)',
-      bottom:'calc(env(safe-area-inset-bottom) + 66px)',
+      bottom:'calc(env(safe-area-inset-bottom) + 76px)',
       zIndex:20,
       pointerEvents:'none',
     }}>
@@ -1377,7 +1377,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-        .wani-home-inner{max-width:1120px;margin:0 auto;padding:18px 34px 190px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;}
+        .wani-home-inner{max-width:1120px;margin:0 auto;padding:18px 34px 215px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;}
         .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-shrink:0;}
         .wani-hero h1{font-size:clamp(20px,3.1vw,30px);line-height:1.08;letter-spacing:-.8px;margin:0 0 5px;font-weight:800;}
         .wani-hero p{font-size:clamp(13px,1.5vw,16px);line-height:1.35;margin:0;font-weight:600;color:#6B7280;}
@@ -1399,7 +1399,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
         .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
         @media (max-width:760px){
-          .wani-home-inner{padding:16px 32px 190px;}
+          .wani-home-inner{padding:16px 32px 215px;}
           .wani-hero{margin-bottom:16px;}
           .wani-hero h1{font-size:22px;letter-spacing:-.6px;margin-bottom:5px;white-space:normal;}
           .wani-hero p{font-size:14px;white-space:normal;}
@@ -1417,7 +1417,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
           .wani-pill-action{width:66px;height:50px;border-radius:20px;}
         }
         @media (max-width:520px){
-          .wani-home-inner{padding:14px 18px 190px;}
+          .wani-home-inner{padding:14px 18px 215px;}
           .wani-hero h1{font-size:20px;}
           .wani-hero p{font-size:13px;}
           .wani-sparkle{width:66px;height:50px;flex-basis:66px;}
@@ -2754,7 +2754,7 @@ export default function Brain({ session }) {
             </div>
 
             {/* Input */}
-            <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingBottom:'calc(env(safe-area-inset-bottom, 0px) + 60px)' }}>
+            <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingBottom:'calc(env(safe-area-inset-bottom, 0px) + 85px)' }}>
               {!isUnlimited && <UsageBar count={messageCount} limit={DAILY_LIMIT} dark={dark} />}
               <div style={{ maxWidth:720,margin:'0 auto' }}>
 
@@ -2928,7 +2928,7 @@ export default function Brain({ session }) {
       {/* Bottom tab bar — Home / History / Profile. Replaces the old always-visible
           sidebar: History is now an explicit, on-demand full-width panel rather than
           a permanent column eating screen space on every view. */}
-      <div style={{ position:'fixed', left:0, right:0, bottom:0, zIndex:60, display:'flex', justifyContent:'center', padding:'10px 14px calc(env(safe-area-inset-bottom, 0px) + 10px)', pointerEvents:'none' }}>
+      <div style={{ position:'fixed', left:0, right:0, bottom:0, zIndex:60, display:'flex', justifyContent:'center', padding:'10px 14px calc(env(safe-area-inset-bottom, 0px) + 20px)', pointerEvents:'none' }}>
         <div style={{ display:'flex', gap:4, padding:4, borderRadius:16, background:t.sidebar, border:`1px solid ${t.border}`, boxShadow:'0 10px 30px rgba(0,0,0,0.18)', pointerEvents:'auto' }}>
           {[
             { key:'home',    label:'Home',    icon:'⌂', onClick:goHome,                  active: !sidebarOpen && !showProfile && view==='home' },
@@ -2937,8 +2937,8 @@ export default function Brain({ session }) {
           ].map(tab=>(
             <button key={tab.key} onClick={tab.onClick}
               style={{
-                display:'flex', alignItems:'center', gap:7, padding:'9px 16px', borderRadius:12, border:'none',
-                cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif", fontSize:13, fontWeight:600,
+                display:'flex', alignItems:'center', gap:8, padding:'12px 20px', borderRadius:12, border:'none',
+                cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif", fontSize:14, fontWeight:600,
                 background: tab.active ? '#4F46E5' : 'transparent',
                 color: tab.active ? '#fff' : t.text3,
                 transition:'all 0.15s',
