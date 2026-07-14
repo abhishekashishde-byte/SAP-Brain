@@ -1901,21 +1901,11 @@ export default function Brain({ session }) {
   },[])
 
   useEffect(()=>{ if(view==='chat') setTimeout(()=>inputRef.current?.focus(),100) },[view,activeConvId])
-  // Auto-summarise — but ONLY when user sends a new message (not while reading)
-  // We check on user message count, not total messages
-  useEffect(()=>{
-    if (!activeConvId || !messages.length) return
-    const userCount = messages.filter(m=>m.role==='user').length
-    const assistantCount = messages.filter(m=>m.role==='assistant').length
-    // Only trigger after user sends a message AND there are enough assistant replies
-    // This ensures we never compact while user is reading the last answer
-    const key = `${activeConvId}-${assistantCount}`
-    if (userCount > 0 && assistantCount >= 5 && assistantCount % 5 === 0 &&
-        !hasAutoSummarisedRef.current.has(key) && !autoCompacting && !isStreaming) {
-      hasAutoSummarisedRef.current.add(key)
-      autoSummarise()
-    }
-  },[messages.filter(m=>m.role==='user').length, activeConvId])
+  // Auto-summarise DISABLED — this was silently replacing the real conversation history
+  // (messages array) with a single summary line in the database, permanently discarding
+  // the original Q&A content the user could see and rely on (including for Export).
+  // If a shorter context is ever needed for the AI's own prompt window, that should be
+  // handled server-side at request time without destroying the user-visible history.
 
   const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);try{window.history.replaceState({ view:'home' },'',window.location.pathname)}catch(e){} }
   const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);try{window.history.pushState({ view:'topic',mod,topic },'',window.location.pathname)}catch(e){} }
@@ -2963,12 +2953,6 @@ export default function Brain({ session }) {
                 <span><span style={{ color:'#6366f1' }}>Book chunks: </span><span style={{ color: debugData.bookChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.bookChunks}</span></span>
                 <span><span style={{ color:'#6366f1' }}>Web search: </span><span style={{ color: debugData.openAISources > 0 ? '#34d399' : '#ef4444' }}>{debugData.openAISources}</span></span>
                 <span><span style={{ color:'#6366f1' }}>Knowledge: </span><span style={{ color: debugData.knowledgeChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.knowledgeChunks}</span></span>
-              </div>
-
-              {/* Conversation compression */}
-              <div style={{ marginBottom:8 }}>
-                <span style={{ color:'#6366f1' }}>Compressed: </span>
-                <span style={{ color: debugData.conversationCompressed ? '#34d399' : '#94a3b8' }}>{debugData.conversationCompressed ? `Yes (${debugData.summaryLength} chars)` : 'No'}</span>
               </div>
 
               {/* Timing */}
