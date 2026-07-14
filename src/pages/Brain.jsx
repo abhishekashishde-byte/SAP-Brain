@@ -1263,7 +1263,17 @@ function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
 
-function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming }) {
+const HOME_TILES = [
+  { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',                   accent:'#F97316', soft:'#FFF7ED' },
+  { action:'customizing', icon:'/icon-customizing.png', label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                         accent:'#E11D48', soft:'#FFF1F2' },
+  { action:'code',        icon:'/icon-code.png',        label:'Code Insight',     desc:'Analyze ABAP logic, risks and dependencies',                      accent:'#0A7DD8', soft:'#EFF6FF' },
+  { action:'workshop',    icon:'/icon-workshop.png',    label:'Deck Generator',   desc:'Generate polished SAP workshop presentations',                    accent:'#F97316', soft:'#FFF7ED' },
+  { action:'fiori',       icon:'/icon-fiori.png',       label:'Explore Fiori',    desc:'Find the right Fiori app for any process',                        accent:'#E11D48', soft:'#FFF1F2' },
+  { action:'bestpractice',icon:'/icon-cloud.png',       label:'Best Practices',   desc:'SAP-standard flows, Activate guidance and process recommendations', accent:'#7C3AED', soft:'#F5F3FF' },
+]
+
+function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming, onQuickLaunch }) {
+  const [showAskMenu, setShowAskMenu] = useState(false)
   return (
     <div className="home-input-dock" style={{
       position:'absolute',
@@ -1273,9 +1283,34 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
       zIndex:20,
       pointerEvents:'none',
     }}>
-      <div style={{ maxWidth:720, margin:'0 auto', pointerEvents:'auto' }}>
+      <div style={{ maxWidth:720, margin:'0 auto', pointerEvents:'auto', position:'relative' }}>
+        {showAskMenu && (
+          <>
+            <div onClick={()=>setShowAskMenu(false)} style={{ position:'fixed', inset:0, zIndex:29 }} />
+            <div style={{
+              position:'absolute', bottom:'calc(100% + 10px)', left:0, right:0, zIndex:30,
+              background:t.inputBg, border:`1.5px solid ${t.border2}`, borderRadius:18, padding:8,
+              boxShadow: dark?'0 14px 34px rgba(0,0,0,0.32)':'0 16px 34px rgba(15,23,42,0.14)', maxHeight:320, overflowY:'auto',
+            }}>
+              {HOME_TILES.map(tile => (
+                <button key={tile.action} onClick={()=>{ setShowAskMenu(false); onQuickLaunch(tile.action) }}
+                  style={{ display:'flex', alignItems:'center', gap:12, width:'100%', padding:'10px 12px', border:'none', background:'transparent', borderRadius:12, cursor:'pointer', textAlign:'left' }}
+                  onMouseEnter={e=>e.currentTarget.style.background=dark?'rgba(255,255,255,0.05)':'rgba(15,23,42,0.04)'}
+                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                >
+                  <img src={tile.icon} alt="" style={{ width:32, height:32, objectFit:'contain', flexShrink:0 }} />
+                  <span style={{ minWidth:0, flex:1 }}>
+                    <span style={{ display:'block', fontSize:14, fontWeight:700, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif" }}>{tile.label}</span>
+                    <span style={{ display:'block', fontSize:12, color:t.text3, fontFamily:"'Inter','DM Sans',sans-serif" }}>{tile.desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         <div style={{
-          display:'flex',gap:10,alignItems:'center',background:t.inputBg,
+          display:'flex',flexDirection:'column',gap:6,background:t.inputBg,
           border:`1.5px solid ${t.border2}`,borderRadius:22,padding:'10px 12px',
           boxShadow: dark?'0 14px 34px rgba(0,0,0,0.28)':'0 16px 34px rgba(15,23,42,0.10)',
           backdropFilter:'blur(12px)'
@@ -1283,22 +1318,35 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
           onFocusCapture={e=>{e.currentTarget.style.borderColor='#7C3AED';e.currentTarget.style.boxShadow='0 0 0 3px rgba(124,58,237,0.12), 0 16px 34px rgba(15,23,42,0.10)'}}
           onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow=dark?'0 14px 34px rgba(0,0,0,0.28)':'0 16px 34px rgba(15,23,42,0.10)'}}
         >
-          <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
-            title={docUploadStage==='extracting'?'Extracting text…':docUploadStage==='indexing'?'Indexing document…':docUploadStage==='failed'?'Indexing failed — click to retry':'Upload document'}
-            style={{ width:42,height:42,borderRadius:12,border:`1px solid ${t.border}`,background:'transparent',color:t.text4,cursor:'pointer',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-            {docUploadStage==='extracting'?'📄':docUploadStage==='indexing'?'⏳':docUploadStage==='failed'?'⚠️':'📎'}
-          </button>
-          <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
+          {/* Row 1: clean full-width input */}
           <textarea ref={inputRef} value={input}
             onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,120)+'px'}}
             onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
             onPaste={handlePaste}
             placeholder="Ask your SAP question..." rows={1}
-            style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.5,height:'24px',maxHeight:'120px',overflowY:'auto',padding:0,outline:'none' }}
+            style={{ width:'100%',background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.5,height:'24px',maxHeight:'120px',overflowY:'auto',padding:0,outline:'none',boxSizing:'border-box' }}
           />
-          <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
-            style={{ width:44,height:44,borderRadius:13,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#111827':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
-          >→</button>
+          {/* Row 2: toolbar */}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
+              title={docUploadStage==='extracting'?'Extracting text…':docUploadStage==='indexing'?'Indexing document…':docUploadStage==='failed'?'Indexing failed — click to retry':'Upload document'}
+              style={{ width:36,height:36,borderRadius:11,border:`1px solid ${t.border}`,background:'transparent',color:t.text4,cursor:'pointer',fontSize:17,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              {docUploadStage==='extracting'?'📄':docUploadStage==='indexing'?'⏳':docUploadStage==='failed'?'⚠️':'📎'}
+            </button>
+            <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
+
+            <button onClick={()=>setShowAskMenu(v=>!v)}
+              style={{ display:'flex', alignItems:'center', gap:6, height:36, padding:'0 12px', borderRadius:999, border:`1px solid ${t.border2}`, background:dark?'rgba(255,255,255,0.04)':'rgba(15,23,42,0.03)', color:t.text2, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif" }}>
+              Ask about…
+              <span style={{ fontSize:10, opacity:0.7, transform: showAskMenu?'rotate(180deg)':'none', transition:'transform 0.15s' }}>▾</span>
+            </button>
+
+            <div style={{ flex:1 }} />
+
+            <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
+              style={{ width:36,height:36,borderRadius:11,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#111827':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+            >→</button>
+          </div>
         </div>
         <div style={{ fontSize:12,color:t.text4,textAlign:'center',marginTop:6 }}>Free mode · verify system-specific behaviour</div>
       </div>
@@ -1307,14 +1355,6 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
 }
 
 function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark, inputProps, profile, session }) {
-  const TILES = [
-    { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',                   accent:'#F97316', soft:'#FFF7ED' },
-    { action:'customizing', icon:'/icon-customizing.png', label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                         accent:'#E11D48', soft:'#FFF1F2' },
-    { action:'code',        icon:'/icon-code.png',        label:'Code Insight',     desc:'Analyze ABAP logic, risks and dependencies',                      accent:'#0A7DD8', soft:'#EFF6FF' },
-    { action:'workshop',    icon:'/icon-workshop.png',    label:'Deck Generator',   desc:'Generate polished SAP workshop presentations',                    accent:'#F97316', soft:'#FFF7ED' },
-    { action:'fiori',       icon:'/icon-fiori.png',       label:'Explore Fiori',    desc:'Find the right Fiori app for any process',                        accent:'#E11D48', soft:'#FFF1F2' },
-    { action:'bestpractice',icon:'/icon-cloud.png',       label:'Best Practices',   desc:'SAP-standard flows, Activate guidance and process recommendations', accent:'#7C3AED', soft:'#F5F3FF' },
-  ]
 
   const firstName = (profile?.name || session?.user?.email?.split('@')[0] || 'Abhishek').split(' ')[0]
 
@@ -1404,39 +1444,40 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
           </svg>
         </div>
 
-        <div className="wani-tool-grid">
-          {TILES.map(tile => (
-            <button
-              key={tile.action}
-              className="wani-tool-card"
-              onClick={() => onQuickLaunch(tile.action)}
-              style={{
-                minHeight:0,
-                height:'100%',
-                padding:'clamp(16px,2.2vh,28px) clamp(14px,2.3vw,26px) clamp(12px,1.8vh,22px)',
-                borderRadius:30,
-                border: 'none',
-                background: 'transparent',
-                boxShadow: 'none',
-                cursor:'pointer',
-                display:'flex',
-                flexDirection:'column',
-                alignItems:'center',
-                textAlign:'center',
-                transition:'transform .18s ease, box-shadow .18s ease',
-              }}
-            >
-              <img className="wani-card-icon" src={tile.icon} alt={tile.label} />
-              <h2 className="wani-card-title" style={{ color:dark?'#FFFFFF':'#050505' }}>{tile.label}</h2>
-              <div className="wani-under" style={{ background:tile.accent }} />
-              <p className="wani-card-desc" style={{ color:dark?'#A1A1AA':'#575757' }}>{tile.desc}</p>
-              <div className="wani-arrow" style={{ background:tile.soft, border:`1px solid ${tile.accent}18` }}>
-                <svg width="27" height="27" viewBox="0 0 27 27" fill="none">
-                  <path d="M5 13.5H21M21 13.5L14.5 7M21 13.5L14.5 20" stroke={tile.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-            </button>
-          ))}
+        <div style={{ flex:1, minHeight:0, overflowY:'auto', display:'flex', flexDirection:'column' }}>
+          <div style={{ fontSize:12, fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:dark?'#71717A':'#9CA3AF', marginBottom:10, fontFamily:"'Inter','DM Sans',sans-serif" }}>
+            Recently updated
+          </div>
+          {(!conversations || conversations.length===0) ? (
+            <div style={{ padding:'20px 4px', color:dark?'#71717A':'#9CA3AF', fontSize:14, fontFamily:"'Inter','DM Sans',sans-serif" }}>
+              No conversations yet — ask your first SAP question below.
+            </div>
+          ) : (
+            <div style={{ borderRadius:18, overflow:'hidden', border:`1px solid ${t.border}`, background:dark?'rgba(255,255,255,0.02)':'rgba(15,23,42,0.015)' }}>
+              {[...conversations].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,6).map((c, i, arr) => {
+                const firstMsg = c.messages?.find(m=>m.role==='user')?.content || c.title || 'Untitled conversation'
+                const mins = Math.floor((Date.now()-new Date(c.updated_at).getTime())/60000)
+                const rel = mins<1?'Just now':mins<60?`${mins} min ago`:mins<1440?`${Math.floor(mins/60)} hr ago`:mins<2880?'Yesterday':`${Math.floor(mins/1440)} days ago`
+                return (
+                  <button key={c.id} onClick={()=>onSelectTopic(c.module, c.topic, c.id)}
+                    style={{
+                      display:'flex', alignItems:'center', gap:12, width:'100%', padding:'13px 16px',
+                      border:'none', borderBottom: i<arr.length-1?`1px solid ${t.border}`:'none',
+                      background:'transparent', cursor:'pointer', textAlign:'left',
+                    }}
+                    onMouseEnter={e=>e.currentTarget.style.background=dark?'rgba(255,255,255,0.03)':'rgba(15,23,42,0.025)'}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                  >
+                    <span style={{ width:22,height:22,borderRadius:999,background:'rgba(34,197,94,0.15)',color:'#22C55E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12 }}>✓</span>
+                    <span style={{ flex:1, minWidth:0, fontSize:14, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      "{firstMsg}"
+                    </span>
+                    <span style={{ flexShrink:0, fontSize:12, color:dark?'#71717A':'#9CA3AF', fontFamily:"'Inter','DM Sans',sans-serif" }}>{rel}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div className="wani-bottom-pill">
@@ -2604,7 +2645,7 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming }} profile={profile} session={session} />}
+        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming, onQuickLaunch:handleQuickLaunch }} profile={profile} session={session} />}
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat'&&(
