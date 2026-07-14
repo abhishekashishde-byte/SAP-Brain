@@ -1434,13 +1434,13 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
       `}</style>
 
       <div className="wani-home-inner">
-        <div className="wani-hero" style={{ flexDirection:'column', alignItems:'center', textAlign:'center', gap:6 }}>
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-start', textAlign:'center', gap:6, marginBottom:20, flexShrink:0, width:'100%' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
             <WaniLogo size={40} dark={dark}/>
             <WaniWordmark height={22} dark={dark}/>
           </div>
-          <h1 style={{ color:dark?'#F8FAFC':'#030303' }}>Welcome, {firstName} 👋</h1>
-          <p style={{ color:dark?'#A1A1AA':'#6B7280' }}>What are we planning to do today?</p>
+          <h1 style={{ color:dark?'#F8FAFC':'#030303', fontSize:'clamp(20px,3.1vw,30px)', lineHeight:1.08, letterSpacing:'-.8px', margin:0, fontWeight:800 }}>Welcome, {firstName} 👋</h1>
+          <p style={{ color:dark?'#A1A1AA':'#6B7280', fontSize:'clamp(13px,1.5vw,16px)', lineHeight:1.35, margin:0, fontWeight:600 }}>What are we planning to do today?</p>
         </div>
 
         <div style={{ flex:1, minHeight:0, overflowY:'auto', display:'flex', flexDirection:'column' }}>
