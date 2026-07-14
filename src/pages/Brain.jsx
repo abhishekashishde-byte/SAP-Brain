@@ -1224,11 +1224,12 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
   )
 }
 
-function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
+function ConversationItem({ conv, isActive, onClick, onDelete, t, index=0 }) {
   const [hovered, setHovered] = useState(false)
+  const baseOpacity = Math.max(1 - index*0.09, 0.55)
   return (
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={onClick}
-      style={{ padding:'10px 14px',borderRadius:10,cursor:'pointer',background:isActive?'rgba(79,70,229,0.12)':hovered?'rgba(79,70,229,0.06)':'transparent',borderLeft:isActive?'3px solid #4F46E5':'3px solid transparent',marginBottom:3,transition:'all 0.15s',position:'relative' }}>
+      style={{ padding:'10px 14px',borderRadius:10,cursor:'pointer',background:isActive?'rgba(79,70,229,0.12)':hovered?'rgba(79,70,229,0.06)':'transparent',borderLeft:isActive?'3px solid #4F46E5':'3px solid transparent',marginBottom:3,transition:'all 0.15s',position:'relative',opacity:isActive||hovered?1:baseOpacity }}>
       <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:3 }}>
         {conv.module && <ModuleBadge module={conv.module} small/>}
         {conv.is_summarised && <span style={{ fontSize:9,color:t.text4,background:t.surface2,padding:'1px 5px',borderRadius:10 }}>∑</span>}
@@ -1279,7 +1280,7 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
       position:'absolute',
       left:'clamp(14px,4vw,34px)',
       right:'clamp(14px,4vw,34px)',
-      bottom:'calc(env(safe-area-inset-bottom) + 10px)',
+      bottom:'calc(env(safe-area-inset-bottom) + 66px)',
       zIndex:20,
       pointerEvents:'none',
     }}>
@@ -1342,6 +1343,10 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
             </button>
 
             <div style={{ flex:1 }} />
+
+            <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:11,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              🎤
+            </button>
 
             <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
               style={{ width:36,height:36,borderRadius:11,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#111827':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
@@ -1464,9 +1469,10 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
                       display:'flex', alignItems:'center', gap:12, width:'100%', padding:'13px 16px',
                       border:'none', borderBottom: i<arr.length-1?`1px solid ${t.border}`:'none',
                       background:'transparent', cursor:'pointer', textAlign:'left',
+                      opacity: Math.max(1 - i*0.11, 0.5), transition:'opacity 0.15s, background 0.15s',
                     }}
-                    onMouseEnter={e=>e.currentTarget.style.background=dark?'rgba(255,255,255,0.03)':'rgba(15,23,42,0.025)'}
-                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                    onMouseEnter={e=>{ e.currentTarget.style.background=dark?'rgba(255,255,255,0.03)':'rgba(15,23,42,0.025)'; e.currentTarget.style.opacity=1 }}
+                    onMouseLeave={e=>{ e.currentTarget.style.background='transparent'; e.currentTarget.style.opacity=Math.max(1 - i*0.11, 0.5) }}
                   >
                     <span style={{ width:22,height:22,borderRadius:999,background:'rgba(34,197,94,0.15)',color:'#22C55E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12 }}>✓</span>
                     <span style={{ flex:1, minWidth:0, fontSize:14, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -1577,7 +1583,7 @@ export default function Brain({ session }) {
   const [autoCompacting, setAutoCompacting] = useState(false)
   const [compactProgress, setCompactProgress] = useState(0)
   const hasAutoSummarisedRef = useRef(new Set())
-  const [sidebarOpen, setSidebarOpen]     = useState(!isMobileWidth())
+  const [sidebarOpen, setSidebarOpen]     = useState(false)
   const [tone, setTone]                   = useState('balanced')
   const [isMobile, setIsMobile]           = useState(isMobileWidth())
   const [showExport, setShowExport]       = useState(false)
@@ -1845,7 +1851,7 @@ export default function Brain({ session }) {
   })
 
   useEffect(()=>{
-    const handleResize=()=>{ if(isMobileWidth())setSidebarOpen(false); else setSidebarOpen(true) }
+    const handleResize=()=>{ if(isMobileWidth())setSidebarOpen(false) }
     window.addEventListener('resize',handleResize)
     return()=>window.removeEventListener('resize',handleResize)
   },[])
@@ -1889,7 +1895,7 @@ export default function Brain({ session }) {
     window.history.replaceState({ view:'home' },'')
     const handlePop=(e)=>{
       const state=e.state
-      if(!state||state.view==='home'){ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);window.history.pushState({ view:'home' },'') }
+      if(!state||state.view==='home'){ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);window.history.pushState({ view:'home' },'') }
       else if(state.view==='topic'){ setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('topic') }
       else if(state.view==='chat'){ if(state.convId){ setActiveConvId(state.convId);setView('chat') } else { setActiveConvId(null);setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('chat') } }
       else { setView('home');window.history.pushState({ view:'home' },'') }
@@ -1907,8 +1913,8 @@ export default function Brain({ session }) {
   // If a shorter context is ever needed for the AI's own prompt window, that should be
   // handled server-side at request time without destroying the user-visible history.
 
-  const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);if(isMobileWidth())setSidebarOpen(false);try{window.history.replaceState({ view:'home' },'',window.location.pathname)}catch(e){} }
-  const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');if(isMobileWidth())setSidebarOpen(false);try{window.history.pushState({ view:'topic',mod,topic },'',window.location.pathname)}catch(e){} }
+  const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);try{window.history.replaceState({ view:'home' },'',window.location.pathname)}catch(e){} }
+  const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');setSidebarOpen(false);try{window.history.pushState({ view:'topic',mod,topic },'',window.location.pathname)}catch(e){} }
   const goChat=(convId,mod=null,topic=null)=>{ 
     setFilterDropdownOpen(false)
     setInput('')
@@ -1918,7 +1924,7 @@ export default function Brain({ session }) {
     if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } 
     else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) }
     try { window.history.pushState({ view:'chat',convId,mod,topic },'',window.location.pathname) } catch(e){}
-    if(isMobileWidth())setSidebarOpen(false) 
+    setSidebarOpen(false)
   }
 
   // Quick launcher — opens new chat with pre-set intent and opening message from Wani
@@ -2398,10 +2404,10 @@ export default function Brain({ session }) {
         }
       `}</style>
 
-      {sidebarOpen&&isMobile&&(<div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:40,backdropFilter:'blur(2px)' }} onClick={()=>setSidebarOpen(false)}/>)}
+      {sidebarOpen&&(<div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:40,backdropFilter:'blur(2px)' }} onClick={()=>setSidebarOpen(false)}/>)}
 
-      {/* Sidebar */}
-      <div style={{ width:isMobile?264:(sidebarOpen?264:0),minWidth:isMobile?264:(sidebarOpen?264:0),background:t.sidebar,borderRight:(!isMobile&&!sidebarOpen)?'none':`1px solid ${t.border}`,display:'flex',flexDirection:'column',overflow:'hidden',transition:'transform 0.3s ease, width 0.3s ease, min-width 0.3s ease',transform:(sidebarOpen||!isMobile)?'translateX(0)':'translateX(-100%)',position:isMobile?'fixed':'relative',top:0,bottom:0,left:0,zIndex:50 }}>
+      {/* History panel — opens as an overlay via the History tab, on any screen size */}
+      <div style={{ width: sidebarOpen ? 'min(320px, 86vw)' : 0, minWidth: sidebarOpen ? 'min(320px, 86vw)' : 0, background:t.sidebar, borderRight: sidebarOpen ? `1px solid ${t.border}` : 'none', display:'flex', flexDirection:'column', overflow:'hidden', transition:'transform 0.3s ease, width 0.3s ease, min-width 0.3s ease', transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)', position:'fixed', top:0, bottom:0, left:0, zIndex:50 }}>
         <div style={{ padding:'16px 16px 12px',borderBottom:`1px solid ${t.border}` }}>
           <div onClick={goHome} style={{ display:'flex',alignItems:'center',gap:10,marginBottom:14,cursor:'pointer' }}>
             <WaniLogo size={30} dark={dark}/><WaniWordmark height={16} dark={dark}/>
@@ -2516,7 +2522,7 @@ export default function Brain({ session }) {
                   </div>
                   {projects.map(proj => (
                     <div key={proj.id}
-                      onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false);if(isMobile)setSidebarOpen(false) }}
+                      onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false);setSidebarOpen(false) }}
                       style={{
                         padding:'9px 12px', borderRadius:10, cursor:'pointer', marginBottom:3,
                         background: activeConvId===proj.id ? 'rgba(79,70,229,0.12)' : 'rgba(79,70,229,0.04)',
@@ -2545,14 +2551,18 @@ export default function Brain({ session }) {
               {/* ── CONVERSATIONS SECTION ── */}
               {filteredConvs.length===0?(
                 <div style={{ padding:'24px 16px',textAlign:'center' }}><div style={{ fontSize:28,marginBottom:8 }}>💬</div><p style={{ fontSize:12,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
-              ):(
-                Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
+              ):(() => {
+                let runningIndex = 0
+                return Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
                   <div key={group}>
                     <div style={{ fontSize:10,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 4px' }}>{group}</div>
-                    {convs.map(conv=>(<ConversationItem key={conv.id} conv={conv} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false);if(isMobile)setSidebarOpen(false) }} onDelete={handleDelete}/>))}
+                    {convs.map(conv=>{
+                      const idx = runningIndex++
+                      return <ConversationItem key={conv.id} conv={conv} index={idx} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false);setSidebarOpen(false) }} onDelete={handleDelete}/>
+                    })}
                   </div>
                 ))
-              )}
+              })()}
             </>
           )}
         </div>
@@ -2739,7 +2749,7 @@ export default function Brain({ session }) {
             </div>
 
             {/* Input */}
-            <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2 }}>
+            <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingBottom:'calc(env(safe-area-inset-bottom, 0px) + 60px)' }}>
               {!isUnlimited && <UsageBar count={messageCount} limit={DAILY_LIMIT} dark={dark} />}
               <div style={{ maxWidth:720,margin:'0 auto' }}>
 
@@ -2813,6 +2823,9 @@ export default function Brain({ session }) {
                     placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
                     style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
+                  <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:10,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    🎤
+                  </button>
                   <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
                     style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
                   >→</button>
@@ -2906,6 +2919,34 @@ export default function Brain({ session }) {
 
       {showProfile&&<ProfileModal session={session} profile={profile} t={t} onClose={()=>setShowProfile(false)} onSave={async(u)=>{await upsertProfile(session.user.id,u);setProfile(p=>({...p,...u}))}} onSignOut={signOut}/>}
       {showSaveFinding&&<SaveFindingModal t={t} dark={dark} onClose={()=>setShowSaveFinding(false)} onSave={saveManualFinding}/>}
+
+      {/* Bottom tab bar — Home / History / Profile. Replaces the old always-visible
+          sidebar: History is now an explicit, on-demand full-width panel rather than
+          a permanent column eating screen space on every view. */}
+      <div style={{ position:'fixed', left:0, right:0, bottom:0, zIndex:60, display:'flex', justifyContent:'center', padding:'10px 14px calc(env(safe-area-inset-bottom, 0px) + 10px)', pointerEvents:'none' }}>
+        <div style={{ display:'flex', gap:4, padding:4, borderRadius:16, background:t.sidebar, border:`1px solid ${t.border}`, boxShadow:'0 10px 30px rgba(0,0,0,0.18)', pointerEvents:'auto' }}>
+          {[
+            { key:'home',    label:'Home',    icon:'⌂', onClick:goHome,                  active: !sidebarOpen && !showProfile && view==='home' },
+            { key:'history', label:'History', icon:'💬', onClick:()=>setSidebarOpen(true),             active: sidebarOpen },
+            { key:'profile', label:'Profile', icon:'☺',  onClick:()=>setShowProfile(true),             active: showProfile },
+          ].map(tab=>(
+            <button key={tab.key} onClick={tab.onClick}
+              style={{
+                display:'flex', alignItems:'center', gap:7, padding:'9px 16px', borderRadius:12, border:'none',
+                cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif", fontSize:13, fontWeight:600,
+                background: tab.active ? '#4F46E5' : 'transparent',
+                color: tab.active ? '#fff' : t.text3,
+                transition:'all 0.15s',
+              }}
+              onMouseEnter={e=>{ if(!tab.active) e.currentTarget.style.background = t.hoverBg||'rgba(79,70,229,0.06)' }}
+              onMouseLeave={e=>{ if(!tab.active) e.currentTarget.style.background = 'transparent' }}
+            >
+              <span style={{ fontSize:15 }}>{tab.icon}</span>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
       {showExport&&<ExportModal conversation={activeConv} messages={messages} t={t} dark={dark} onClose={()=>setShowExport(false)}/>}
 
       {/* ── ADMIN DEBUG PANEL — only visible to admin emails ── */}
