@@ -9,6 +9,48 @@ import {
   getProfile, upsertProfile,
 } from '../supabaseClient'
 
+// ── Simple line-style icons — replace emoji for a cleaner, consistent look ──
+const IconMic = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="2" width="6" height="12" rx="3"/>
+    <path d="M5 10a7 7 0 0 0 14 0"/>
+    <line x1="12" y1="19" x2="12" y2="22"/>
+    <line x1="8" y1="22" x2="16" y2="22"/>
+  </svg>
+)
+const IconHistory = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 1 0 3-6.7"/>
+    <polyline points="3 4 3 9 8 9"/>
+    <polyline points="12 8 12 12 15 14"/>
+  </svg>
+)
+const IconBook = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 0 4 5.5v14z"/>
+    <path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20"/>
+  </svg>
+)
+const IconHome = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 10.5 12 3l9 7.5"/>
+    <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>
+  </svg>
+)
+const IconLogOut = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+    <polyline points="16 17 21 12 16 7"/>
+    <line x1="21" y1="12" x2="9" y2="12"/>
+  </svg>
+)
+const IconPlus = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/>
+    <line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+)
+
 const T = {
   light: {
     bg:'#FAFAF8',surface:'#FFFFFF',surface2:'#F5F0FA',border:'#EDEDE8',border2:'#D8D0E8',
@@ -1345,7 +1387,7 @@ function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inpu
             <div style={{ flex:1 }} />
 
             <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:11,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-              🎤
+              <IconMic size={17}/>
             </button>
 
             <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
@@ -2586,12 +2628,11 @@ export default function Brain({ session }) {
 
           {/* Persistent quick-access icons — always visible, not just inside an active chat */}
           <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-            <button onClick={()=>goChat(null,null,null)} title="New Conversation" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',fontSize:15,color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>+</button>
-            <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',fontSize:14,color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s',position:'relative' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
-              📚
+            <button onClick={()=>goChat(null,null,null)} title="New Conversation" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}><IconPlus size={15}/></button>
+            <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s',position:'relative' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
+              <IconBook size={15}/>
               {knowledgeEntries.length > 0 && <span style={{ position:'absolute',top:-4,right:-4,background:'#6366f1',color:'white',borderRadius:'50%',width:14,height:14,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center' }}>{knowledgeEntries.length}</span>}
             </button>
-            <button onClick={()=>setShowProfile(true)} title="Profile" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',fontSize:14,color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>☺</button>
           </div>
 
           {view==='chat'&&activeConv&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><ModuleBadge module={activeConv.module} small={isMobile}/>{!isMobile&&<div style={{ fontSize:13,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0 }}>{activeConv.title}</div>}{isMobile&&<div style={{ fontSize:14,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:1 }}>{activeConv.topic||activeConv.module?.split('–')[0].trim()}</div>}</div>)}
@@ -2601,7 +2642,7 @@ export default function Brain({ session }) {
             <>
               <button onClick={()=>setShowCapabilities(c=>!c)} title="What can Wani do?" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:showCapabilities?'#4F46E5':t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0,borderColor:showCapabilities?'#4F46E5':t.border }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{if(!showCapabilities){e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}}>{isMobile?'✨':'✨ What can I do?'}</button>
               <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
-                {isMobile?'📚':'📚 Knowledge'}
+                <IconBook size={13}/> {!isMobile && 'Knowledge'}
                 {knowledgeEntries.length > 0 && <span style={{ background:'#6366f1',color:'white',borderRadius:'50%',width:16,height:16,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2 }}>{knowledgeEntries.length}</span>}
               </button>
               <button onClick={()=>setShowExport(true)} title="Export" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'↓':'↓ Export'}</button>
@@ -2621,12 +2662,12 @@ export default function Brain({ session }) {
           )}
         </div>
 
-        {/* Home / History / Profile — now positioned right below the header, not floating at the bottom */}
+        {/* Home / History — now positioned right below the header. Profile moved to
+            a dedicated avatar + logout cluster on the right of this same row. */}
         <div style={{ display:'flex', alignItems:'center', gap:6, padding:isMobile?'8px 14px':'8px 12px', borderBottom:`1px solid ${t.border}`, background:t.topbar, flexShrink:0 }}>
           {[
-            { key:'home',    label:'Home',    icon:'⌂', onClick:goHome,                  active: !sidebarOpen && !showProfile && view==='home' },
-            { key:'history', label:'History', icon:'💬', onClick:()=>setSidebarOpen(true),             active: sidebarOpen },
-            { key:'profile', label:'Profile', icon:'☺',  onClick:()=>setShowProfile(true),             active: showProfile },
+            { key:'home',    label:'Home',    Icon:IconHome,    onClick:goHome,                  active: !sidebarOpen && !showProfile && view==='home' },
+            { key:'history', label:'History', Icon:IconHistory, onClick:()=>setSidebarOpen(true), active: sidebarOpen },
           ].map(tab=>(
             <button key={tab.key} onClick={tab.onClick}
               style={{
@@ -2639,10 +2680,28 @@ export default function Brain({ session }) {
               onMouseEnter={e=>{ if(!tab.active) e.currentTarget.style.background = t.hoverBg||'rgba(79,70,229,0.06)' }}
               onMouseLeave={e=>{ if(!tab.active) e.currentTarget.style.background = 'transparent' }}
             >
-              <span style={{ fontSize:14 }}>{tab.icon}</span>
+              <tab.Icon size={15}/>
               {tab.label}
             </button>
           ))}
+
+          <div style={{ flex:1 }} />
+
+          {/* Profile avatar (initials) + Logout — top right */}
+          <button onClick={()=>setShowProfile(true)} title="Profile" style={{
+            width:32, height:32, borderRadius:'50%', border:'none', cursor:'pointer',
+            background:'linear-gradient(135deg,#4F46E5,#7C3AED)', color:'#fff',
+            fontSize:13, fontWeight:700, fontFamily:"'Inter','DM Sans',sans-serif",
+            display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+          }}>
+            {(profile?.name || session?.user?.email || '?').charAt(0).toUpperCase()}
+          </button>
+          <button onClick={signOut} title="Sign out" style={{ width:32,height:32,borderRadius:10,border:`1.5px solid ${t.border}`,background:'none',color:t.text3,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor='#EF4444';e.currentTarget.style.color='#EF4444'}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}
+          >
+            <IconLogOut size={15}/>
+          </button>
         </div>
 
         {/* Tone bar */}
@@ -2853,7 +2912,7 @@ export default function Brain({ session }) {
                     style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
                   <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:10,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    🎤
+                    <IconMic size={17}/>
                   </button>
                   <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
                     style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
