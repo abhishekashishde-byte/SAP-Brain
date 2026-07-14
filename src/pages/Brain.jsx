@@ -1377,7 +1377,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-        .wani-home-inner{max-width:1120px;margin:0 auto;padding:28px 34px 104px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;}
+        .wani-home-inner{max-width:1120px;margin:0 auto;padding:18px 34px 190px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;}
         .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-shrink:0;}
         .wani-hero h1{font-size:clamp(20px,3.1vw,30px);line-height:1.08;letter-spacing:-.8px;margin:0 0 5px;font-weight:800;}
         .wani-hero p{font-size:clamp(13px,1.5vw,16px);line-height:1.35;margin:0;font-weight:600;color:#6B7280;}
@@ -1399,7 +1399,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
         .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
         .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
         @media (max-width:760px){
-          .wani-home-inner{padding:24px 32px 104px;}
+          .wani-home-inner{padding:16px 32px 190px;}
           .wani-hero{margin-bottom:16px;}
           .wani-hero h1{font-size:22px;letter-spacing:-.6px;margin-bottom:5px;white-space:normal;}
           .wani-hero p{font-size:14px;white-space:normal;}
@@ -1417,7 +1417,7 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
           .wani-pill-action{width:66px;height:50px;border-radius:20px;}
         }
         @media (max-width:520px){
-          .wani-home-inner{padding:20px 18px 104px;}
+          .wani-home-inner{padding:14px 18px 190px;}
           .wani-hero h1{font-size:20px;}
           .wani-hero p{font-size:13px;}
           .wani-sparkle{width:66px;height:50px;flex-basis:66px;}
@@ -1434,19 +1434,13 @@ function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t,
       `}</style>
 
       <div className="wani-home-inner">
-        <div className="wani-hero">
-          <div>
-            <h1 style={{ color:dark?'#F8FAFC':'#030303' }}>Welcome, {firstName} 👋</h1>
-            <p style={{ color:dark?'#A1A1AA':'#6B7280' }}>What are we planning to do today?</p>
+        <div className="wani-hero" style={{ flexDirection:'column', alignItems:'center', textAlign:'center', gap:6 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+            <WaniLogo size={40} dark={dark}/>
+            <WaniWordmark height={22} dark={dark}/>
           </div>
-
-          <svg className="wani-sparkle" viewBox="0 0 188 104" fill="none" aria-hidden="true">
-            <path d="M151 0L155.8 14.2L170 19L155.8 23.8L151 38L146.2 23.8L132 19L146.2 14.2L151 0Z" fill="#F8C44F" opacity="0.92"/>
-            <path d="M122 31L126 43L138 47L126 51L122 63L118 51L106 47L118 43L122 31Z" fill="#F8C44F" opacity="0.72"/>
-            <path d="M153 71L156 80L165 83L156 86L153 95L150 86L141 83L150 80L153 71Z" fill="#F8C44F" opacity="0.70"/>
-            <path d="M16 84C52 80 99 58 151 20" stroke="#F8C44F" strokeWidth="3" strokeLinecap="round" opacity="0.34"/>
-            <path d="M55 78C89 68 119 49 145 25" stroke="#F8C44F" strokeWidth="2" strokeLinecap="round" opacity="0.20"/>
-          </svg>
+          <h1 style={{ color:dark?'#F8FAFC':'#030303' }}>Welcome, {firstName} 👋</h1>
+          <p style={{ color:dark?'#A1A1AA':'#6B7280' }}>What are we planning to do today?</p>
         </div>
 
         <div style={{ flex:1, minHeight:0, overflowY:'auto', display:'flex', flexDirection:'column' }}>
@@ -2589,6 +2583,17 @@ export default function Brain({ session }) {
         <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap:isMobile?12:8,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingLeft:isMobile?'18px':'12px',paddingRight:isMobile?'18px':'12px',paddingBottom:isMobile?'0':'9px',paddingTop:isMobile?'max(14px, calc(env(safe-area-inset-top) + 10px))':'9px',height:isMobile?'auto':48,minHeight:isMobile?68:48 }}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ background:'none',border:'none',cursor:'pointer',borderRadius:10,fontSize:isMobile?24:16,color:t.text,transition:'background 0.15s',flexShrink:0,width:isMobile?48:32,height:isMobile?48:32,display:'flex',alignItems:'center',justifyContent:'center' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>☰</button>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
+
+          {/* Persistent quick-access icons — always visible, not just inside an active chat */}
+          <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+            <button onClick={()=>goChat(null,null,null)} title="New Conversation" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',fontSize:15,color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>+</button>
+            <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',fontSize:14,color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s',position:'relative' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
+              📚
+              {knowledgeEntries.length > 0 && <span style={{ position:'absolute',top:-4,right:-4,background:'#6366f1',color:'white',borderRadius:'50%',width:14,height:14,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center' }}>{knowledgeEntries.length}</span>}
+            </button>
+            <button onClick={()=>setShowProfile(true)} title="Profile" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',fontSize:14,color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>☺</button>
+          </div>
+
           {view==='chat'&&activeConv&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><ModuleBadge module={activeConv.module} small={isMobile}/>{!isMobile&&<div style={{ fontSize:13,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0 }}>{activeConv.title}</div>}{isMobile&&<div style={{ fontSize:14,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:1 }}>{activeConv.topic||activeConv.module?.split('–')[0].trim()}</div>}</div>)}
           {view==='topic'&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><span style={{ color:t.text4,fontSize:16 }}>›</span><div style={{ fontSize:isMobile?15:13,fontWeight:500,color:t.text2 }}>{browseTopic||browseModule?.split('–')[0].trim()}</div></div>)}
           {!(view==='chat'||view==='topic')&&<div style={{ flex:1 }}/>}
