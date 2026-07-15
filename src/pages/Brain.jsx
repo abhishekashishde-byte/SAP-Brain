@@ -1288,8 +1288,6 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t, index=0 }) {
   )
 }
 
-// HomeScreen and TopicView kept identical to original — omitted for brevity, paste from original Brain.jsx
-
 const MODULE_STACK = [
   { key:'PP – Production Planning',mod:'PP',sub:'Production Planning',emoji:'⚙️',gradDark:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#60A5FA 100%)',gradLight:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#93C5FD 100%)' },
   { key:'PM – Plant Maintenance',mod:'PM',sub:'Plant Maintenance',emoji:'🔧',gradDark:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)',gradLight:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)' },
@@ -1302,245 +1300,6 @@ const N_CARDS=MODULE_STACK.length,CARD_H=170,PEEK=14
 function topFor(slot){return slot===0?0:CARD_H+(slot-1)*PEEK}
 function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
-
-
-const HOME_TILES = [
-  { action:'fs',          icon:'/icon-fs.png',          label:'Build Specs',      desc:'Turn discussions into structured FS documents',                   accent:'#F97316', soft:'#FFF7ED' },
-  { action:'customizing', icon:'/icon-customizing.png', label:'Find & Configure', desc:'SPRO paths, T-codes and config guidance',                         accent:'#E11D48', soft:'#FFF1F2' },
-  { action:'code',        icon:'/icon-code.png',        label:'Code Insight',     desc:'Analyze ABAP logic, risks and dependencies',                      accent:'#0A7DD8', soft:'#EFF6FF' },
-  { action:'workshop',    icon:'/icon-workshop.png',    label:'Deck Generator',   desc:'Generate polished SAP workshop presentations',                    accent:'#F97316', soft:'#FFF7ED' },
-  { action:'fiori',       icon:'/icon-fiori.png',       label:'Explore Fiori',    desc:'Find the right Fiori app for any process',                        accent:'#E11D48', soft:'#FFF1F2' },
-  { action:'bestpractice',icon:'/icon-cloud.png',       label:'Best Practices',   desc:'SAP-standard flows, Activate guidance and process recommendations', accent:'#7C3AED', soft:'#F5F3FF' },
-]
-
-function HomeInputDock({ t, dark, input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming, onQuickLaunch }) {
-  const [showAskMenu, setShowAskMenu] = useState(false)
-  return (
-    <div className="home-input-dock" style={{
-      position:'absolute',
-      left:'clamp(14px,4vw,34px)',
-      right:'clamp(14px,4vw,34px)',
-      bottom:'calc(env(safe-area-inset-bottom) + 10px)',
-      zIndex:20,
-      pointerEvents:'none',
-    }}>
-      <div style={{ maxWidth:720, margin:'0 auto', pointerEvents:'auto', position:'relative' }}>
-        {showAskMenu && (
-          <>
-            <div onClick={()=>setShowAskMenu(false)} style={{ position:'fixed', inset:0, zIndex:29 }} />
-            <div style={{
-              position:'absolute', bottom:'calc(100% + 10px)', left:0, right:0, zIndex:30,
-              background:t.inputBg, border:`1.5px solid ${t.border2}`, borderRadius:18, padding:8,
-              boxShadow: dark?'0 14px 34px rgba(0,0,0,0.32)':'0 16px 34px rgba(15,23,42,0.14)', maxHeight:320, overflowY:'auto',
-            }}>
-              {HOME_TILES.map(tile => (
-                <button key={tile.action} onClick={()=>{ setShowAskMenu(false); onQuickLaunch(tile.action) }}
-                  style={{ display:'flex', alignItems:'center', gap:12, width:'100%', padding:'10px 12px', border:'none', background:'transparent', borderRadius:12, cursor:'pointer', textAlign:'left' }}
-                  onMouseEnter={e=>e.currentTarget.style.background=dark?'rgba(255,255,255,0.05)':'rgba(15,23,42,0.04)'}
-                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}
-                >
-                  <img src={tile.icon} alt="" style={{ width:32, height:32, objectFit:'contain', flexShrink:0 }} />
-                  <span style={{ minWidth:0, flex:1 }}>
-                    <span style={{ display:'block', fontSize:14, fontWeight:700, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif" }}>{tile.label}</span>
-                    <span style={{ display:'block', fontSize:12, color:t.text3, fontFamily:"'Inter','DM Sans',sans-serif" }}>{tile.desc}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        <div style={{
-          display:'flex',flexDirection:'column',gap:6,background:t.inputBg,
-          border:`1.5px solid ${t.border2}`,borderRadius:22,padding:'10px 12px',
-          boxShadow: dark?'0 14px 34px rgba(0,0,0,0.28)':'0 16px 34px rgba(15,23,42,0.10)',
-          backdropFilter:'blur(12px)'
-        }}
-          onFocusCapture={e=>{e.currentTarget.style.borderColor='#7C3AED';e.currentTarget.style.boxShadow='0 0 0 3px rgba(124,58,237,0.12), 0 16px 34px rgba(15,23,42,0.10)'}}
-          onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow=dark?'0 14px 34px rgba(0,0,0,0.28)':'0 16px 34px rgba(15,23,42,0.10)'}}
-        >
-          {/* Row 1: clean full-width input */}
-          <textarea ref={inputRef} value={input}
-            onChange={e=>{setInput(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,120)+'px'}}
-            onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
-            onPaste={handlePaste}
-            placeholder="Ask your SAP question..." rows={1}
-            style={{ width:'100%',background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.5,height:'24px',maxHeight:'120px',overflowY:'auto',padding:0,outline:'none',boxSizing:'border-box' }}
-          />
-          {/* Row 2: toolbar */}
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
-              title={docUploadStage==='extracting'?'Extracting text…':docUploadStage==='indexing'?'Indexing document…':docUploadStage==='failed'?'Indexing failed — click to retry':'Upload document'}
-              style={{ width:36,height:36,borderRadius:11,border:`1px solid ${t.border}`,background:'transparent',color:t.text4,cursor:'pointer',fontSize:17,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-              {docUploadStage==='extracting'?'📄':docUploadStage==='indexing'?'⏳':docUploadStage==='failed'?'⚠️':'📎'}
-            </button>
-            <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
-
-            <button onClick={()=>setShowAskMenu(v=>!v)}
-              style={{ display:'flex', alignItems:'center', gap:6, height:36, padding:'0 12px', borderRadius:999, border:`1px solid ${t.border2}`, background:dark?'rgba(255,255,255,0.04)':'rgba(15,23,42,0.03)', color:t.text2, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif" }}>
-              Ask about…
-              <span style={{ fontSize:10, opacity:0.7, transform: showAskMenu?'rotate(180deg)':'none', transition:'transform 0.15s' }}>▾</span>
-            </button>
-
-            <div style={{ flex:1 }} />
-
-            <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:11,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-              <IconMic size={17}/>
-            </button>
-
-            <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
-              style={{ width:36,height:36,borderRadius:11,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#111827':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
-            >→</button>
-          </div>
-        </div>
-        <div style={{ fontSize:12,color:t.text4,textAlign:'center',marginTop:6 }}>Free mode · verify system-specific behaviour</div>
-      </div>
-    </div>
-  )
-}
-
-function HomeScreen({ conversations, onSelectTopic, onNewChat, onQuickLaunch, t, dark, inputProps, profile, session }) {
-
-  const firstName = (profile?.name || session?.user?.email?.split('@')[0] || 'Abhishek').split(' ')[0]
-
-  return (
-    <div className="wani-home-exact" style={{
-      flex:1,
-      height:'100%',
-      overflow:'hidden',
-      background: dark
-        ? 'radial-gradient(circle at 85% 8%, rgba(251,191,36,0.10), transparent 24%), #0D0D14'
-        : 'radial-gradient(circle at 90% 10%, rgba(251,191,36,0.18), transparent 22%), linear-gradient(180deg,#FFFFFF 0%,#FFFDF9 70%,#FFF7ED 100%)',
-      fontFamily:"'DM Sans','Inter',system-ui,sans-serif",
-    }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-        @keyframes exactTileIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes exactFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-        .wani-home-inner{max-width:1120px;margin:0 auto;padding:18px 34px 110px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;}
-        .wani-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-shrink:0;}
-        .wani-hero h1{font-size:clamp(20px,3.1vw,30px);line-height:1.08;letter-spacing:-.8px;margin:0 0 5px;font-weight:800;}
-        .wani-hero p{font-size:clamp(13px,1.5vw,16px);line-height:1.35;margin:0;font-weight:600;color:#6B7280;}
-        .wani-sparkle{width:150px;height:82px;flex:0 0 150px;margin-top:0;}
-        .wani-tool-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:1fr;gap:14px;flex:1;min-height:0;overflow:hidden;}
-        .wani-tool-card{animation:exactTileIn .42s cubic-bezier(.16,1,.3,1) both;}
-        .wani-tool-card:nth-child(1){animation-delay:.03s}.wani-tool-card:nth-child(2){animation-delay:.07s}.wani-tool-card:nth-child(3){animation-delay:.11s}
-        .wani-tool-card:nth-child(4){animation-delay:.15s}.wani-tool-card:nth-child(5){animation-delay:.19s}.wani-tool-card:nth-child(6){animation-delay:.23s}
-        .wani-tool-card:hover{transform:translateY(-5px)!important;box-shadow:0 22px 42px rgba(15,23,42,.12)!important;}
-        .wani-tool-card:hover .wani-card-icon{animation:exactFloat .8s ease-in-out infinite;}
-        .wani-card-icon{width:clamp(72px,13vh,130px);height:clamp(72px,13vh,130px);object-fit:contain;display:block;margin:0 auto clamp(10px,1.5vh,18px);flex-shrink:0;}
-        .wani-card-title{font-size:clamp(17px,2.4vh,25px);line-height:1.04;font-weight:800;letter-spacing:-.6px;text-align:center;margin:0;color:#050505;}
-        .wani-under{width:44px;height:3px;border-radius:999px;margin:clamp(8px,1.2vh,13px) auto clamp(8px,1.2vh,14px);flex-shrink:0;}
-        .wani-card-desc{font-size:clamp(12px,1.7vh,17px);line-height:1.32;font-weight:500;color:#575757;text-align:center;margin:0 auto;max-width:245px;overflow:hidden;}
-        .wani-arrow{width:clamp(38px,6vh,52px);height:clamp(38px,6vh,52px);border-radius:999px;margin:auto auto 0;display:flex;align-items:center;justify-content:center;transition:transform .18s ease;flex-shrink:0;}
-        .wani-tool-card:hover .wani-arrow{transform:translateX(3px);}
-        .wani-bottom-pill{display:none;}
-        .wani-pill-left{display:flex;align-items:center;gap:18px;font-size:23px;line-height:1.2;font-weight:800;color:#090909;}
-        .wani-pill-icon{width:58px;height:58px;border-radius:999px;background:#FFF7ED;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(217,119,6,.08);}
-        .wani-pill-action{width:76px;height:58px;border-radius:22px;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;border:1px solid rgba(217,119,6,.16);box-shadow:0 10px 24px rgba(15,23,42,.08);}
-        @media (max-width:760px){
-          .wani-home-inner{padding:16px 32px 110px;}
-          .wani-hero{margin-bottom:16px;}
-          .wani-hero h1{font-size:22px;letter-spacing:-.6px;margin-bottom:5px;white-space:normal;}
-          .wani-hero p{font-size:14px;white-space:normal;}
-          .wani-sparkle{width:92px;height:62px;flex-basis:92px;margin-top:0;}
-          .wani-tool-grid{gap:14px 18px;grid-template-columns:repeat(3,minmax(0,1fr));}
-          .wani-tool-card{min-height:0!important;padding:20px 16px 14px!important;border-radius:24px!important;}
-          .wani-card-icon{width:92px;height:92px;margin-bottom:16px;}
-          .wani-card-title{font-size:20px;letter-spacing:-.5px;}
-          .wani-under{width:42px;height:3px;margin:10px auto 11px;}
-          .wani-card-desc{font-size:14px;line-height:1.3;max-width:210px;}
-          .wani-arrow{width:42px;height:42px;margin-top:auto;}
-          .wani-bottom-pill{margin-top:24px;padding:12px 14px 12px 18px;border-radius:26px;}
-          .wani-pill-left{font-size:18px;gap:12px;}
-          .wani-pill-icon{width:50px;height:50px;}
-          .wani-pill-action{width:66px;height:50px;border-radius:20px;}
-        }
-        @media (max-width:520px){
-          .wani-home-inner{padding:14px 18px 110px;}
-          .wani-hero h1{font-size:20px;}
-          .wani-hero p{font-size:13px;}
-          .wani-sparkle{width:66px;height:50px;flex-basis:66px;}
-          .wani-tool-grid{gap:12px;}
-          .wani-tool-card{min-height:0!important;padding:16px 10px 12px!important;border-radius:22px!important;}
-          .wani-card-icon{width:72px;height:72px;margin-bottom:12px;}
-          .wani-card-title{font-size:16px;}
-          .wani-card-desc{font-size:12px;line-height:1.25;}
-          .wani-arrow{width:38px;height:38px;}
-          .wani-pill-left{font-size:14px;}
-          .wani-pill-icon{width:42px;height:42px;}
-          .wani-pill-action{width:52px;height:42px;}
-        }
-      `}</style>
-
-      <div className="wani-home-inner">
-        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-start', textAlign:'center', flexShrink:0, width:'100%', padding:'20px 0 16px' }}>
-          <WaniLogo size={window.innerWidth<768?48:64} dark={dark}/>
-          <div style={{ marginTop:12, marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:32} dark={dark}/></div>
-          <div style={{ fontFamily:"'Inter',sans-serif", fontSize:window.innerWidth<768?18:22, fontWeight:600, color:t.text, marginTop:4, marginBottom:4 }}>Hello, {firstName} 👋</div>
-          <p style={{ fontSize:15, color:t.text2, maxWidth:320, lineHeight:1.5, margin:0 }}>What are we planning to do today?</p>
-        </div>
-
-        <div style={{ flex:1, minHeight:0, overflowY:'auto', display:'flex', flexDirection:'column' }}>
-          <div style={{ fontSize:12, fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:dark?'#71717A':'#9CA3AF', marginBottom:10, fontFamily:"'Inter','DM Sans',sans-serif" }}>
-            Recently updated
-          </div>
-          {(!conversations || conversations.length===0) ? (
-            <div style={{ padding:'20px 4px', color:dark?'#71717A':'#9CA3AF', fontSize:14, fontFamily:"'Inter','DM Sans',sans-serif" }}>
-              No conversations yet — ask your first SAP question below.
-            </div>
-          ) : (
-            <div style={{ borderRadius:18, overflow:'hidden', border:`1px solid ${t.border}`, background:dark?'rgba(255,255,255,0.02)':'rgba(15,23,42,0.015)' }}>
-              {[...conversations].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,6).map((c, i, arr) => {
-                const firstMsg = c.messages?.find(m=>m.role==='user')?.content || c.title || 'Untitled conversation'
-                const mins = Math.floor((Date.now()-new Date(c.updated_at).getTime())/60000)
-                const rel = mins<1?'Just now':mins<60?`${mins} min ago`:mins<1440?`${Math.floor(mins/60)} hr ago`:mins<2880?'Yesterday':`${Math.floor(mins/1440)} days ago`
-                return (
-                  <button key={c.id} onClick={()=>onSelectTopic(c.module, c.topic, c.id)}
-                    style={{
-                      display:'flex', alignItems:'center', gap:12, width:'100%', padding:'13px 16px',
-                      border:'none', borderBottom: i<arr.length-1?`1px solid ${t.border}`:'none',
-                      background:'transparent', cursor:'pointer', textAlign:'left',
-                      opacity: Math.max(1 - i*0.11, 0.5), transition:'opacity 0.15s, background 0.15s',
-                    }}
-                    onMouseEnter={e=>{ e.currentTarget.style.background=dark?'rgba(255,255,255,0.03)':'rgba(15,23,42,0.025)'; e.currentTarget.style.opacity=1 }}
-                    onMouseLeave={e=>{ e.currentTarget.style.background='transparent'; e.currentTarget.style.opacity=Math.max(1 - i*0.11, 0.5) }}
-                  >
-                    <span style={{ width:22,height:22,borderRadius:999,background:'rgba(34,197,94,0.15)',color:'#22C55E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12 }}>✓</span>
-                    <span style={{ flex:1, minWidth:0, fontSize:14, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      "{firstMsg}"
-                    </span>
-                    <span style={{ flexShrink:0, fontSize:12, color:dark?'#71717A':'#9CA3AF', fontFamily:"'Inter','DM Sans',sans-serif" }}>{rel}</span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="wani-bottom-pill">
-          <div className="wani-pill-left">
-            <div className="wani-pill-icon">
-              <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
-                <path d="M15 2L18 11L27 15L18 19L15 28L12 19L3 15L12 11L15 2Z" stroke="#D97706" strokeWidth="2.4" strokeLinejoin="round"/>
-                <path d="M23 2L24.4 6.1L28.5 7.5L24.4 8.9L23 13L21.6 8.9L17.5 7.5L21.6 6.1L23 2Z" fill="#D97706"/>
-              </svg>
-            </div>
-            <span>Smart tools. SAP expertise. Better outcomes.</span>
-          </div>
-          <div className="wani-pill-action">
-            <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-              <path d="M5 25L13 17L19 21L29 9" stroke="#D97706" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M21 9H29V17" stroke="#D97706" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-        </div>
-
-        {inputProps && <HomeInputDock {...inputProps} t={t} dark={dark} />}
-      </div>
-    </div>
-  )
-}
 
 function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, onBack, t }) {
   const colors=MODULE_COLORS[mod]||{ from:'#6B7280',to:'#4B5563',emoji:'◈' }
@@ -1579,7 +1338,7 @@ export default function Brain({ session }) {
   const { dark, toggle } = useTheme()
   const t = dark ? T.dark : T.light
 
-  const [view, setView]                   = useState('home')
+  const [view, setView]                   = useState('chat')
   const [browseModule, setBrowseModule]   = useState(null)
   const [browseTopic, setBrowseTopic]     = useState(null)
   const [conversations, setConversations] = useState([])
@@ -1923,13 +1682,13 @@ export default function Brain({ session }) {
   // useEffect removed intentionally
 
   useEffect(()=>{
-    window.history.replaceState({ view:'home' },'')
+    window.history.replaceState({ view:'chat' },'')
     const handlePop=(e)=>{
       const state=e.state
-      if(!state||state.view==='home'){ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);window.history.pushState({ view:'home' },'') }
+      if(!state||state.view==='home'){ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);window.history.pushState({ view:'chat' },'') }
       else if(state.view==='topic'){ setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('topic') }
       else if(state.view==='chat'){ if(state.convId){ setActiveConvId(state.convId);setView('chat') } else { setActiveConvId(null);setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('chat') } }
-      else { setView('home');window.history.pushState({ view:'home' },'') }
+      else { setView('chat');window.history.pushState({ view:'chat' },'') }
     }
     window.addEventListener('popstate',handlePop)
     const handleResize=()=>setIsMobile(isMobileWidth())
@@ -1944,7 +1703,7 @@ export default function Brain({ session }) {
   // If a shorter context is ever needed for the AI's own prompt window, that should be
   // handled server-side at request time without destroying the user-visible history.
 
-  const goHome=()=>{ setView('home');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);try{window.history.replaceState({ view:'home' },'',window.location.pathname)}catch(e){} }
+  const goHome=()=>{ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);setInput('');setAttachedCode(null);setExpandedCode(false);setQuickLaunchMessages([]);try{window.history.replaceState({ view:'chat' },'',window.location.pathname)}catch(e){} }
   const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');setSidebarOpen(false);try{window.history.pushState({ view:'topic',mod,topic },'',window.location.pathname)}catch(e){} }
   const goChat=(convId,mod=null,topic=null)=>{ 
     setFilterDropdownOpen(false)
@@ -2658,7 +2417,7 @@ export default function Brain({ session }) {
             a dedicated avatar + logout cluster on the right of this same row. */}
         <div style={{ display:'flex', alignItems:'center', gap:6, padding:isMobile?'8px 14px':'8px 12px', borderBottom:`1px solid ${t.border}`, background:t.topbar, flexShrink:0 }}>
           {[
-            { key:'home',    label:'Home',    Icon:IconHome,    onClick:goHome,                  active: !sidebarOpen && !showProfile && view==='home' },
+            { key:'home',    label:'New Chat', Icon:IconHome,    onClick:goHome,                  active: !sidebarOpen && !showProfile && view==='chat' && !activeConvId && !browseModule && !browseTopic },
             { key:'history', label:'History', Icon:IconHistory, onClick:()=>setSidebarOpen(true), active: sidebarOpen },
           ].map(tab=>(
             <button key={tab.key} onClick={tab.onClick}
@@ -2715,7 +2474,6 @@ export default function Brain({ session }) {
           </div>
         )}
 
-        {view==='home'&&<HomeScreen conversations={conversations} t={t} dark={dark} onSelectTopic={(mod,topic,convId)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onQuickLaunch={handleQuickLaunch} inputProps={{ input, setInput, handleSend, handlePaste, inputRef, docInputRef, handleDocUpload, docUploading, docUploadStage, attachedCode, isLoading, isStreaming, onQuickLaunch:handleQuickLaunch }} profile={profile} session={session} />}
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
 
         {view==='chat'&&(
