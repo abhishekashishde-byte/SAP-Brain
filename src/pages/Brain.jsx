@@ -2412,7 +2412,7 @@ export default function Brain({ session }) {
   const groups = groupConversations(filteredConvs)
 
   return (
-    <div style={{ display:'flex',height:'100dvh',background:t.bg,fontFamily:"'Inter','DM Sans',sans-serif",overflow:'hidden' }}>
+    <div style={{ display:'flex',width:'100%',height:'100dvh',background:t.bg,fontFamily:"'Inter','DM Sans',sans-serif",overflow:'hidden',overflowX:'hidden' }}>
       <style>{`
         @keyframes typingBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
         @keyframes msgSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
