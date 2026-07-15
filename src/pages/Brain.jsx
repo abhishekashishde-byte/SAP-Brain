@@ -59,7 +59,6 @@ const T = {
     inputBg:'#FAFAF8',msgUser:'#FDF4FF',msgUserBdr:'#E8C8F0',msgAI:'#FFFFFF',msgAIBdr:'#EDEDED',
     blob1:'rgba(200,80,192,0.12)',blob2:'rgba(255,107,53,0.09)',blob3:'rgba(255,204,112,0.11)',
     bgGrad:'linear-gradient(160deg,#FDF8FF 0%,#FFF5F0 40%,#FFFBF0 100%)',
-    toneBtn:'#F5F0FA',toneBtnBdr:'#D1C8DC',toneBtnTxt:'#5A4A6A',
     codeBg:'rgba(200,80,192,0.1)',codeTxt:'#7C3A7A',
     summarise:'linear-gradient(135deg,rgba(200,80,192,0.08),rgba(255,107,53,0.06))',
     summariseBdr:'rgba(200,80,192,0.2)',summariseTxt:'#7C3A7A',
@@ -71,7 +70,6 @@ const T = {
     inputBg:'#1A1530',msgUser:'#1E1535',msgUserBdr:'#4A2060',msgAI:'#16132A',msgAIBdr:'#2A2440',
     blob1:'rgba(200,80,192,0.18)',blob2:'rgba(255,107,53,0.14)',blob3:'rgba(255,204,112,0.12)',
     bgGrad:'linear-gradient(160deg,#0E0C1E 0%,#120A18 40%,#0C0E18 100%)',
-    toneBtn:'#1E1A30',toneBtnBdr:'#3D3560',toneBtnTxt:'#A090C0',
     codeBg:'rgba(200,80,192,0.18)',codeTxt:'#D070D0',
     summarise:'linear-gradient(135deg,rgba(200,80,192,0.15),rgba(255,107,53,0.1))',
     summariseBdr:'rgba(200,80,192,0.35)',summariseTxt:'#D090D0',
@@ -1618,7 +1616,6 @@ export default function Brain({ session }) {
   const [compactProgress, setCompactProgress] = useState(0)
   const hasAutoSummarisedRef = useRef(new Set())
   const [sidebarOpen, setSidebarOpen]     = useState(false)
-  const [tone, setTone]                   = useState('balanced')
   const [isMobile, setIsMobile]           = useState(isMobileWidth())
   const [showExport, setShowExport]       = useState(false)
 
@@ -2079,7 +2076,7 @@ export default function Brain({ session }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, tone, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
+        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
       })
 
       if (!res.ok) throw new Error('Network error')
@@ -2426,14 +2423,11 @@ export default function Brain({ session }) {
         @keyframes blob1{0%,100%{transform:translate(-15%,-15%) scale(1)}50%{transform:translate(20%,15%) scale(1.35)}}
         @keyframes blob2{0%,100%{transform:translate(15%,20%) scale(1.1)}50%{transform:translate(-20%,-10%) scale(1.4)}}
         @keyframes blob3{0%,100%{transform:translate(-5%,10%) scale(1)}50%{transform:translate(10%,-15%) scale(1.2)}}
-        .tone-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-family:'Inter','DM Sans',sans-serif;cursor:pointer;transition:all 0.18s;font-weight:500;}
-        .tone-btn.active{background:#4F46E5;border-color:transparent!important;color:#fff!important;font-weight:700;box-shadow:0 2px 10px rgba(79,70,229,0.25);}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(79,70,229,0.25);border-radius:4px}
         @media(max-width:768px){
           .main-topbar{padding:0 18px!important;height:68px!important;min-height:68px!important;}
           .chat-input-wrap{padding:10px 14px 16px!important;margin-bottom:0!important;}
           .chat-messages{padding:16px 14px!important;}
-          .tone-btn{padding:7px 14px!important;font-size:13px!important;}
           .home-input-dock{left:18px!important;right:18px!important;bottom:calc(env(safe-area-inset-bottom) + 8px)!important;}
         }
       `}</style>
@@ -2701,16 +2695,6 @@ export default function Brain({ session }) {
             <IconLogOut size={15}/>
           </button>
         </div>
-
-        {/* Tone bar */}
-        {view==='chat'&&messages.some(m=>m.role==='user')&&(
-          <div style={{ padding:isMobile?'0 18px':'5px 14px',height:isMobile?48:36,borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap:8,background:t.topbar,backdropFilter:'blur(6px)',flexShrink:0,position:'relative',zIndex:2,overflowX:'auto',WebkitOverflowScrolling:'touch' }}>
-            <span style={{ fontSize:11,color:t.text4,fontWeight:500,flexShrink:0 }}>Tone:</span>
-            {[{key:'balanced',label:'⚖️ Balanced'},{key:'direct',label:'⚡ Direct'},{key:'friendly',label:'😊 Friendly'},{key:'formal',label:'📋 Formal'}].map(to=>(
-              <button key={to.key} className={`tone-btn${tone===to.key?' active':''}`} onClick={()=>setTone(to.key)} style={{ border:`1.5px solid ${tone===to.key?'transparent':t.toneBtnBdr}`,background:tone===to.key?undefined:t.toneBtn,color:tone===to.key?undefined:t.toneBtnTxt,flexShrink:0 }}>{to.label}</button>
-            ))}
-          </div>
-        )}
 
         {/* Auto-compact progress overlay — like Claude.ai */}
         {autoCompacting&&(
