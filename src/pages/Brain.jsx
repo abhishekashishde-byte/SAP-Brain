@@ -562,10 +562,11 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
 
   const inlineFormat = (text) => {
     if (!text) return ''
-    return text.split(/(\*\*[^*]+\*\*|`[^`]+`|_[^_]+_)/g).map((part, i) => {
+    return text.split(/(\*\*[^*]+\*\*|`[^`]+`|_[^_]+_|https?:\/\/[^\s)<>\]]+)/g).map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ fontWeight:600,color:t.text }}>{part.slice(2,-2)}</strong>
       if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily:"'IBM Plex Mono',monospace",background:t.codeBg,padding:'2px 6px',borderRadius:4,fontSize:'0.88em',color:t.codeTxt }}>{part.slice(1,-1)}</code>
       if (part.startsWith('_') && part.endsWith('_')) return <span key={i} style={{ fontSize:11,color:t.text4,fontStyle:'italic' }}>{part.slice(1,-1)}</span>
+      if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:'#4F46E5',textDecoration:'underline',wordBreak:'break-all' }}>{part}</a>
       return <span key={i}>{part}</span>
     })
   }
