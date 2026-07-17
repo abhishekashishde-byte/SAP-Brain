@@ -1289,6 +1289,37 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t, index=0 }) {
   )
 }
 
+function ProjectItem({ proj, isActive, onClick, onDelete, t }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={onClick}
+      style={{
+        padding:'9px 12px', borderRadius:10, cursor:'pointer', marginBottom:3, position:'relative',
+        background: isActive ? 'rgba(79,70,229,0.12)' : hovered ? 'rgba(79,70,229,0.08)' : 'rgba(79,70,229,0.04)',
+        border: `1.5px solid ${isActive ? '#4F46E5' : hovered ? 'rgba(79,70,229,0.35)' : 'rgba(79,70,229,0.2)'}`,
+        transition:'all 0.15s',
+      }}
+    >
+      <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:2 }}>
+        {proj.module && <ModuleBadge module={proj.module} small/>}
+        <span style={{ fontSize:9,fontWeight:700,color:'#4F46E5',background:'rgba(79,70,229,0.12)',padding:'1px 6px',borderRadius:8,letterSpacing:0.5 }}>FS</span>
+      </div>
+      <div style={{ fontSize:13,fontWeight:500,color:isActive?'#4F46E5':t.text,lineHeight:1.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:hovered?24:0 }}>
+        {proj.project_name || proj.fs_title || proj.title}
+      </div>
+      <div style={{ fontSize:11,color:t.text4,marginTop:2 }}>
+        {proj.fs_generated_at ? new Date(proj.fs_generated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : new Date(proj.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
+      </div>
+      {hovered && (
+        <button onClick={e=>{e.stopPropagation();onDelete(proj.id)}} style={{ position:'absolute',right:8,top:10,background:'none',border:'none',cursor:'pointer',color:t.text4,fontSize:18,padding:4,lineHeight:1 }}
+          onMouseEnter={e=>e.currentTarget.style.color='#EF4444'}
+          onMouseLeave={e=>e.currentTarget.style.color=t.text4}
+        >×</button>
+      )}
+    </div>
+  )
+}
+
 const MODULE_STACK = [
   { key:'PP – Production Planning',mod:'PP',sub:'Production Planning',emoji:'⚙️',gradDark:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#60A5FA 100%)',gradLight:'linear-gradient(140deg,#1E3A8A 0%,#2563EB 55%,#93C5FD 100%)' },
   { key:'PM – Plant Maintenance',mod:'PM',sub:'Plant Maintenance',emoji:'🔧',gradDark:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)',gradLight:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)' },
@@ -1336,8 +1367,7 @@ function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, 
 }
 
 export default function Brain({ session }) {
-  const { dark, toggle } = useTheme()
-  const t = dark ? T.dark : T.light
+  const { toggle } = useTheme()
 
   const [view, setView]                   = useState('chat')
   const [browseModule, setBrowseModule]   = useState(null)
@@ -1369,6 +1399,8 @@ export default function Brain({ session }) {
   const [showProfile, setShowProfile]     = useState(false)
   const [showSaveFinding, setShowSaveFinding] = useState(false)
   const [profile, setProfile]             = useState(null)
+  const dark = profile?.theme !== 'light'
+  const t = dark ? T.dark : T.light
   const bgTheme = BG_THEMES[profile?.theme] || BG_THEMES.aurora
   const [showSummarise, setShowSummarise] = useState(false)
   const [isSummarising, setIsSummarising] = useState(false)
@@ -2166,6 +2198,7 @@ export default function Brain({ session }) {
   const handleDelete = async (id) => {
     await deleteConversation(id)
     setConversations(prev=>prev.filter(c=>c.id!==id))
+    setProjects(prev=>prev.filter(p=>p.id!==id))
     if (activeConvId===id) goHome()
   }
 
@@ -2195,7 +2228,7 @@ export default function Brain({ session }) {
       {sidebarOpen&&(<div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:40,backdropFilter:'blur(2px)' }} onClick={()=>setSidebarOpen(false)}/>)}
 
       {/* History panel — opens as an overlay via the History tab, on any screen size */}
-      <div style={{ width: sidebarOpen ? 'min(320px, 86vw)' : 0, minWidth: sidebarOpen ? 'min(320px, 86vw)' : 0, background:t.sidebar, borderRight: sidebarOpen ? `1px solid ${t.border}` : 'none', display:'flex', flexDirection:'column', overflow:'hidden', transition:'transform 0.3s ease, width 0.3s ease, min-width 0.3s ease', transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)', position:'fixed', top:0, bottom:0, left:0, zIndex:50 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width: sidebarOpen ? 'min(320px, 86vw)' : 0, minWidth: sidebarOpen ? 'min(320px, 86vw)' : 0, background:t.sidebar, borderRight: sidebarOpen ? `1px solid ${t.border}` : 'none', display:'flex', flexDirection:'column', overflow:'hidden', transition:'transform 0.3s ease, width 0.3s ease, min-width 0.3s ease', transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)', position:'fixed', top:0, bottom:0, left:0, zIndex:50 }}>
         <div style={{ padding:'16px 16px 12px',borderBottom:`1px solid ${t.border}` }}>
           <div onClick={goHome} style={{ display:'flex',alignItems:'center',gap:10,marginBottom:14,cursor:'pointer' }}>
             <WaniLogo size={30} dark={dark}/><WaniWordmark height={16} dark={dark}/>
@@ -2309,28 +2342,9 @@ export default function Brain({ session }) {
                     <span style={{ background:'rgba(79,70,229,0.12)',color:'#4F46E5',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
                   </div>
                   {projects.map(proj => (
-                    <div key={proj.id}
+                    <ProjectItem key={proj.id} proj={proj} isActive={activeConvId===proj.id} t={t}
                       onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false);setSidebarOpen(false) }}
-                      style={{
-                        padding:'9px 12px', borderRadius:10, cursor:'pointer', marginBottom:3,
-                        background: activeConvId===proj.id ? 'rgba(79,70,229,0.12)' : 'rgba(79,70,229,0.04)',
-                        border: `1.5px solid ${activeConvId===proj.id ? '#4F46E5' : 'rgba(79,70,229,0.2)'}`,
-                        transition:'all 0.15s',
-                      }}
-                      onMouseEnter={e=>{ if(activeConvId!==proj.id){ e.currentTarget.style.background='rgba(79,70,229,0.08)';e.currentTarget.style.borderColor='rgba(79,70,229,0.35)' }}}
-                      onMouseLeave={e=>{ if(activeConvId!==proj.id){ e.currentTarget.style.background='rgba(79,70,229,0.04)';e.currentTarget.style.borderColor='rgba(79,70,229,0.2)' }}}
-                    >
-                      <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:2 }}>
-                        {proj.module && <ModuleBadge module={proj.module} small/>}
-                        <span style={{ fontSize:9,fontWeight:700,color:'#4F46E5',background:'rgba(79,70,229,0.12)',padding:'1px 6px',borderRadius:8,letterSpacing:0.5 }}>FS</span>
-                      </div>
-                      <div style={{ fontSize:13,fontWeight:500,color:activeConvId===proj.id?'#4F46E5':t.text,lineHeight:1.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
-                        {proj.project_name || proj.fs_title || proj.title}
-                      </div>
-                      <div style={{ fontSize:11,color:t.text4,marginTop:2 }}>
-                        {proj.fs_generated_at ? new Date(proj.fs_generated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : new Date(proj.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
-                      </div>
-                    </div>
+                      onDelete={handleDelete}/>
                   ))}
                   <div style={{ height:1,background:t.border,margin:'8px 4px 4px' }}/>
                 </div>
@@ -2375,7 +2389,20 @@ export default function Brain({ session }) {
 
         {/* Topbar */}
         <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap:isMobile?12:8,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingLeft:isMobile?'18px':'12px',paddingRight:isMobile?'18px':'12px',paddingBottom:isMobile?'0':'9px',paddingTop:isMobile?'max(14px, calc(env(safe-area-inset-top) + 10px))':'9px',height:isMobile?'auto':48,minHeight:isMobile?68:48 }}>
-          <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ background:'none',border:'none',cursor:'pointer',borderRadius:10,fontSize:isMobile?24:16,color:t.text,transition:'background 0.15s',flexShrink:0,width:isMobile?48:32,height:isMobile?48:32,display:'flex',alignItems:'center',justifyContent:'center' }} onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>☰</button>
+          <div style={{ display:'flex',alignItems:'center',background:t.surface2,borderRadius:10,padding:2,gap:2,flexShrink:0 }}>
+            <button onClick={goHome} title="Chat"
+              style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
+                background: (!sidebarOpen && view==='chat') ? (dark?'#2A2440':'#fff') : 'transparent',
+                color: (!sidebarOpen && view==='chat') ? t.text : t.text3,
+                boxShadow: (!sidebarOpen && view==='chat') ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
+              }}>💬{!isMobile&&' Chat'}</button>
+            <button onClick={()=>setSidebarOpen(true)} title="History"
+              style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
+                background: sidebarOpen ? (dark?'#2A2440':'#fff') : 'transparent',
+                color: sidebarOpen ? t.text : t.text3,
+                boxShadow: sidebarOpen ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
+              }}>🕘{!isMobile&&' History'}</button>
+          </div>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
 
           {/* Persistent quick-access icons — always visible, not just inside an active chat */}
