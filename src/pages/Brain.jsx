@@ -1333,6 +1333,153 @@ function topFor(slot){return slot===0?0:CARD_H+(slot-1)*PEEK}
 function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
+function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, filterDropdownOpen, setFilterDropdownOpen, deliverableFilter, setDeliverableFilter, DELIVERABLE_FILTERS, groups, filteredConvs, activeConvId, dbLoading, goHome, goChat, handleDelete, setActiveConvId, setView, setShowSummarise, profile, session, setShowProfile, dark, t, isMobile }) {
+  return (
+    <div style={{ flex:1, height:'100%', overflow:'hidden', display:'flex', flexDirection:'column', background:t.bg }}>
+      <div style={{ padding: isMobile?'16px 18px 12px':'20px 24px 14px', borderBottom:`1px solid ${t.border}`, maxWidth:720, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
+        <button onClick={()=>goChat(null,null,null)} style={{ width:'100%',padding:'10px 14px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s',marginBottom:12 }}
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
+        ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}> New Conversation</span></button>
+
+        <div style={{ position:'relative' }}>
+          <span style={{ position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:t.text4,fontSize:13 }}>🔍</span>
+          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search..."
+            style={{ width:'100%',padding:'8px 10px 8px 32px',boxSizing:'border-box',border:`1.5px solid ${t.border}`,borderRadius:10,fontSize:13,color:t.text,background:t.inputBg,fontFamily:"'Inter','DM Sans',sans-serif",outline:'none',transition:'border-color 0.2s' }}
+            onFocus={e=>e.target.style.borderColor='#4F46E5'}
+            onBlur={e=>e.target.style.borderColor=t.border}
+          />
+        </div>
+        <div style={{ position:'relative', marginTop:8 }} data-filter-dropdown>
+          <div
+            onClick={() => setFilterDropdownOpen(prev => !prev)}
+            style={{
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'8px 12px', borderRadius:10, border:`1.5px solid ${t.border}`,
+              background:t.inputBg, cursor:'pointer', transition:'border-color 0.2s',
+              fontFamily:"'Inter','DM Sans',sans-serif",
+            }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=filterDropdownOpen?'#4F46E5':t.border}
+          >
+            <span style={{ fontSize:13, color: deliverableFilter==='ALL' ? t.text3 : '#4F46E5', fontWeight: deliverableFilter==='ALL'?400:600 }}>
+              {DELIVERABLE_FILTERS.find(f=>f.key===deliverableFilter)?.label || 'All Conversations'}
+            </span>
+            <span style={{ fontSize:11, color:t.text4, transform: filterDropdownOpen?'rotate(180deg)':'rotate(0deg)', transition:'transform 0.2s' }}>▾</span>
+          </div>
+
+          {filterDropdownOpen && (
+            <div style={{
+              position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:100,
+              background:t.surface, border:`1.5px solid ${t.border}`, borderRadius:12,
+              boxShadow:'0 8px 24px rgba(0,0,0,0.12)', overflow:'hidden',
+              fontFamily:"'Inter','DM Sans',sans-serif",
+            }}>
+              <div
+                onClick={() => { setDeliverableFilter('ALL'); setFilterDropdownOpen(false) }}
+                style={{
+                  padding:'9px 14px', fontSize:13, cursor:'pointer',
+                  color: deliverableFilter==='ALL' ? '#4F46E5' : t.text,
+                  background: deliverableFilter==='ALL' ? 'rgba(79,70,229,0.07)' : 'transparent',
+                  fontWeight: deliverableFilter==='ALL' ? 600 : 400,
+                  display:'flex', alignItems:'center', justifyContent:'space-between',
+                  transition:'background 0.12s',
+                }}
+                onMouseEnter={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                onMouseLeave={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='transparent' }}
+              >
+                All Conversations
+                {deliverableFilter==='ALL' && <span style={{ fontSize:12 }}>✓</span>}
+              </div>
+              {['Knowledge','Deliverables','Planning'].map(group => {
+                const groupItems = DELIVERABLE_FILTERS.filter(f => f.group === group)
+                return (
+                  <div key={group}>
+                    <div style={{
+                      padding:'6px 14px 4px', fontSize:10, fontWeight:700,
+                      color:t.text4, letterSpacing:0.8, textTransform:'uppercase',
+                      borderTop:`1px solid ${t.border}`, marginTop:2,
+                    }}>
+                      {group}
+                    </div>
+                    {groupItems.map(f => (
+                      <div
+                        key={f.key}
+                        onClick={() => { setDeliverableFilter(f.key); setFilterDropdownOpen(false) }}
+                        style={{
+                          padding:'8px 14px 8px 20px', fontSize:13, cursor:'pointer',
+                          color: deliverableFilter===f.key ? '#4F46E5' : t.text2,
+                          background: deliverableFilter===f.key ? 'rgba(79,70,229,0.07)' : 'transparent',
+                          fontWeight: deliverableFilter===f.key ? 600 : 400,
+                          display:'flex', alignItems:'center', justifyContent:'space-between',
+                          transition:'background 0.12s',
+                        }}
+                        onMouseEnter={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                        onMouseLeave={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='transparent' }}
+                      >
+                        {f.label}
+                        {deliverableFilter===f.key && <span style={{ fontSize:12 }}>✓</span>}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ flex:1,overflowY:'auto',padding: isMobile?'10px 18px 20px':'14px 24px 24px', maxWidth:720, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
+        {dbLoading?(
+          <div style={{ padding:20,textAlign:'center' }}><div style={{ width:20,height:20,border:`2px solid ${t.border}`,borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',margin:'0 auto 8px' }}/><span style={{ fontSize:12,color:t.text4 }}>Loading...</span></div>
+        ):(
+          <>
+            {projects.length > 0 && (
+              <div style={{ marginBottom:8 }}>
+                <div style={{ fontSize:10,fontWeight:700,color:'#4F46E5',letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 6px',display:'flex',alignItems:'center',gap:6 }}>
+                  <span>📁</span> Projects
+                  <span style={{ background:'rgba(79,70,229,0.12)',color:'#4F46E5',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
+                </div>
+                {projects.map(proj => (
+                  <ProjectItem key={proj.id} proj={proj} isActive={activeConvId===proj.id} t={t}
+                    onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false) }}
+                    onDelete={handleDelete}/>
+                ))}
+                <div style={{ height:1,background:t.border,margin:'8px 4px 4px' }}/>
+              </div>
+            )}
+
+            {filteredConvs.length===0?(
+              <div style={{ padding:'24px 16px',textAlign:'center' }}><div style={{ fontSize:28,marginBottom:8 }}>💬</div><p style={{ fontSize:12,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
+            ):(() => {
+              let runningIndex = 0
+              return Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
+                <div key={group}>
+                  <div style={{ fontSize:10,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 4px' }}>{group}</div>
+                  {convs.map(conv=>{
+                    const idx = runningIndex++
+                    return <ConversationItem key={conv.id} conv={conv} index={idx} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false) }} onDelete={handleDelete}/>
+                  })}
+                </div>
+              ))
+            })()}
+          </>
+        )}
+      </div>
+
+      <div style={{ padding:'10px 14px',borderTop:`1px solid ${t.border}`, maxWidth:720, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
+        <div onClick={()=>setShowProfile(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,cursor:'pointer',transition:'background 0.15s' }}
+          onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
+          onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+        >
+          <div style={{ width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>{getInitials(profile?.name,session.user.email)}</div>
+          <div style={{ overflow:'hidden',flex:1 }}><div style={{ fontSize:13,fontWeight:500,color:t.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{profile?.name||'My Profile'}</div><div style={{ fontSize:11,color:t.text4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{session.user.email}</div></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, onBack, t }) {
   const colors=MODULE_COLORS[mod]||{ from:'#6B7280',to:'#4B5563',emoji:'◈' }
   const filtered=topic?conversations.filter(c=>c.module===mod&&c.topic===topic):conversations.filter(c=>c.module===mod)
@@ -1407,7 +1554,6 @@ export default function Brain({ session }) {
   const [autoCompacting, setAutoCompacting] = useState(false)
   const [compactProgress, setCompactProgress] = useState(0)
   const hasAutoSummarisedRef = useRef(new Set())
-  const [sidebarOpen, setSidebarOpen]     = useState(false)
   const [isMobile, setIsMobile]           = useState(isMobileWidth())
   const [showExport, setShowExport]       = useState(false)
 
@@ -1673,11 +1819,6 @@ export default function Brain({ session }) {
     return matchesSearch && matchesFilter
   })
 
-  useEffect(()=>{
-    const handleResize=()=>{ if(isMobileWidth())setSidebarOpen(false) }
-    window.addEventListener('resize',handleResize)
-    return()=>window.removeEventListener('resize',handleResize)
-  },[])
 
   // Close filter dropdown when clicking outside
   useEffect(()=>{
@@ -1718,7 +1859,7 @@ export default function Brain({ session }) {
     window.history.replaceState({ view:'chat' },'')
     const handlePop=(e)=>{
       const state=e.state
-      if(!state||state.view==='home'){ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);window.history.pushState({ view:'chat' },'') }
+      if(!state||state.view==='home'){ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);window.history.pushState({ view:'chat' },'') }
       else if(state.view==='topic'){ setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('topic') }
       else if(state.view==='chat'){ if(state.convId){ setActiveConvId(state.convId);setView('chat') } else { setActiveConvId(null);setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('chat') } }
       else { setView('chat');window.history.pushState({ view:'chat' },'') }
@@ -1736,8 +1877,8 @@ export default function Brain({ session }) {
   // If a shorter context is ever needed for the AI's own prompt window, that should be
   // handled server-side at request time without destroying the user-visible history.
 
-  const goHome=()=>{ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setSidebarOpen(false);setInput('');setAttachedCode(null);setExpandedCode(false);setQuickLaunchMessages([]);try{window.history.replaceState({ view:'chat' },'',window.location.pathname)}catch(e){} }
-  const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');setSidebarOpen(false);try{window.history.pushState({ view:'topic',mod,topic },'',window.location.pathname)}catch(e){} }
+  const goHome=()=>{ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);setInput('');setAttachedCode(null);setExpandedCode(false);setQuickLaunchMessages([]);try{window.history.replaceState({ view:'chat' },'',window.location.pathname)}catch(e){} }
+  const goTopic=(mod,topic)=>{ setBrowseModule(mod);setBrowseTopic(topic);setView('topic');try{window.history.pushState({ view:'topic',mod,topic },'',window.location.pathname)}catch(e){} }
   const goChat=(convId,mod=null,topic=null)=>{ 
     setFilterDropdownOpen(false)
     setInput('')
@@ -1747,7 +1888,6 @@ export default function Brain({ session }) {
     if(convId){ setActiveConvId(convId);setView('chat');setShowSummarise(false) } 
     else { setActiveConvId(null);setBrowseModule(mod);setBrowseTopic(topic);setView('chat');setShowSummarise(false) }
     try { window.history.pushState({ view:'chat',convId,mod,topic },'',window.location.pathname) } catch(e){}
-    setSidebarOpen(false)
   }
 
   // Quick launcher — opens new chat with pre-set intent and opening message from Wani
@@ -1794,7 +1934,6 @@ export default function Brain({ session }) {
     setBrowseTopic(config.topic)
     setView('chat')
     try { window.history.pushState({ view:'chat', mod:config.mod, topic:config.topic },'',window.location.pathname) } catch(e){}
-    if(isMobileWidth()) setSidebarOpen(false)
 
     if (config.openingMsg) {
       // A behaviour — Wani speaks first
@@ -2225,160 +2364,7 @@ export default function Brain({ session }) {
         }
       `}</style>
 
-      {sidebarOpen&&(<div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:40,backdropFilter:'blur(2px)' }} onClick={()=>setSidebarOpen(false)}/>)}
-
-      {/* History panel — opens as an overlay via the History tab, on any screen size */}
-      <div onClick={e=>e.stopPropagation()} style={{ width: sidebarOpen ? 'min(320px, 86vw)' : 0, minWidth: sidebarOpen ? 'min(320px, 86vw)' : 0, background:t.sidebar, borderRight: sidebarOpen ? `1px solid ${t.border}` : 'none', display:'flex', flexDirection:'column', overflow:'hidden', transition:'transform 0.3s ease, width 0.3s ease, min-width 0.3s ease', transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)', position:'fixed', top:0, bottom:0, left:0, zIndex:50 }}>
-        <div style={{ padding:'16px 16px 12px',borderBottom:`1px solid ${t.border}` }}>
-          <div onClick={goHome} style={{ display:'flex',alignItems:'center',gap:10,marginBottom:14,cursor:'pointer' }}>
-            <WaniLogo size={30} dark={dark}/><WaniWordmark height={16} dark={dark}/>
-          </div>
-          <button onClick={()=>goChat(null,null,null)} style={{ width:'100%',padding:'10px 14px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s' }}
-            onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
-            onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
-          ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}> New Conversation</span></button>
-        </div>
-        <div style={{ padding:'10px 14px 6px' }}>
-          <div style={{ position:'relative' }}>
-            <span style={{ position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:t.text4,fontSize:13 }}>🔍</span>
-            <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search..."
-              style={{ width:'100%',padding:'8px 10px 8px 32px',boxSizing:'border-box',border:`1.5px solid ${t.border}`,borderRadius:10,fontSize:13,color:t.text,background:t.inputBg,fontFamily:"'Inter','DM Sans',sans-serif",outline:'none',transition:'border-color 0.2s' }}
-              onFocus={e=>e.target.style.borderColor='#4F46E5'}
-              onBlur={e=>e.target.style.borderColor=t.border}
-            />
-          </div>
-          {/* Deliverable filter — grouped dropdown */}
-          <div style={{ position:'relative', marginTop:8 }} data-filter-dropdown>
-            <div
-              onClick={() => setFilterDropdownOpen(prev => !prev)}
-              style={{
-                display:'flex', alignItems:'center', justifyContent:'space-between',
-                padding:'8px 12px', borderRadius:10, border:`1.5px solid ${t.border}`,
-                background:t.inputBg, cursor:'pointer', transition:'border-color 0.2s',
-                fontFamily:"'Inter','DM Sans',sans-serif",
-              }}
-              onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=filterDropdownOpen?'#4F46E5':t.border}
-            >
-              <span style={{ fontSize:13, color: deliverableFilter==='ALL' ? t.text3 : '#4F46E5', fontWeight: deliverableFilter==='ALL'?400:600 }}>
-                {DELIVERABLE_FILTERS.find(f=>f.key===deliverableFilter)?.label || 'All Conversations'}
-              </span>
-              <span style={{ fontSize:11, color:t.text4, transform: filterDropdownOpen?'rotate(180deg)':'rotate(0deg)', transition:'transform 0.2s' }}>▾</span>
-            </div>
-
-            {filterDropdownOpen && (
-              <div style={{
-                position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:100,
-                background:t.surface, border:`1.5px solid ${t.border}`, borderRadius:12,
-                boxShadow:'0 8px 24px rgba(0,0,0,0.12)', overflow:'hidden',
-                fontFamily:"'Inter','DM Sans',sans-serif",
-              }}>
-                {/* All Conversations — always first, no group header */}
-                <div
-                  onClick={() => { setDeliverableFilter('ALL'); setFilterDropdownOpen(false) }}
-                  style={{
-                    padding:'9px 14px', fontSize:13, cursor:'pointer',
-                    color: deliverableFilter==='ALL' ? '#4F46E5' : t.text,
-                    background: deliverableFilter==='ALL' ? 'rgba(79,70,229,0.07)' : 'transparent',
-                    fontWeight: deliverableFilter==='ALL' ? 600 : 400,
-                    display:'flex', alignItems:'center', justifyContent:'space-between',
-                    transition:'background 0.12s',
-                  }}
-                  onMouseEnter={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
-                  onMouseLeave={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='transparent' }}
-                >
-                  All Conversations
-                  {deliverableFilter==='ALL' && <span style={{ fontSize:12 }}>✓</span>}
-                </div>
-
-                {/* Grouped items */}
-                {['Knowledge','Deliverables','Planning'].map(group => {
-                  const groupItems = DELIVERABLE_FILTERS.filter(f => f.group === group)
-                  return (
-                    <div key={group}>
-                      <div style={{
-                        padding:'6px 14px 4px', fontSize:10, fontWeight:700,
-                        color:t.text4, letterSpacing:0.8, textTransform:'uppercase',
-                        borderTop:`1px solid ${t.border}`, marginTop:2,
-                      }}>
-                        {group}
-                      </div>
-                      {groupItems.map(f => (
-                        <div
-                          key={f.key}
-                          onClick={() => { setDeliverableFilter(f.key); setFilterDropdownOpen(false) }}
-                          style={{
-                            padding:'8px 14px 8px 20px', fontSize:13, cursor:'pointer',
-                            color: deliverableFilter===f.key ? '#4F46E5' : t.text2,
-                            background: deliverableFilter===f.key ? 'rgba(79,70,229,0.07)' : 'transparent',
-                            fontWeight: deliverableFilter===f.key ? 600 : 400,
-                            display:'flex', alignItems:'center', justifyContent:'space-between',
-                            transition:'background 0.12s',
-                          }}
-                          onMouseEnter={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
-                          onMouseLeave={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='transparent' }}
-                        >
-                          {f.label}
-                          {deliverableFilter===f.key && <span style={{ fontSize:12 }}>✓</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-        <div style={{ flex:1,overflowY:'auto',padding:'4px 8px 8px' }}>
-          {dbLoading?(
-            <div style={{ padding:20,textAlign:'center' }}><div style={{ width:20,height:20,border:`2px solid ${t.border}`,borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',margin:'0 auto 8px' }}/><span style={{ fontSize:12,color:t.text4 }}>Loading...</span></div>
-          ):(
-            <>
-              {/* ── PROJECTS SECTION — auto-created when FS is generated ── */}
-              {projects.length > 0 && (
-                <div style={{ marginBottom:8 }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:'#4F46E5',letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 6px',display:'flex',alignItems:'center',gap:6 }}>
-                    <span>📁</span> Projects
-                    <span style={{ background:'rgba(79,70,229,0.12)',color:'#4F46E5',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
-                  </div>
-                  {projects.map(proj => (
-                    <ProjectItem key={proj.id} proj={proj} isActive={activeConvId===proj.id} t={t}
-                      onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false);setSidebarOpen(false) }}
-                      onDelete={handleDelete}/>
-                  ))}
-                  <div style={{ height:1,background:t.border,margin:'8px 4px 4px' }}/>
-                </div>
-              )}
-
-              {/* ── CONVERSATIONS SECTION ── */}
-              {filteredConvs.length===0?(
-                <div style={{ padding:'24px 16px',textAlign:'center' }}><div style={{ fontSize:28,marginBottom:8 }}>💬</div><p style={{ fontSize:12,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
-              ):(() => {
-                let runningIndex = 0
-                return Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
-                  <div key={group}>
-                    <div style={{ fontSize:10,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 4px' }}>{group}</div>
-                    {convs.map(conv=>{
-                      const idx = runningIndex++
-                      return <ConversationItem key={conv.id} conv={conv} index={idx} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false);setSidebarOpen(false) }} onDelete={handleDelete}/>
-                    })}
-                  </div>
-                ))
-              })()}
-            </>
-          )}
-        </div>
-        <div style={{ padding:'10px 14px',borderTop:`1px solid ${t.border}` }}>
-          <div onClick={()=>setShowProfile(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,cursor:'pointer',transition:'background 0.15s' }}
-            onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
-            onMouseLeave={e=>e.currentTarget.style.background='transparent'}
-          >
-            <div style={{ width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>{getInitials(profile?.name,session.user.email)}</div>
-            <div style={{ overflow:'hidden',flex:1 }}><div style={{ fontSize:13,fontWeight:500,color:t.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{profile?.name||'My Profile'}</div><div style={{ fontSize:11,color:t.text4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{session.user.email}</div></div>
-          </div>
-        </div>
-      </div>
-
+      
       {/* Main */}
       <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0,position:'relative' }}>
         <div style={{ position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0,background:bgTheme.bgGrad }}>
@@ -2392,15 +2378,15 @@ export default function Brain({ session }) {
           <div style={{ display:'flex',alignItems:'center',background:t.surface2,borderRadius:10,padding:2,gap:2,flexShrink:0 }}>
             <button onClick={goHome} title="Chat"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
-                background: (!sidebarOpen && view==='chat') ? (dark?'#2A2440':'#fff') : 'transparent',
-                color: (!sidebarOpen && view==='chat') ? t.text : t.text3,
-                boxShadow: (!sidebarOpen && view==='chat') ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
+                background: view==='chat' ? (dark?'#2A2440':'#fff') : 'transparent',
+                color: view==='chat' ? t.text : t.text3,
+                boxShadow: view==='chat' ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
               }}>💬{!isMobile&&' Chat'}</button>
-            <button onClick={()=>setSidebarOpen(true)} title="History"
+            <button onClick={()=>setView('history')} title="History"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
-                background: sidebarOpen ? (dark?'#2A2440':'#fff') : 'transparent',
-                color: sidebarOpen ? t.text : t.text3,
-                boxShadow: sidebarOpen ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
+                background: view==='history' ? (dark?'#2A2440':'#fff') : 'transparent',
+                color: view==='history' ? t.text : t.text3,
+                boxShadow: view==='history' ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
               }}>🕘{!isMobile&&' History'}</button>
           </div>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
@@ -2445,8 +2431,8 @@ export default function Brain({ session }) {
             a dedicated avatar + logout cluster on the right of this same row. */}
         <div style={{ display:'flex', alignItems:'center', gap:6, padding:isMobile?'8px 14px':'8px 12px', borderBottom:`1px solid ${t.border}`, background:t.topbar, flexShrink:0 }}>
           {[
-            { key:'home',    label:'New Chat', Icon:IconHome,    onClick:goHome,                  active: !sidebarOpen && !showProfile && view==='chat' && !activeConvId && !browseModule && !browseTopic },
-            { key:'history', label:'History', Icon:IconHistory, onClick:()=>setSidebarOpen(true), active: sidebarOpen },
+            { key:'home',    label:'New Chat', Icon:IconHome,    onClick:goHome,               active: !showProfile && view==='chat' && !activeConvId && !browseModule && !browseTopic },
+            { key:'history', label:'History', Icon:IconHistory, onClick:()=>setView('history'), active: view==='history' },
           ].map(tab=>(
             <button key={tab.key} onClick={tab.onClick}
               style={{
@@ -2503,6 +2489,7 @@ export default function Brain({ session }) {
         )}
 
         {view==='topic'&&<TopicView module={browseModule} topic={browseTopic} conversations={conversations} t={t} onSelectConv={(convId,mod,topic)=>{ if(convId)goChat(convId); else goTopic(mod,topic) }} onNewChat={(mod,topic)=>goChat(null,mod,topic)} onBack={goHome}/>}
+        {view==='history'&&<HistoryPage conversations={conversations} projects={projects} searchQuery={searchQuery} setSearchQuery={setSearchQuery} filterDropdownOpen={filterDropdownOpen} setFilterDropdownOpen={setFilterDropdownOpen} deliverableFilter={deliverableFilter} setDeliverableFilter={setDeliverableFilter} DELIVERABLE_FILTERS={DELIVERABLE_FILTERS} groups={groups} filteredConvs={filteredConvs} activeConvId={activeConvId} dbLoading={dbLoading} goHome={goHome} goChat={goChat} handleDelete={handleDelete} setActiveConvId={setActiveConvId} setView={setView} setShowSummarise={setShowSummarise} profile={profile} session={session} setShowProfile={setShowProfile} dark={dark} t={t} isMobile={isMobile}/>}
 
         {view==='chat'&&(
           <>
