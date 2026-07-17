@@ -1265,24 +1265,33 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
   )
 }
 
-function ConversationItem({ conv, isActive, onClick, onDelete, t, index=0 }) {
+function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
   const [hovered, setHovered] = useState(false)
-  const baseOpacity = Math.max(1 - index*0.09, 0.55)
   return (
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={onClick}
-      style={{ padding:'10px 14px',borderRadius:10,cursor:'pointer',background:isActive?'rgba(79,70,229,0.12)':hovered?'rgba(79,70,229,0.06)':'transparent',borderLeft:isActive?'3px solid #4F46E5':'3px solid transparent',marginBottom:3,transition:'all 0.15s',position:'relative',opacity:isActive||hovered?1:baseOpacity }}>
-      <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:3 }}>
+      style={{
+        padding:'14px 16px', borderRadius:14, cursor:'pointer', position:'relative',
+        background: isActive ? 'rgba(79,70,229,0.10)' : t.surface,
+        border: `1.5px solid ${isActive ? '#4F46E5' : hovered ? 'rgba(79,70,229,0.35)' : t.border}`,
+        boxShadow: hovered ? '0 6px 20px rgba(0,0,0,0.10)' : '0 1px 3px rgba(0,0,0,0.03)',
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        transition:'all 0.18s ease',
+        display:'flex', flexDirection:'column', minHeight:92,
+      }}>
+      <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
         {conv.module && <ModuleBadge module={conv.module} small/>}
-        {conv.is_summarised && <span style={{ fontSize:9,color:t.text4,background:t.surface2,padding:'1px 5px',borderRadius:10 }}>∑</span>}
+        {conv.is_summarised && <span style={{ fontSize:9,color:t.text4,background:t.surface2,padding:'1px 5px',borderRadius:10 }}>∑ summarised</span>}
       </div>
-      <div style={{ fontSize:13,fontWeight:isActive?600:400,color:isActive?t.text:t.text2,lineHeight:1.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:hovered?24:0 }}>{conv.title}</div>
-      <div style={{ fontSize:12,color:isActive?'#4F46E5':t.text3,marginTop:2,fontWeight:isActive?500:400 }}>
-        {conv.topic} · {new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
+      <div style={{ fontSize:14,fontWeight:isActive?600:500,color:isActive?'#4F46E5':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>{conv.title}</div>
+      <div style={{ fontSize:11.5,color:t.text3,marginTop:10,fontWeight:400,display:'flex',alignItems:'center',gap:5 }}>
+        <span style={{ overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{conv.topic}</span>
+        <span style={{ color:t.text4,flexShrink:0 }}>·</span>
+        <span style={{ flexShrink:0,color:t.text4 }}>{new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>
       </div>
       {hovered && (
-        <button onClick={e=>{e.stopPropagation();onDelete(conv.id)}} style={{ position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:t.text4,fontSize:18,padding:4,lineHeight:1 }}
-          onMouseEnter={e=>e.currentTarget.style.color='#EF4444'}
-          onMouseLeave={e=>e.currentTarget.style.color=t.text4}
+        <button onClick={e=>{e.stopPropagation();onDelete(conv.id)}} style={{ position:'absolute',right:10,top:10,background:t.surface2,border:'none',borderRadius:8,cursor:'pointer',color:t.text4,fontSize:15,width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1 }}
+          onMouseEnter={e=>{e.currentTarget.style.color='#fff';e.currentTarget.style.background='#EF4444'}}
+          onMouseLeave={e=>{e.currentTarget.style.color=t.text4;e.currentTarget.style.background=t.surface2}}
         >×</button>
       )}
     </div>
@@ -1294,26 +1303,29 @@ function ProjectItem({ proj, isActive, onClick, onDelete, t }) {
   return (
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={onClick}
       style={{
-        padding:'9px 12px', borderRadius:10, cursor:'pointer', marginBottom:3, position:'relative',
-        background: isActive ? 'rgba(79,70,229,0.12)' : hovered ? 'rgba(79,70,229,0.08)' : 'rgba(79,70,229,0.04)',
-        border: `1.5px solid ${isActive ? '#4F46E5' : hovered ? 'rgba(79,70,229,0.35)' : 'rgba(79,70,229,0.2)'}`,
-        transition:'all 0.15s',
+        padding:'14px 16px', borderRadius:14, cursor:'pointer', position:'relative',
+        background: isActive ? 'rgba(79,70,229,0.12)' : 'linear-gradient(135deg,rgba(79,70,229,0.06),rgba(124,58,237,0.04))',
+        border: `1.5px solid ${isActive ? '#4F46E5' : hovered ? 'rgba(79,70,229,0.45)' : 'rgba(79,70,229,0.22)'}`,
+        boxShadow: hovered ? '0 6px 20px rgba(79,70,229,0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        transition:'all 0.18s ease',
+        display:'flex', flexDirection:'column', minHeight:92,
       }}
     >
-      <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:2 }}>
+      <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
         {proj.module && <ModuleBadge module={proj.module} small/>}
-        <span style={{ fontSize:9,fontWeight:700,color:'#4F46E5',background:'rgba(79,70,229,0.12)',padding:'1px 6px',borderRadius:8,letterSpacing:0.5 }}>FS</span>
+        <span style={{ fontSize:9,fontWeight:700,color:'#4F46E5',background:'rgba(79,70,229,0.15)',padding:'2px 7px',borderRadius:8,letterSpacing:0.5 }}>📁 FS</span>
       </div>
-      <div style={{ fontSize:13,fontWeight:500,color:isActive?'#4F46E5':t.text,lineHeight:1.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',paddingRight:hovered?24:0 }}>
+      <div style={{ fontSize:14,fontWeight:600,color:isActive?'#4F46E5':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>
         {proj.project_name || proj.fs_title || proj.title}
       </div>
-      <div style={{ fontSize:11,color:t.text4,marginTop:2 }}>
+      <div style={{ fontSize:11.5,color:t.text3,marginTop:10 }}>
         {proj.fs_generated_at ? new Date(proj.fs_generated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : new Date(proj.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
       </div>
       {hovered && (
-        <button onClick={e=>{e.stopPropagation();onDelete(proj.id)}} style={{ position:'absolute',right:8,top:10,background:'none',border:'none',cursor:'pointer',color:t.text4,fontSize:18,padding:4,lineHeight:1 }}
-          onMouseEnter={e=>e.currentTarget.style.color='#EF4444'}
-          onMouseLeave={e=>e.currentTarget.style.color=t.text4}
+        <button onClick={e=>{e.stopPropagation();onDelete(proj.id)}} style={{ position:'absolute',right:10,top:10,background:t.surface2,border:'none',borderRadius:8,cursor:'pointer',color:t.text4,fontSize:15,width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1 }}
+          onMouseEnter={e=>{e.currentTarget.style.color='#fff';e.currentTarget.style.background='#EF4444'}}
+          onMouseLeave={e=>{e.currentTarget.style.color=t.text4;e.currentTarget.style.background=t.surface2}}
         >×</button>
       )}
     </div>
@@ -1334,146 +1346,163 @@ function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
 function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, filterDropdownOpen, setFilterDropdownOpen, deliverableFilter, setDeliverableFilter, DELIVERABLE_FILTERS, groups, filteredConvs, activeConvId, dbLoading, goHome, goChat, handleDelete, setActiveConvId, setView, setShowSummarise, profile, session, setShowProfile, dark, t, isMobile }) {
+  const totalCount = projects.length + filteredConvs.length
+  const gridStyle = { display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: isMobile?10:14 }
   return (
     <div style={{ flex:1, height:'100%', overflow:'hidden', display:'flex', flexDirection:'column', background:t.bg }}>
-      <div style={{ padding: isMobile?'16px 18px 12px':'20px 24px 14px', borderBottom:`1px solid ${t.border}`, maxWidth:720, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
-        <button onClick={()=>goChat(null,null,null)} style={{ width:'100%',padding:'10px 14px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s',marginBottom:12 }}
-          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
-          onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
-        ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}> New Conversation</span></button>
-
-        <div style={{ position:'relative' }}>
-          <span style={{ position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:t.text4,fontSize:13 }}>🔍</span>
-          <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search..."
-            style={{ width:'100%',padding:'8px 10px 8px 32px',boxSizing:'border-box',border:`1.5px solid ${t.border}`,borderRadius:10,fontSize:13,color:t.text,background:t.inputBg,fontFamily:"'Inter','DM Sans',sans-serif",outline:'none',transition:'border-color 0.2s' }}
-            onFocus={e=>e.target.style.borderColor='#4F46E5'}
-            onBlur={e=>e.target.style.borderColor=t.border}
-          />
-        </div>
-        <div style={{ position:'relative', marginTop:8 }} data-filter-dropdown>
-          <div
-            onClick={() => setFilterDropdownOpen(prev => !prev)}
-            style={{
-              display:'flex', alignItems:'center', justifyContent:'space-between',
-              padding:'8px 12px', borderRadius:10, border:`1.5px solid ${t.border}`,
-              background:t.inputBg, cursor:'pointer', transition:'border-color 0.2s',
-              fontFamily:"'Inter','DM Sans',sans-serif",
-            }}
-            onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'}
-            onMouseLeave={e=>e.currentTarget.style.borderColor=filterDropdownOpen?'#4F46E5':t.border}
-          >
-            <span style={{ fontSize:13, color: deliverableFilter==='ALL' ? t.text3 : '#4F46E5', fontWeight: deliverableFilter==='ALL'?400:600 }}>
-              {DELIVERABLE_FILTERS.find(f=>f.key===deliverableFilter)?.label || 'All Conversations'}
-            </span>
-            <span style={{ fontSize:11, color:t.text4, transform: filterDropdownOpen?'rotate(180deg)':'rotate(0deg)', transition:'transform 0.2s' }}>▾</span>
+      <div style={{ padding: isMobile?'18px 18px 14px':'28px 40px 18px', borderBottom:`1px solid ${t.border}`, width:'100%', boxSizing:'border-box' }}>
+        <div style={{ maxWidth:1280, margin:'0 auto', width:'100%' }}>
+          <div style={{ display:'flex', alignItems:isMobile?'flex-start':'center', justifyContent:'space-between', gap:14, flexDirection:isMobile?'column':'row', marginBottom:16 }}>
+            <div>
+              <div style={{ fontSize:isMobile?20:24, fontWeight:700, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif" }}>History</div>
+              <div style={{ fontSize:12.5, color:t.text3, marginTop:2 }}>{totalCount} conversation{totalCount!==1?'s':''}{projects.length>0?` · ${projects.length} project${projects.length!==1?'s':''}`:''}</div>
+            </div>
+            <button onClick={()=>goChat(null,null,null)} style={{ padding:'10px 18px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s',flexShrink:0,whiteSpace:'nowrap' }}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
+            ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}>New Conversation</span></button>
           </div>
 
-          {filterDropdownOpen && (
-            <div style={{
-              position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:100,
-              background:t.surface, border:`1.5px solid ${t.border}`, borderRadius:12,
-              boxShadow:'0 8px 24px rgba(0,0,0,0.12)', overflow:'hidden',
-              fontFamily:"'Inter','DM Sans',sans-serif",
-            }}>
+          <div style={{ display:'flex', gap:10, flexDirection:isMobile?'column':'row' }}>
+            <div style={{ position:'relative', flex:1, minWidth:0 }}>
+              <span style={{ position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:t.text4,fontSize:14 }}>🔍</span>
+              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search conversations..."
+                style={{ width:'100%',padding:'10px 12px 10px 36px',boxSizing:'border-box',border:`1.5px solid ${t.border}`,borderRadius:10,fontSize:13.5,color:t.text,background:t.inputBg,fontFamily:"'Inter','DM Sans',sans-serif",outline:'none',transition:'border-color 0.2s' }}
+                onFocus={e=>e.target.style.borderColor='#4F46E5'}
+                onBlur={e=>e.target.style.borderColor=t.border}
+              />
+            </div>
+            <div style={{ position:'relative', flexShrink:0, width:isMobile?'100%':220 }} data-filter-dropdown>
               <div
-                onClick={() => { setDeliverableFilter('ALL'); setFilterDropdownOpen(false) }}
+                onClick={() => setFilterDropdownOpen(prev => !prev)}
                 style={{
-                  padding:'9px 14px', fontSize:13, cursor:'pointer',
-                  color: deliverableFilter==='ALL' ? '#4F46E5' : t.text,
-                  background: deliverableFilter==='ALL' ? 'rgba(79,70,229,0.07)' : 'transparent',
-                  fontWeight: deliverableFilter==='ALL' ? 600 : 400,
                   display:'flex', alignItems:'center', justifyContent:'space-between',
-                  transition:'background 0.12s',
+                  padding:'10px 12px', borderRadius:10, border:`1.5px solid ${t.border}`,
+                  background:t.inputBg, cursor:'pointer', transition:'border-color 0.2s',
+                  fontFamily:"'Inter','DM Sans',sans-serif", height:'100%', boxSizing:'border-box',
                 }}
-                onMouseEnter={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
-                onMouseLeave={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='transparent' }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=filterDropdownOpen?'#4F46E5':t.border}
               >
-                All Conversations
-                {deliverableFilter==='ALL' && <span style={{ fontSize:12 }}>✓</span>}
+                <span style={{ fontSize:13, color: deliverableFilter==='ALL' ? t.text3 : '#4F46E5', fontWeight: deliverableFilter==='ALL'?400:600, whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
+                  {DELIVERABLE_FILTERS.find(f=>f.key===deliverableFilter)?.label || 'All Conversations'}
+                </span>
+                <span style={{ fontSize:11, color:t.text4, transform: filterDropdownOpen?'rotate(180deg)':'rotate(0deg)', transition:'transform 0.2s', flexShrink:0, marginLeft:6 }}>▾</span>
               </div>
-              {['Knowledge','Deliverables','Planning'].map(group => {
-                const groupItems = DELIVERABLE_FILTERS.filter(f => f.group === group)
-                return (
-                  <div key={group}>
-                    <div style={{
-                      padding:'6px 14px 4px', fontSize:10, fontWeight:700,
-                      color:t.text4, letterSpacing:0.8, textTransform:'uppercase',
-                      borderTop:`1px solid ${t.border}`, marginTop:2,
-                    }}>
-                      {group}
-                    </div>
-                    {groupItems.map(f => (
-                      <div
-                        key={f.key}
-                        onClick={() => { setDeliverableFilter(f.key); setFilterDropdownOpen(false) }}
-                        style={{
-                          padding:'8px 14px 8px 20px', fontSize:13, cursor:'pointer',
-                          color: deliverableFilter===f.key ? '#4F46E5' : t.text2,
-                          background: deliverableFilter===f.key ? 'rgba(79,70,229,0.07)' : 'transparent',
-                          fontWeight: deliverableFilter===f.key ? 600 : 400,
-                          display:'flex', alignItems:'center', justifyContent:'space-between',
-                          transition:'background 0.12s',
-                        }}
-                        onMouseEnter={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
-                        onMouseLeave={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='transparent' }}
-                      >
-                        {f.label}
-                        {deliverableFilter===f.key && <span style={{ fontSize:12 }}>✓</span>}
+
+              {filterDropdownOpen && (
+                <div style={{
+                  position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:100,
+                  background:t.surface, border:`1.5px solid ${t.border}`, borderRadius:12,
+                  boxShadow:'0 8px 24px rgba(0,0,0,0.15)', overflow:'hidden',
+                  fontFamily:"'Inter','DM Sans',sans-serif",
+                }}>
+                  <div
+                    onClick={() => { setDeliverableFilter('ALL'); setFilterDropdownOpen(false) }}
+                    style={{
+                      padding:'9px 14px', fontSize:13, cursor:'pointer',
+                      color: deliverableFilter==='ALL' ? '#4F46E5' : t.text,
+                      background: deliverableFilter==='ALL' ? 'rgba(79,70,229,0.07)' : 'transparent',
+                      fontWeight: deliverableFilter==='ALL' ? 600 : 400,
+                      display:'flex', alignItems:'center', justifyContent:'space-between',
+                      transition:'background 0.12s',
+                    }}
+                    onMouseEnter={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                    onMouseLeave={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='transparent' }}
+                  >
+                    All Conversations
+                    {deliverableFilter==='ALL' && <span style={{ fontSize:12 }}>✓</span>}
+                  </div>
+                  {['Knowledge','Deliverables','Planning'].map(group => {
+                    const groupItems = DELIVERABLE_FILTERS.filter(f => f.group === group)
+                    return (
+                      <div key={group}>
+                        <div style={{
+                          padding:'6px 14px 4px', fontSize:10, fontWeight:700,
+                          color:t.text4, letterSpacing:0.8, textTransform:'uppercase',
+                          borderTop:`1px solid ${t.border}`, marginTop:2,
+                        }}>
+                          {group}
+                        </div>
+                        {groupItems.map(f => (
+                          <div
+                            key={f.key}
+                            onClick={() => { setDeliverableFilter(f.key); setFilterDropdownOpen(false) }}
+                            style={{
+                              padding:'8px 14px 8px 20px', fontSize:13, cursor:'pointer',
+                              color: deliverableFilter===f.key ? '#4F46E5' : t.text2,
+                              background: deliverableFilter===f.key ? 'rgba(79,70,229,0.07)' : 'transparent',
+                              fontWeight: deliverableFilter===f.key ? 600 : 400,
+                              display:'flex', alignItems:'center', justifyContent:'space-between',
+                              transition:'background 0.12s',
+                            }}
+                            onMouseEnter={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                            onMouseLeave={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='transparent' }}
+                          >
+                            {f.label}
+                            {deliverableFilter===f.key && <span style={{ fontSize:12 }}>✓</span>}
+                          </div>
+                        ))}
                       </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flex:1,overflowY:'auto',padding: isMobile?'16px 18px 20px':'24px 40px 32px', width:'100%', boxSizing:'border-box' }}>
+        <div style={{ maxWidth:1280, margin:'0 auto', width:'100%' }}>
+          {dbLoading?(
+            <div style={{ padding:60,textAlign:'center' }}><div style={{ width:22,height:22,border:`2px solid ${t.border}`,borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',margin:'0 auto 10px' }}/><span style={{ fontSize:13,color:t.text4 }}>Loading...</span></div>
+          ):(
+            <>
+              {projects.length > 0 && (
+                <div style={{ marginBottom:28 }}>
+                  <div style={{ fontSize:11,fontWeight:700,color:'#4F46E5',letterSpacing:0.8,textTransform:'uppercase',padding:'0 0 10px',display:'flex',alignItems:'center',gap:6 }}>
+                    <span>📁</span> Projects
+                    <span style={{ background:'rgba(79,70,229,0.12)',color:'#4F46E5',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
+                  </div>
+                  <div style={gridStyle}>
+                    {projects.map(proj => (
+                      <ProjectItem key={proj.id} proj={proj} isActive={activeConvId===proj.id} t={t}
+                        onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false) }}
+                        onDelete={handleDelete}/>
                     ))}
                   </div>
-                )
-              })}
-            </div>
+                </div>
+              )}
+
+              {filteredConvs.length===0?(
+                <div style={{ padding:'60px 16px',textAlign:'center' }}><div style={{ fontSize:32,marginBottom:10 }}>💬</div><p style={{ fontSize:13,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
+              ):(
+                Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
+                  <div key={group} style={{ marginBottom:24 }}>
+                    <div style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'0 0 10px' }}>{group}</div>
+                    <div style={gridStyle}>
+                      {convs.map(conv=>(
+                        <ConversationItem key={conv.id} conv={conv} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false) }} onDelete={handleDelete}/>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
           )}
         </div>
       </div>
 
-      <div style={{ flex:1,overflowY:'auto',padding: isMobile?'10px 18px 20px':'14px 24px 24px', maxWidth:720, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
-        {dbLoading?(
-          <div style={{ padding:20,textAlign:'center' }}><div style={{ width:20,height:20,border:`2px solid ${t.border}`,borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',margin:'0 auto 8px' }}/><span style={{ fontSize:12,color:t.text4 }}>Loading...</span></div>
-        ):(
-          <>
-            {projects.length > 0 && (
-              <div style={{ marginBottom:8 }}>
-                <div style={{ fontSize:10,fontWeight:700,color:'#4F46E5',letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 6px',display:'flex',alignItems:'center',gap:6 }}>
-                  <span>📁</span> Projects
-                  <span style={{ background:'rgba(79,70,229,0.12)',color:'#4F46E5',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
-                </div>
-                {projects.map(proj => (
-                  <ProjectItem key={proj.id} proj={proj} isActive={activeConvId===proj.id} t={t}
-                    onClick={()=>{ setActiveConvId(proj.id);setView('chat');setShowSummarise(false) }}
-                    onDelete={handleDelete}/>
-                ))}
-                <div style={{ height:1,background:t.border,margin:'8px 4px 4px' }}/>
-              </div>
-            )}
-
-            {filteredConvs.length===0?(
-              <div style={{ padding:'24px 16px',textAlign:'center' }}><div style={{ fontSize:28,marginBottom:8 }}>💬</div><p style={{ fontSize:12,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
-            ):(() => {
-              let runningIndex = 0
-              return Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
-                <div key={group}>
-                  <div style={{ fontSize:10,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'10px 6px 4px' }}>{group}</div>
-                  {convs.map(conv=>{
-                    const idx = runningIndex++
-                    return <ConversationItem key={conv.id} conv={conv} index={idx} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false) }} onDelete={handleDelete}/>
-                  })}
-                </div>
-              ))
-            })()}
-          </>
-        )}
-      </div>
-
-      <div style={{ padding:'10px 14px',borderTop:`1px solid ${t.border}`, maxWidth:720, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
-        <div onClick={()=>setShowProfile(true)} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,cursor:'pointer',transition:'background 0.15s' }}
-          onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
-          onMouseLeave={e=>e.currentTarget.style.background='transparent'}
-        >
-          <div style={{ width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>{getInitials(profile?.name,session.user.email)}</div>
-          <div style={{ overflow:'hidden',flex:1 }}><div style={{ fontSize:13,fontWeight:500,color:t.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{profile?.name||'My Profile'}</div><div style={{ fontSize:11,color:t.text4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{session.user.email}</div></div>
+      <div style={{ padding: isMobile?'10px 18px':'12px 40px',borderTop:`1px solid ${t.border}`, width:'100%', boxSizing:'border-box' }}>
+        <div style={{ maxWidth:1280, margin:'0 auto', width:'100%' }}>
+          <div onClick={()=>setShowProfile(true)} style={{ display:'inline-flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,cursor:'pointer',transition:'background 0.15s' }}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
+            onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+          >
+            <div style={{ width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>{getInitials(profile?.name,session.user.email)}</div>
+            <div style={{ overflow:'hidden' }}><div style={{ fontSize:13,fontWeight:500,color:t.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{profile?.name||'My Profile'}</div><div style={{ fontSize:11,color:t.text4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{session.user.email}</div></div>
+          </div>
         </div>
       </div>
     </div>
