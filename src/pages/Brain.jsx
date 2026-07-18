@@ -1557,22 +1557,22 @@ export default function Brain({ session }) {
   const [conversations, setConversations] = useState([])
   const [projects, setProjects]           = useState([])
   const [activeConvId, setActiveConvId]   = useState(null)
+  useEffect(()=>{ activeConvIdRef.current = activeConvId },[activeConvId])
   const [input, setInput]                 = useState('')
   const [attachedCode, setAttachedCode]   = useState(null) // { content, lines, language }
   const [expandedCode, setExpandedCode]   = useState(false)
   const [quickLaunchMessages, setQuickLaunchMessages] = useState([])
   const [isLoading, setIsLoading]         = useState(false)
   const [isStreaming, setIsStreaming]      = useState(false)
+  const [busyConvIds, setBusyConvIds]     = useState({})
+  const abortControllersRef               = useRef({})
+  const activeConvIdRef                   = useRef(null)
   const [streamingText, setStreamingText] = useState('')
   const [streamingIntent, setStreamingIntent] = useState('SAP_QA')
   const [dualStreaming, setDualStreaming] = useState(false)
   const [dualText, setDualText] = useState('')
   const [dualLabel, setDualLabel] = useState('')
   const [primaryLabel, setPrimaryLabel] = useState('')
-  const dualTextRef = useRef('')
-  const sourceInfoRef = useRef(null)
-  const debugDocRef   = useRef(null)
-  const dualLabelRef = useRef('')
   const [messageCount, setMessageCount]   = useState(0)
   const [isUnlimited, setIsUnlimited]     = useState(false)
   const DAILY_LIMIT = 50
@@ -1987,12 +1987,26 @@ export default function Brain({ session }) {
     }
   }
 
+  const markBusy = (id, val) => setBusyConvIds(prev => {
+    const next = { ...prev }
+    if (val) next[id] = true; else delete next[id]
+    return next
+  })
+  const isMine = (id) => activeConvIdRef.current === id
+
+  const handleStop = () => {
+    const id = activeConvId
+    if (id && abortControllersRef.current[id]) {
+      abortControllersRef.current[id].abort()
+    }
+  }
+
   const handleSend = async (overrideText) => {
     // Guard: overrideText must be a plain string — never a DOM event or object
     const safeOverride = (typeof overrideText === 'string') ? overrideText : null
     const baseText = (safeOverride || input).trim()
-    if (!baseText && !attachedCode) return
-    if (isLoading || isStreaming) return
+    if (baseText === '' && !attachedCode) return
+    if (activeConvId && busyConvIds[activeConvId]) return
 
     // Build the actual content sent to the API
     const msgText = attachedCode
@@ -2014,8 +2028,11 @@ export default function Brain({ session }) {
     setDualText('')
     setDualLabel('')
     setPrimaryLabel('')
-    dualTextRef.current = ''
-    dualLabelRef.current = ''
+    let localDualText = ''
+    let localDualLabel = ''
+    let localPrimaryLabel = ''
+    let localSourceInfo = null
+    let localDebugDoc = null
 
     let convId = activeConvId
     let currentMod = activeConv?.module||browseModule
@@ -2033,6 +2050,11 @@ export default function Brain({ session }) {
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:currentMsgs}:c))
     }
 
+    markBusy(convId, true)
+    const abortController = new AbortController()
+    abortControllersRef.current[convId] = abortController
+    let accumulated = ''
+
     try {
       const docChunks = uploadedDoc ? await getDocChunks(msgText) : []
       const token = session?.access_token
@@ -2043,17 +2065,16 @@ export default function Brain({ session }) {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
+        signal: abortController.signal,
       })
 
       if (!res.ok) throw new Error('Network error')
 
-      setIsLoading(false)
-      setIsStreaming(true)
+      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true) }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buf = '', fullReply = '', modelUsed = '', deliverableType = 'NONE'
-      let accumulated = ''
       let searchResults = []
       let furtherReadingLinks = []
 
@@ -2070,7 +2091,7 @@ export default function Brain({ session }) {
             const evt = JSON.parse(raw)
             if (evt.type === 'chunk') {
               accumulated += evt.text
-              setStreamingText(accumulated)
+              if (isMine(convId)) setStreamingText(accumulated)
             } else if (evt.type === 'save_to_memory_confirm') {
               // User said "save this" — show popup with summary for confirmation
               // Delete the trigger message from chat (last user message)
@@ -2080,26 +2101,29 @@ export default function Brain({ session }) {
                 ? { ...c, messages: msgsWithoutTrigger, updated_at: new Date().toISOString() }
                 : c
               ))
-              setPendingMemorySave({ summary: evt.summary })
-              setIsLoading(false)
-              setIsStreaming(false)
-              setStreamingText('')
+              markBusy(convId, false)
+              delete abortControllersRef.current[convId]
+              if (isMine(convId)) {
+                setPendingMemorySave({ summary: evt.summary })
+                setIsLoading(false)
+                setIsStreaming(false)
+                setStreamingText('')
+              }
               return
             } else if (evt.type === 'model_label') {
-              setPrimaryLabel(evt.label || '')
+              localPrimaryLabel = evt.label || ''
+              if (isMine(convId)) setPrimaryLabel(localPrimaryLabel)
             } else if (evt.type === 'dual_start') {
-              setDualLabel(evt.label || '')
-              dualLabelRef.current = evt.label || ''
-              setDualStreaming(true)
-              setDualText('')
-              dualTextRef.current = ''
+              localDualLabel = evt.label || ''
+              localDualText = ''
+              if (isMine(convId)) { setDualLabel(localDualLabel); setDualStreaming(true); setDualText('') }
             } else if (evt.type === 'dual_chunk') {
-              dualTextRef.current += evt.text
-              setDualText(prev => prev + evt.text)
+              localDualText += evt.text
+              if (isMine(convId)) setDualText(prev => prev + evt.text)
             } else if (evt.type === 'dual_done') {
-              setDualStreaming(false)
+              if (isMine(convId)) setDualStreaming(false)
             } else if (evt.type === 'start') {
-              setStreamingIntent(evt.intent || 'SAP_QA')
+              if (isMine(convId)) setStreamingIntent(evt.intent || 'SAP_QA')
             } else if (evt.type === 'search_results') {
               searchResults = evt.results || []
             } else if (evt.type === 'further_reading') {
@@ -2124,8 +2148,8 @@ export default function Brain({ session }) {
               deliverableType = evt.deliverableType || 'NONE'
               if (typeof evt.messageCount === 'number') setMessageCount(evt.messageCount)
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
-              if (evt.sourceInfo) sourceInfoRef.current = evt.sourceInfo
-              if (evt.debugDoc)    debugDocRef.current   = evt.debugDoc
+              if (evt.sourceInfo) localSourceInfo = evt.sourceInfo
+              if (evt.debugDoc)    localDebugDoc   = evt.debugDoc
               if (evt.isCorrection) {
                 setPendingCorrection({
                   userMsg: currentMsgs[currentMsgs.length - 1]?.content || '',
@@ -2206,9 +2230,7 @@ export default function Brain({ session }) {
 
       const finalReply = fullReply || accumulated
 
-      setIsStreaming(false)
-      setStreamingText('')
-      setStreamingIntent('SAP_QA')
+      if (isMine(convId)) { setIsStreaming(false); setStreamingText(''); setStreamingIntent('SAP_QA') }
 
       // No separate links section — sources are now cited inline in the answer
       const replyContent = finalReply
@@ -2218,29 +2240,26 @@ export default function Brain({ session }) {
         role: 'assistant',
         content: replyContent,
         _model: modelUsed,
-        ...(primaryLabel ? { _primaryLabel: primaryLabel } : {}),
-        ...(dualTextRef.current ? { _dualText: dualTextRef.current, _dualLabel: dualLabelRef.current } : {}),
+        ...(localPrimaryLabel ? { _primaryLabel: localPrimaryLabel } : {}),
+        ...(localDualText ? { _dualText: localDualText, _dualLabel: localDualLabel } : {}),
         ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
         ...(deliverableType === 'FS_SPEC' && window.__lastFsText
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
         ...(deliverableType === 'WORKSHOP_PPT' && window.__lastPptText
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
-        ...(sourceInfoRef.current ? { _sourceInfo: sourceInfoRef.current } : {}),
-        ...(debugDocRef.current ? { _debugDoc: debugDocRef.current } : {}),
+        ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
+        ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
       }
-      sourceInfoRef.current = null
-      debugDocRef.current   = null
 
       const finalMsgs = [...currentMsgs, assistantMsg]
       const convUpdate = { messages: finalMsgs }
       if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
       await updateConversation(convId, convUpdate)
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,updated_at:new Date().toISOString()}:c))
+      markBusy(convId, false)
+      delete abortControllersRef.current[convId]
       // Clear live dual bubble now that saved message has _dualText — prevents duplicate
-      dualTextRef.current = ''
-      dualLabelRef.current = ''
-      setDualText('')
-      setDualLabel('')
+      if (isMine(convId)) { setDualText(''); setDualLabel('') }
 
       if (currentMsgs.length===1) {
         fetch('/api/categorise',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:msgText, answer:(finalReply||'').slice(0,800) }) })
@@ -2253,7 +2272,22 @@ export default function Brain({ session }) {
       checkForFindings(finalMsgs).catch(() => {})
 
     } catch(err) {
-      setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('')
+      markBusy(convId, false)
+      delete abortControllersRef.current[convId]
+
+      if (err.name === 'AbortError') {
+        // User clicked Stop — save whatever was streamed so far as the message, marked as stopped
+        if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false) }
+        const partialText = (accumulated || '').trim()
+        const stoppedMsgs = partialText
+          ? [...currentMsgs,{ role:'assistant',content:partialText,_stopped:true }]
+          : currentMsgs
+        if (partialText) await updateConversation(convId,{ messages:stoppedMsgs }).catch(()=>{})
+        setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:stoppedMsgs}:c))
+        return
+      }
+
+      if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('') }
       // Note: dualText and dualLabel intentionally NOT cleared here
       // They persist until next dual_start event so Claude answer stays visible
       const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
@@ -2728,9 +2762,15 @@ export default function Brain({ session }) {
                   <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:10,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
                     <IconMic size={17}/>
                   </button>
-                  <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||isLoading||isStreaming}
-                    style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#4F46E5':t.border,color:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'#fff':t.text4,cursor:(input.trim()||attachedCode)&&!isLoading&&!isStreaming?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
-                  >→</button>
+                  {activeConvId && busyConvIds[activeConvId] ? (
+                    <button onClick={handleStop} title="Stop generating"
+                      style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:'#4F46E5',color:'#fff',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+                    ><span style={{ width:11,height:11,background:'#fff',borderRadius:2,display:'block' }}/></button>
+                  ) : (
+                    <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||(activeConvId&&busyConvIds[activeConvId])}
+                      style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)?'#4F46E5':t.border,color:(input.trim()||attachedCode)?'#fff':t.text4,cursor:(input.trim()||attachedCode)?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+                    >→</button>
+                  )}
                 </div>
                 <div style={{ fontSize:11,color:t.text4,textAlign:'right',marginTop:4 }}>{activeConv?.module||browseModule||'Free mode'} · verify system-specific behaviour</div>
               </div>
