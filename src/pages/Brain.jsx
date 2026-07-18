@@ -2772,7 +2772,7 @@ export default function Brain({ session }) {
                     >→</button>
                   )}
                 </div>
-                <div style={{ fontSize:11,color:t.text4,textAlign:'right',marginTop:4 }}>{activeConv?.module||browseModule||'Free mode'} · verify system-specific behaviour</div>
+                <div style={{ fontSize:11,color:t.text4,textAlign:'right',marginTop:4 }}>{(activeConv?.module||browseModule) ? `${activeConv?.module||browseModule} · ` : ''}Wani can make mistakes. Please verify important information.</div>
               </div>
             </div>
 
