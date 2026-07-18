@@ -18,6 +18,11 @@ const IconMic = ({ size=16, color='currentColor' }) => (
     <line x1="8" y1="22" x2="16" y2="22"/>
   </svg>
 )
+const IconChat = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+  </svg>
+)
 const IconHistory = ({ size=16, color='currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 12a9 9 0 1 0 3-6.7"/>
@@ -1350,17 +1355,17 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
   const gridStyle = { display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: isMobile?10:14 }
   return (
     <div style={{ flex:1, height:'100%', overflow:'hidden', display:'flex', flexDirection:'column', background:t.bg }}>
-      <div style={{ padding: isMobile?'18px 18px 14px':'28px 40px 18px', borderBottom:`1px solid ${t.border}`, width:'100%', boxSizing:'border-box' }}>
+      <div style={{ padding: isMobile?'14px 18px 10px':'28px 40px 18px', borderBottom:`1px solid ${t.border}`, width:'100%', boxSizing:'border-box' }}>
         <div style={{ maxWidth:1280, margin:'0 auto', width:'100%' }}>
-          <div style={{ display:'flex', alignItems:isMobile?'flex-start':'center', justifyContent:'space-between', gap:14, flexDirection:isMobile?'column':'row', marginBottom:16 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:14, marginBottom:isMobile?10:16 }}>
             <div>
-              <div style={{ fontSize:isMobile?20:24, fontWeight:700, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif" }}>History</div>
-              <div style={{ fontSize:12.5, color:t.text3, marginTop:2 }}>{totalCount} conversation{totalCount!==1?'s':''}{projects.length>0?` · ${projects.length} project${projects.length!==1?'s':''}`:''}</div>
+              <div style={{ fontSize:isMobile?17:24, fontWeight:700, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif" }}>History</div>
+              <div style={{ fontSize:12, color:t.text3, marginTop:1 }}>{totalCount} conversation{totalCount!==1?'s':''}{projects.length>0?` · ${projects.length} project${projects.length!==1?'s':''}`:''}</div>
             </div>
-            <button onClick={()=>goChat(null,null,null)} style={{ padding:'10px 18px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s',flexShrink:0,whiteSpace:'nowrap' }}
+            {!isMobile&&(<button onClick={()=>goChat(null,null,null)} style={{ padding:'10px 18px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s',flexShrink:0,whiteSpace:'nowrap' }}
               onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
               onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
-            ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}>New Conversation</span></button>
+            ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}>New Conversation</span></button>)}
           </div>
 
           <div style={{ display:'flex', gap:10, flexDirection:isMobile?'column':'row' }}>
@@ -2410,13 +2415,13 @@ export default function Brain({ session }) {
                 background: view==='chat' ? (dark?'#2A2440':'#fff') : 'transparent',
                 color: view==='chat' ? t.text : t.text3,
                 boxShadow: view==='chat' ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
-              }}>💬{!isMobile&&' Chat'}</button>
+              }}><IconChat size={15}/>{!isMobile&&' Chat'}</button>
             <button onClick={()=>setView('history')} title="History"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
                 background: view==='history' ? (dark?'#2A2440':'#fff') : 'transparent',
                 color: view==='history' ? t.text : t.text3,
                 boxShadow: view==='history' ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
-              }}>🕘{!isMobile&&' History'}</button>
+              }}><IconHistory size={15}/>{!isMobile&&' History'}</button>
           </div>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
 
@@ -2540,6 +2545,30 @@ export default function Brain({ session }) {
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
                         {STARTERS[browseTopic].map((s,i)=>(<div key={i} onClick={()=>setInput(s)} style={{ padding:'7px 14px',background:t.surface,border:`1.5px solid ${t.border}`,borderRadius:20,fontSize:12,color:t.text3,cursor:'pointer',transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3;e.currentTarget.style.background=t.surface}}>{s}</div>))}
+                      </div>
+                    )}
+                    {!browseTopic && !input.trim() && conversations.length>0 && (
+                      <div style={{ width:'100%',maxWidth:440,marginTop:8,textAlign:'left',animation:'fadeIn 0.4s ease' }}>
+                        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10 }}>
+                          <span style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:1,textTransform:'uppercase' }}>Recently Updated</span>
+                          <span onClick={()=>setView('history')} style={{ fontSize:12,color:'#4F46E5',cursor:'pointer',fontWeight:600 }}>View all</span>
+                        </div>
+                        <div style={{ background:t.surface,border:`1px solid ${t.border}`,borderRadius:14,overflow:'hidden' }}>
+                          {[...conversations].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,4).map((conv,i)=>{
+                            const mins = Math.floor((Date.now()-new Date(conv.updated_at))/60000)
+                            const rel = mins<1?'Just now':mins<60?`${mins} min ago`:mins<1440?`${Math.floor(mins/60)} hr ago`:mins<2880?'Yesterday':`${Math.floor(mins/1440)} days ago`
+                            return (
+                              <div key={conv.id} onClick={()=>goChat(conv.id)} style={{ display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer',borderTop:i>0?`1px solid ${t.border}`:'none',transition:'background 0.15s' }}
+                                onMouseEnter={e=>e.currentTarget.style.background=t.surface2}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                              >
+                                <span style={{ width:22,height:22,borderRadius:'50%',background:'rgba(16,185,129,0.15)',color:'#10B981',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0 }}>✓</span>
+                                <span style={{ flex:1,fontSize:13,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>"{conv.title}"</span>
+                                <span style={{ fontSize:11.5,color:t.text4,flexShrink:0 }}>{rel}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
