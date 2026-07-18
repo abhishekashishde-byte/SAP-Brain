@@ -1399,7 +1399,8 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
                 <div style={{
                   position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:100,
                   background:t.surface, border:`1.5px solid ${t.border}`, borderRadius:12,
-                  boxShadow:'0 8px 24px rgba(0,0,0,0.15)', overflow:'hidden',
+                  boxShadow:'0 8px 24px rgba(0,0,0,0.15)', overflowY:'auto', overflowX:'hidden',
+                  maxHeight:'min(60vh, 420px)', WebkitOverflowScrolling:'touch',
                   fontFamily:"'Inter','DM Sans',sans-serif",
                 }}>
                   <div
