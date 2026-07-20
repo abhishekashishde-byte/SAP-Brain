@@ -1478,8 +1478,10 @@ export default async function handler(req, res) {
     }
 
     // ── Inject search results ──────────────────────────────────────────────
-    if (openAISearchText) {
-      systemPrompt += `\n\nWEB SEARCH RESULTS (from OpenAI search):\n${openAISearchText.slice(0, 2000)}`
+    if (openAISearchText && openAISources.length > 0) {
+      systemPrompt += `\n\nWEB SEARCH RESULTS (from OpenAI search, ${openAISources.length} source${openAISources.length!==1?'s':''} found):\n${openAISearchText.slice(0, 2000)}`
+    } else if (openAISearchText) {
+      systemPrompt += `\n\n⚠️ WEB SEARCH ATTEMPTED — NO SOURCES FOUND: The search tool returned prose below with zero real source citations backing it. This text is NOT verified against any actual page — treat it the same as your own unverified memory, not as retrieved evidence. Do not state any specific table field, T-code, BAdI, or other technical identifier from this text as fact; if you use it at all, name it as something to verify, not something confirmed.\n${openAISearchText.slice(0, 1500)}`
     }
 
     if (tavilyFiltered.length > 0) {
@@ -1492,6 +1494,10 @@ export default async function handler(req, res) {
     if (allSearchResults.length > 0) {
       const sourceRef = allSearchResults.map((r, i) => `[${i+1}] ${r.title} — ${r.url}`).join('\n')
       systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nCITATION RULES: Weave citations INLINE using [1] [2] notation. Do NOT add a Sources section at the end.`
+    }
+
+    if (bookChunks.length===0 && relevantKnowledge.length===0 && openAISources.length===0 && tavilyFiltered.length===0) {
+      systemPrompt += `\n\n⚠️ ZERO GROUNDING THIS TURN: no book chunks, no saved knowledge, no search sources — nothing was actually retrieved for this question. You are answering purely from your own training. If the answer requires stating a specific table field, TDOBJECT/TDID value, T-code, BAdI, or other named technical object, you must flag it as unverified ("verify in your system") rather than stating it with confidence — this is the exact situation the grounding rule above exists for.`
     }
 
     // ── Document context ───────────────────────────────────────────────────
