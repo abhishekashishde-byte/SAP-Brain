@@ -106,7 +106,7 @@ Question: "${question.slice(0, 500)}"
     // General explicit lookup/search intent — independent of topic (blogs, release notes, latest updates, etc.)
     // Without this, a request like "find me a blog about X" or "latest PP notes" could fall through
     // intent classification as GENERAL and never trigger search at all (needsSearch=false).
-    const isExplicitSearchRequest = /\b(search for|find (me|a|any)|look up|look for|any (blog|note|article|post)|latest|recent|show me (a|any))\b/i.test(question)
+    const isExplicitSearchRequest = /\b(search|find (me|a|any)|look up|look for|any (blog|note|article|post)|latest|recent|show me (a|any))\b/i.test(question)
     const isErrorSearch  = /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW)\b/i.test(question)
     const isNewFeature   = /\b(2024|2025|2026|S\/4HANA 2|latest|new in|what changed|release note)\b/i.test(question)
     const isTroubleshoot = /\b(not working|doesn't work|missing|error|wrong|incorrect|failed|why is|why does|not found|not appearing|problem|issue)\b/i.test(question)
@@ -1553,7 +1553,7 @@ export default async function handler(req, res) {
 
     if (allSearchResults.length > 0) {
       const sourceRef = allSearchResults.map((r, i) => `[${i+1}] ${r.title} — ${r.url}`).join('\n')
-      systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nCITATION RULES: Weave citations INLINE using [1] [2] notation. Do NOT add a Sources section at the end.`
+      systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nCITATION RULES: Weave citations INLINE using [1] [2] notation. Do NOT add a Sources section at the end. This rule applies identically when you use your own web_search tool mid-answer — those results also get cited inline as [1] [2], never as a manually-typed list of raw URLs at the end of your answer. The UI renders a proper sources panel automatically from whatever you cite inline; a hand-typed link dump duplicates it and looks broken.`
     }
 
     if (bookChunks.length===0 && relevantKnowledge.length===0 && openAISources.length===0 && tavilyFiltered.length===0) {
@@ -1686,6 +1686,11 @@ export default async function handler(req, res) {
         ).join('\n\n')
         enrichedSystemPrompt += `\n\n🔍 WEB SEARCH RESULTS — cite relevant ones with URL inline:\n${tavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
       }
+
+      // Unconditional — reaches Sonnet even when Tavily/OpenAI found nothing and only
+      // Sonnet's own native search succeeds, which is exactly the case that produced a
+      // raw hand-typed URL dump at the end of an answer before this was added.
+      enrichedSystemPrompt += `\n\nIf you use your own web_search tool during this answer, cite what you find inline as [1] [2] etc., the same as any other source — never as a manually-typed list of raw URLs at the end of your answer. The UI builds a sources panel automatically from inline citations; a hand-typed link list duplicates and breaks that.`
 
       send({ type: 'model_label', label: '' })
 
