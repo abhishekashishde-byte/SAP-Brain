@@ -373,11 +373,19 @@ async function tavilySearch(searchQuery, intent) {
         max_results: 7,
         include_answer: false,
         include_raw_content: false,
-        // Deliberately unrestricted — the user isn't asking for a specific site,
-        // they want the best answer wherever it lives (SAP Community, LinkedIn,
-        // consulting blogs, etc). Previously used a non-existent 'prefer_domains'
-        // param that Tavily's API silently ignored, so this was already
-        // effectively unrestricted — now it's unrestricted on purpose.
+        // Restricted again, deliberately: unrestricted search kept surfacing tangentially-
+        // related results (e.g. a LinkedIn post about Power BI modeling) ranked ABOVE the
+        // actually relevant SAP sources, which is worse than not finding them at all —
+        // a bad #1 result poisons the whole list since people read top to bottom.
+        // Using the real Tavily param this time (include_domains), not the broken
+        // 'prefer_domains' from before.
+        include_domains: [
+          'community.sap.com',
+          'blogs.sap.com',
+          'help.sap.com',
+          'me.sap.com',
+          'fioriappslibrary.hana.ondemand.com',
+        ],
         max_tokens_per_result: 1000,
       })
     })
