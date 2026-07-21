@@ -357,7 +357,7 @@ Conversation context: ${recentContext || 'No previous context'}`
   } catch { return question }
 }
 
-// ── 5. TAVILY SEARCH — SAP-targeted ──────────────────────────────────────────
+// ── 5. TAVILY SEARCH — general web, unrestricted ────────────────────────────
 async function tavilySearch(searchQuery, intent) {
   try {
     const key = process.env.TAVILY_API_KEY
@@ -373,14 +373,11 @@ async function tavilySearch(searchQuery, intent) {
         max_results: 7,
         include_answer: false,
         include_raw_content: false,
-        prefer_domains: [
-          'community.sap.com',
-          'blogs.sap.com',
-          'help.sap.com',
-          'me.sap.com',
-          'ganeshsapscm.com',
-          'saplearninghub.plateau.com'
-        ],
+        // Deliberately unrestricted — the user isn't asking for a specific site,
+        // they want the best answer wherever it lives (SAP Community, LinkedIn,
+        // consulting blogs, etc). Previously used a non-existent 'prefer_domains'
+        // param that Tavily's API silently ignored, so this was already
+        // effectively unrestricted — now it's unrestricted on purpose.
         max_tokens_per_result: 1000,
       })
     })
@@ -401,13 +398,56 @@ async function tavilySearch(searchQuery, intent) {
              : r.url?.includes('blogs.sap.com')     ? 'SAP Blog'
              : r.url?.includes('help.sap.com')       ? 'SAP Help'
              : r.url?.includes('me.sap.com')         ? 'SAP Support'
-             : 'SAP',
+             : r.url?.includes('linkedin.com')       ? 'LinkedIn'
+             : 'Web',
     }))
 
     console.log('[TAVILY] Results:', results.length)
     return results
   } catch (e) {
     console.error('[TAVILY] Exception:', e.message)
+    return []
+  }
+}
+
+// ── 5b. TAVILY SEARCH — SAP Community only (real include_domains restriction) ──
+// Runs in parallel with the general search above. Scoped to community.sap.com
+// specifically — not SAP Notes, which sit behind the Support Portal login and
+// are often only partially retrievable by a search crawler. Community threads
+// are fully public and are where practitioner-verified answers to specific
+// "I hit this exact problem" questions actually live.
+async function tavilySearchNotes(searchQuery) {
+  try {
+    const key = process.env.TAVILY_API_KEY
+    if (!key) return []
+
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: key,
+        query: searchQuery,
+        search_depth: 'basic',
+        max_results: 3,
+        include_answer: false,
+        include_raw_content: false,
+        include_domains: ['community.sap.com'], // the real Tavily param for a hard restriction
+        max_tokens_per_result: 800,
+      })
+    })
+
+    if (!res.ok) return []
+
+    const data = await res.json()
+    return (data.results || []).map(r => ({
+      title:   r.title || '',
+      url:     r.url   || '',
+      snippet: r.content?.slice(0, 800) || '',
+      score:   r.score || 0,
+      source:  'SAP Community',
+    }))
+  } catch (e) {
+    console.error('[TAVILY COMMUNITY] Exception:', e.message)
     return []
   }
 }
@@ -772,8 +812,18 @@ async function streamGPT(systemPrompt, messages, onChunk, model = 'gpt-4o', maxT
 }
 
 // ── 11. Claude streaming ──────────────────────────────────────────────────────
-async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 4000) {
+async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 4000, opts = {}) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set')
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages,
+    stream: true,
+  }
+  if (opts.enableWebSearch) {
+    body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
+  }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -781,13 +831,7 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages,
-      stream: true,
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const errText = await res.text()
@@ -796,6 +840,8 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = '', fullText = ''
+  let webSearchCount = 0
+  const webSearchQueries = []
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -812,10 +858,18 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
           const text = json.delta.text || ''
           if (text) { fullText += text; onChunk && onChunk(text) }
         }
+        // Sonnet's own verification search — server-side tool, Anthropic executes it directly.
+        // We just track that it happened for cost/credibility visibility in the debug doc.
+        if (json.type === 'content_block_start' && json.content_block?.type === 'server_tool_use' && json.content_block?.name === 'web_search') {
+          webSearchCount++
+        }
+        if (json.type === 'content_block_delta' && json.delta?.type === 'input_json_delta' && json.delta?.partial_json) {
+          // Query text streams in as partial JSON on the server_tool_use block — best-effort capture, not critical
+        }
       } catch {}
     }
   }
-  return fullText
+  return opts.enableWebSearch ? { text: fullText, webSearchCount, webSearchQueries } : fullText
 }
 
 // ── 12. MISC HELPERS ──────────────────────────────────────────────────────────
@@ -1344,16 +1398,19 @@ export default async function handler(req, res) {
     const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
     const memoriesPromise  = userId ? fetchUserMemories(lastMsg, userId).catch(() => []) : Promise.resolve([])
 
-    // 5d. Search (Tavily + OpenAI) — only if needsSearch
-    let tavilyResultsPromise  = Promise.resolve([])
-    let openAIResultPromise   = Promise.resolve(null)
+    // 5d. Search — Tavily (general + community-only) and OpenAI, all run in parallel,
+    // all fed the SAME rewritten, conversation-aware query — not each other's raw
+    // last message. A bare follow-up like "which app is best" only makes sense
+    // combined with what was asked two messages ago; rewriteForSearch folds that
+    // context in once, and every engine gets the same context-aware query.
+    let tavilyResultsPromise      = Promise.resolve([])
+    let tavilyNotesResultsPromise = Promise.resolve([])
+    let openAIResultPromise       = Promise.resolve(null)
 
     if (!isDeliverable && needsSearch) {
-      // OpenAI web search is now the primary search source for all questions (replaces Tavily —
-      // confirmed across multiple tests to find real, verifiable SAP Notes/sources that Tavily's
-      // query construction was missing). Tavily is no longer called; tavilyResultsPromise stays
-      // as its initialized empty-array promise.
-      openAIResultPromise = callOpenAISearch(lastMsg).catch(() => null)
+      tavilyResultsPromise      = searchQueryPromise.then(q => tavilySearch(q, intent)).catch(() => [])
+      tavilyNotesResultsPromise = searchQueryPromise.then(q => tavilySearchNotes(q)).catch(() => [])
+      openAIResultPromise       = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)
     }
 
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
@@ -1363,6 +1420,7 @@ export default async function handler(req, res) {
       relevantKnowledge,
       userMemories,
       tavilyRaw,
+      tavilyNotesRaw,
       openAIResult,
     ] = await Promise.all([
       bookRagPromise,
@@ -1370,6 +1428,7 @@ export default async function handler(req, res) {
       knowledgePromise,
       memoriesPromise,
       tavilyResultsPromise,
+      tavilyNotesResultsPromise,
       openAIResultPromise,
     ])
 
@@ -1405,13 +1464,14 @@ export default async function handler(req, res) {
       await Promise.all(fetchPromises)
     }
 
-    // Combine search sources
+    // Combine search sources — general Tavily, Notes-only Tavily, and OpenAI all count
     const openAISources = openAIResult?.sources || []
     const openAISearchText = openAIResult?.text || ''
-    const allSearchResults = [...tavilyFiltered, ...openAISources]
+    const allSearchResults = [...tavilyFiltered, ...tavilyNotesRaw, ...openAISources]
 
     debugLog.tavilyRaw      = tavilyRaw.length
     debugLog.tavilyFiltered = tavilyFiltered.length
+    debugLog.tavilyNotes    = tavilyNotesRaw.length
     debugLog.openAISources  = openAISources.length
     debugLog.bookChunks     = bookChunks.length
     debugLog.knowledgeChunks = relevantKnowledge.length
@@ -1619,8 +1679,7 @@ export default async function handler(req, res) {
         enrichedSystemPrompt += `\n\n📚 SAP BOOK DOCUMENTATION — cite these with page numbers inline:\n${bookText}\n\nWhen using book content, cite it as: (${bookChunks[0]?.source_book || 'Book'}, p.XX)`
       }
 
-      // Inject Tavily results directly into Sonnet's prompt (Tavily currently disabled — see
-      // search orchestration above; tavilyFiltered will be empty, this block is a safe no-op)
+      // Inject Tavily results directly into Sonnet's prompt
       if (tavilyFiltered.length > 0) {
         const tavilyText = tavilyFiltered.map((r, i) =>
           `[Web ${i+1}] ${r.title}\nURL: ${r.url}\n${(r.snippet || '').slice(0, 1000)}`
@@ -1631,16 +1690,19 @@ export default async function handler(req, res) {
       send({ type: 'model_label', label: '' })
 
       // Sonnet answers directly — streaming to user — THIS is the final answer.
-      // No second-model injection: OpenAI search results are already baked into systemPrompt
-      // above (book chunks + web search results), and Sonnet reasons from those directly rather
-      // than from an unverified second model's guess.
-      fullAnswer = await streamClaude(
+      // Native web_search tool is enabled here specifically for self-verification: before
+      // stating a specific technical identifier not already grounded above, Sonnet can check
+      // itself rather than rely solely on the prompt instruction to hedge.
+      const sonnetResult = await streamClaude(
         'claude-sonnet-4-5',
         enrichedSystemPrompt,
         validMessages,
         chunk => send({ type: 'chunk', text: chunk }),
-        4096
+        4096,
+        { enableWebSearch: true }
       )
+      fullAnswer = sonnetResult.text
+      debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
 
       debugLog.rawClaudeAnswer = fullAnswer
       debugLog.rawMergedAnswer = fullAnswer
@@ -1769,7 +1831,9 @@ export default async function handler(req, res) {
           bookChunks:         debugLog.bookChunks,
           tavilyRaw:          debugLog.tavilyRaw,
           tavilyFiltered:     debugLog.tavilyFiltered,
+          tavilyNotes:        debugLog.tavilyNotes,
           openAISources:      debugLog.openAISources,
+          sonnetVerificationSearches: debugLog.sonnetVerificationSearches || 0,
           knowledgeChunks:    debugLog.knowledgeChunks,
           timing: {
             parallelMs:    debugLog.parallelMs,
@@ -1842,14 +1906,39 @@ export default async function handler(req, res) {
         ? '(No saved findings matched this question — if you expected one to fire, check match_threshold or how it was tagged/embedded when saved.)'
         : '',
       '',
-      '4. WEB SEARCH (OpenAI)',
+      '4a. WEB SEARCH — TAVILY GENERAL (unrestricted)',
       '─────────────────────────────────────────────────────────',
-      `Search query sent: ${lastMsg}`,
+      `Query sent: ${searchQuery || lastMsg}`,
+      `Results found: ${debugLog.tavilyRaw ?? 0} raw → ${debugLog.tavilyFiltered ?? 0} after relevance filter`,
+      ...(tavilyFiltered || []).map((r, i) =>
+        `[TG${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}`
+      ),
+      (debugLog.tavilyFiltered ?? 0) === 0 ? '(No results, or needsSearch was false)' : '',
+      '',
+      '4b. WEB SEARCH — TAVILY COMMUNITY (community.sap.com only)',
+      '─────────────────────────────────────────────────────────',
+      `Query sent: ${(searchQuery || lastMsg)}`,
+      `Results found: ${debugLog.tavilyNotes ?? 0}`,
+      ...(tavilyNotesRaw || []).map((r, i) =>
+        `[TC${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}`
+      ),
+      (debugLog.tavilyNotes ?? 0) === 0 ? '(No results, or needsSearch was false)' : '',
+      '',
+      '4c. WEB SEARCH — OpenAI',
+      '─────────────────────────────────────────────────────────',
+      `Query sent: ${searchQuery || lastMsg}`,
       `OpenAI search sources: ${(debugLog.openAISources ?? 0)}`,
       openAISearchText ? `Search summary text:\n${openAISearchText.slice(0, 1500)}` : '(No search results — either needsSearch was false, or OpenAI search returned nothing)',
       ...(openAISources || []).map((r, i) =>
         `[W${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}`
       ),
+      '',
+      '4d. SONNET SELF-VERIFICATION SEARCHES (native tool, run by Sonnet itself while answering)',
+      '─────────────────────────────────────────────────────────',
+      `Verification searches used: ${debugLog.sonnetVerificationSearches ?? 0}`,
+      (debugLog.sonnetVerificationSearches ?? 0) > 0
+        ? 'Sonnet checked at least one specific claim against a live search before including it in the answer below.'
+        : '(Sonnet did not need to verify anything this turn — either nothing uncertain was stated, or it was already grounded above.)',
       '',
       '5. CLAUDE SONNET (PRIMARY ANSWERER — FINAL ANSWER)',
       '─────────────────────────────────────────────────────────',
@@ -1863,7 +1952,8 @@ export default async function handler(req, res) {
       '─────────────────────────────────────────────────────────',
       '→ NOT USED — Sonnet answers directly. GPT-4o only used for short greetings.',
       `  Book chunks: ${(bookChunks || []).length}`,
-      `  Web search sources: ${(openAISources || []).length}`,
+      `  Web search sources (Tavily general + community + OpenAI): ${((tavilyFiltered||[]).length + (tavilyNotesRaw||[]).length + (openAISources || []).length)}`,
+      `  Sonnet verification searches: ${debugLog.sonnetVerificationSearches ?? 0}`,
       `  Answer (Sonnet): ${(debugLog.rawClaudeAnswer || '').length} chars`,
       '',
       '← FINAL ANSWER RECEIVED:',
@@ -1897,7 +1987,9 @@ export default async function handler(req, res) {
         bookSources:    (bookChunks || []).map(c => `${c.source_book}, p.${c.page_number}`),
         tavilyRaw:      debugLog.tavilyRaw    || 0,
         tavilyFiltered: debugLog.tavilyFiltered || 0,
+        tavilyNotes:    debugLog.tavilyNotes  || 0,
         openAISources:  debugLog.openAISources || 0,
+        sonnetVerificationSearches: debugLog.sonnetVerificationSearches || 0,
         needsSearch,
         detectedModule:      debugLog.detectedModule || null,
         totalMs:             debugLog.totalMs || null,
