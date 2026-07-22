@@ -158,7 +158,18 @@ Question: "${question.slice(0, 500)}"
     // Tavily fires by default for all SAP questions
     // Only skip for pure conversational messages and memory saves
     const isNonSAPMessage = intent === 'GENERAL' && !isBapiSearch && !isExitSearch && !isNoteSearch && !isExplicitSearchRequest
-    const needsSearch = (!isNonSAPMessage || isExplicitSearchRequest) && intent !== 'SAVE_TO_MEMORY'
+    let needsSearch = (!isNonSAPMessage || isExplicitSearchRequest) && intent !== 'SAVE_TO_MEMORY'
+
+    // ── TEMPORARY A/B TEST TOGGLE ──────────────────────────────────────────
+    // Set env var WANI_DISABLE_SEARCH=true to force ALL search (Tavily general +
+    // community + OpenAI) off, to measure what web search actually contributes to
+    // answer quality. Native Sonnet self-verification search is NOT affected by
+    // this — that's a separate mechanism. Remove this block after the test.
+    // Sonnet's own tool would still be able to fire; to test a TRULY search-free
+    // answer, also see the enableWebSearch flag note below.
+    if (process.env.WANI_DISABLE_SEARCH === 'true') {
+      needsSearch = false
+    }
 
     return {
       intent, confidence, secondaryIntent,
@@ -337,13 +348,16 @@ async function rewriteForSearch(question, recentContext) {
         temperature: 0,
         messages: [{
           role: 'system',
-          content: `You rewrite SAP questions into optimised search queries for SAP Community and SAP blogs.
+          content: `You rewrite SAP questions into precise search queries for SAP Community and SAP documentation.
+
+The goal is a query specific enough that results match the actual SAP TOPIC, not just generic words. Generic words like "approval", "management", "change", "process", "workflow", "data" match thousands of unrelated SAP results — a query built mostly from those retrieves junk (a question about maintenance approval workflows matching "travel expense approval", etc).
+
 Rules:
-- Add SAP module prefix (PP/PM/MM/SD/QM etc.)
-- Add relevant technical terms the question implies
-- Target SAP Community (community.sap.com) and SAP Help (help.sap.com)
-- Connect follow-up questions to the conversation context below
-- Return ONLY the search query, 5-10 words, nothing else
+- Lead with the SAP module prefix (PP/PM/MM/SD/QM/PM-WCM etc.) AND the specific SAP object/process name, not just the generic activity. E.g. NOT "PM multi-level approval workflow" (too generic) but "PM maintenance order flexible workflow approval SPRO" (names the actual mechanism).
+- Include the distinctive technical anchor the question is really about — the specific transaction, table, Fiori app, config area, or SAP-specific feature name — so results can't match on generic words alone.
+- If the question is about a niche SAP concept (Management of Change, Work Clearance Management, phase-based maintenance), keep that exact SAP term in the query rather than paraphrasing it into generic words.
+- Connect follow-up questions to the conversation context below so a bare "which is best?" carries its real subject.
+- Return ONLY the search query, 5-10 words, nothing else.
 
 Conversation context: ${recentContext || 'No previous context'}`
         }, {
@@ -530,17 +544,19 @@ async function filterRelevantResults(results, originalQuestion) {
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `Score each search result for relevance to this SAP question: "${originalQuestion}"
+          content: `You are filtering SAP search results. The user's actual question is: "${originalQuestion}"
 
-Score 1-5:
-5 = directly answers the question with specific SAP details
-4 = closely related, useful context
-3 = somewhat related, marginally useful
-2 = loosely related
-1 = irrelevant
+Score each result 1-5 for whether it genuinely addresses the SAME SAP topic/process the user is asking about — NOT whether it shares keywords.
 
-Return ONLY a JSON array of scores in order, e.g. [4,2,5,1,3,4,2]
-No explanation, just the array.
+CRITICAL: shared words are NOT relevance. A question about "PM maintenance approval workflow" and a result about "travel expense approval" both contain "approval" but are about completely different SAP areas — that result scores 1, not 3. A question about "Management of Change in QM/WCM" and a result about "Deletion of Personal Data in Work Clearance Management" share "Management" and "Clearance" but are unrelated topics — score 1. Judge the actual subject matter, not word overlap.
+
+5 = same SAP topic AND directly useful for this exact question
+4 = same SAP topic/module, useful context even if not a perfect match
+3 = same broad area but only tangentially touches the question
+2 = different SAP topic that merely shares some words
+1 = unrelated, or matches only on generic words (approval/management/change/process/data)
+
+Return ONLY a JSON array of scores in order, e.g. [4,2,5,1,3,4,2]. No explanation.
 
 Results:
 ${listText}`
@@ -551,10 +567,11 @@ ${listText}`
     const raw = data.choices?.[0]?.message?.content?.trim() || '[]'
     const scores = JSON.parse(raw.replace(/```json|```/g, '').trim())
 
-    // Keep only score >= 3, sorted by score desc, max 3 results
+    // Keep only score >= 4 (genuinely same-topic), sorted by score desc, max 3.
+    // Better to show 1 real link — or none — than 3 that only match on keywords.
     const scored = results
       .map((r, i) => ({ ...r, relevanceScore: scores[i] || 1 }))
-      .filter(r => r.relevanceScore >= 3)
+      .filter(r => r.relevanceScore >= 4)
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, 3)
 
@@ -562,8 +579,9 @@ ${listText}`
     return scored
   } catch (e) {
     console.error('[FILTER] Error:', e.message)
-    // Fallback: return top 3 by Tavily score
-    return results.sort((a, b) => b.score - a.score).slice(0, 3)
+    // Fallback on error: return nothing rather than unfiltered junk — a wrong
+    // link ranked #1 is worse than no link. Empty is the safe failure mode.
+    return []
   }
 }
 
@@ -1472,14 +1490,24 @@ export default async function handler(req, res) {
       await Promise.all(fetchPromises)
     }
 
-    // Combine search sources — general Tavily, Notes-only Tavily, and OpenAI all count
-    const openAISources = openAIResult?.sources || []
+    // Filter the community lane through the same relevance check — it was
+    // bypassing filtering entirely, which is how off-topic results (e.g. a
+    // travel-expense thread for a maintenance-approval question) reached the UI.
+    const tavilyNotesFiltered = (tavilyNotesRaw.length > 0)
+      ? await filterRelevantResults(tavilyNotesRaw, lastMsg).catch(() => [])
+      : []
+
+    // Combine search sources — general Tavily, community Tavily (both filtered), and OpenAI
+    const openAISourcesRaw = openAIResult?.sources || []
+    const openAISources = (openAISourcesRaw.length > 0)
+      ? await filterRelevantResults(openAISourcesRaw, lastMsg).catch(() => openAISourcesRaw)
+      : []
     const openAISearchText = openAIResult?.text || ''
-    const allSearchResults = [...tavilyFiltered, ...tavilyNotesRaw, ...openAISources]
+    const allSearchResults = [...tavilyFiltered, ...tavilyNotesFiltered, ...openAISources]
 
     debugLog.tavilyRaw      = tavilyRaw.length
     debugLog.tavilyFiltered = tavilyFiltered.length
-    debugLog.tavilyNotes    = tavilyNotesRaw.length
+    debugLog.tavilyNotes    = tavilyNotesFiltered.length
     debugLog.openAISources  = openAISources.length
     debugLog.bookChunks     = bookChunks.length
     debugLog.knowledgeChunks = relevantKnowledge.length
@@ -1712,7 +1740,7 @@ export default async function handler(req, res) {
         validMessages,
         chunk => send({ type: 'chunk', text: chunk }),
         4096,
-        { enableWebSearch: true }
+        { enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true' }
       )
       fullAnswer = sonnetResult.text
       debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
@@ -1932,7 +1960,7 @@ export default async function handler(req, res) {
       '─────────────────────────────────────────────────────────',
       `Query sent: ${(searchQuery || lastMsg)}`,
       `Results found: ${debugLog.tavilyNotes ?? 0}`,
-      ...(tavilyNotesRaw || []).map((r, i) =>
+      ...(tavilyNotesFiltered || []).map((r, i) =>
         `[TC${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}`
       ),
       (debugLog.tavilyNotes ?? 0) === 0 ? '(No results, or needsSearch was false)' : '',
@@ -1965,7 +1993,7 @@ export default async function handler(req, res) {
       '─────────────────────────────────────────────────────────',
       '→ NOT USED — Sonnet answers directly. GPT-4o only used for short greetings.',
       `  Book chunks: ${(bookChunks || []).length}`,
-      `  Web search sources (Tavily general + community + OpenAI): ${((tavilyFiltered||[]).length + (tavilyNotesRaw||[]).length + (openAISources || []).length)}`,
+      `  Web search sources (Tavily general + community + OpenAI): ${((tavilyFiltered||[]).length + (tavilyNotesFiltered||[]).length + (openAISources || []).length)}`,
       `  Sonnet verification searches: ${debugLog.sonnetVerificationSearches ?? 0}`,
       `  Answer (Sonnet): ${(debugLog.rawClaudeAnswer || '').length} chars`,
       '',
