@@ -25,7 +25,8 @@ function getSupabase() {
 }
 
 // ── 1. GROQ — intent classification ──────────────────────────────────────────
-async function groqClassify(question) {
+async function groqClassify(question, gate = {}) {
+  const { deliverableRequested = false, docWizardStage = null } = gate
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -147,9 +148,31 @@ Question: "${question.slice(0, 500)}"
     if (isTeachMeKeyword && !isCode && !isError) { intent = 'TEACH_ME'; confidence = 0.9 }
     // Only applies when nothing more specific matched — a generic "write this up as a document"
     // request should not be force-fit into FS_SPEC/FORMS_SPEC/TECH_SPEC.
-    if (isGeneralDocKeyword && !isCode && !isError && !isFsKeyword && !isTestKeyword && !isWorkshopPPT) { intent = 'GENERAL_DOC'; confidence = 0.9 }
+    let docKeywordHint = false
+    if (isGeneralDocKeyword && !isCode && !isError && !isFsKeyword && !isTestKeyword && !isWorkshopPPT) {
+      // Kept as a hint only. Previously this set intent='GENERAL_DOC' with a hardcoded
+      // confidence of 0.9, which overrode the LLM classifier and sailed past the
+      // confidence guard below. Documents are now gated on an explicit UI action, so a
+      // phrase in prose no longer decides intent.
+      docKeywordHint = true
+    }
 
     const DELIVERABLE_INTENTS_SET = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','WORKSHOP_PPT','GENERAL_DOC'])
+
+    // Documents are a deliberate user action, never inferred from prose.
+    // deliverableRequested is set by an explicit UI control (button / doc picker); the
+    // wizard stages are the follow-up turns of a flow the user already opted into.
+    // Without that signal, any deliverable classification is downgraded to a normal
+    // answer — so a question that merely MENTIONS a spec gets answered, not turned into
+    // a document offer. This replaces the old keyword forcing, which set confidence 0.9
+    // from a regex and so bypassed the confidence check below entirely.
+    const inDocFlow = docWizardStage === 'confirmed' || docWizardStage === 'gathering'
+                   || docWizardStage === 'generate'  || docWizardStage === 'awaiting_confirm'
+    if (DELIVERABLE_INTENTS_SET.has(intent) && deliverableRequested !== true && !inDocFlow) {
+      intent = 'SAP_QA'
+      secondaryIntent = null
+    }
+
     if (DELIVERABLE_INTENTS_SET.has(intent) && confidence < 0.75) {
       intent = 'SAP_QA'
       secondaryIntent = null
@@ -984,6 +1007,19 @@ async function fetchRelevantKnowledge(question, userId, userToken) {
     const userClient = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${userToken}` } } })
     const queryEmbedding = await embed(question)
     if (!queryEmbedding) return []
+    // Diagnostic: this matched 0 times across 10 consecutive real turns. Two candidate
+    // causes — (a) threshold too high, (b) asymmetry, since save embeds a declarative
+    // finding while retrieval embeds a conversational question. Fetch unthresholded so
+    // the ACTUAL top scores are visible: ~0.55-0.65 means lower the threshold, ~0.2 means
+    // the embeddings are mismatched and the threshold is irrelevant.
+    try {
+      const probe = await userClient.rpc('match_wani_knowledge', { query_embedding: queryEmbedding, match_threshold: 0.0, match_count: 3 })
+      if (probe?.data?.length) {
+        console.log('[knowledge-probe] top similarities:', probe.data.map(d => (d.similarity ?? d.score ?? '?')).join(', '))
+      } else {
+        console.log('[knowledge-probe] no rows returned even at threshold 0 — table empty for this user, or RLS blocking')
+      }
+    } catch (e) { console.log('[knowledge-probe] failed:', e.message) }
     const { data, error } = await userClient.rpc('match_wani_knowledge', { query_embedding: queryEmbedding, match_threshold: 0.75, match_count: 3 })
     if (error) { console.error('knowledge search error:', error.message); return [] }
     return data || []
@@ -1241,7 +1277,7 @@ export default async function handler(req, res) {
   }
 
   // ── STREAMING HANDLER ─────────────────────────────────────────────────────
-  const { messages, tone = 'balanced', userName, userRole, userModules = [], docWizardStage } = body
+  const { messages, tone = 'balanced', userName, userRole, userModules = [], docWizardStage, deliverableRequested = false } = body
   const lastMsg = messages?.[messages.length - 1]?.content || ''
   const prevAssistantMsg = [...(messages || [])].reverse().find(m => m.role === 'assistant')?.content || ''
 
@@ -1306,7 +1342,7 @@ export default async function handler(req, res) {
 
     // ── STEP 1: Classify + load corrections in parallel ────────────────────
     const [classification, globalCorrections] = await Promise.all([
-      groqClassify(lastMsg),
+      groqClassify(lastMsg, { deliverableRequested, docWizardStage }),
       loadGlobalCorrections().catch(() => []),
     ])
 
@@ -1503,7 +1539,14 @@ export default async function handler(req, res) {
       ? await filterRelevantResults(openAISourcesRaw, lastMsg).catch(() => openAISourcesRaw)
       : []
     const openAISearchText = openAIResult?.text || ''
-    const allSearchResults = [...tavilyFiltered, ...tavilyNotesFiltered, ...openAISources]
+    // Citable references = only sources whose CONTENT was actually injected into the
+    // prompt. OpenAI sources are deliberately excluded: their text is no longer sent to
+    // Sonnet, so listing their URLs here would let it attach [n] citations to pages it
+    // never read — the exact failure seen with TC01, where a fabricated table name was
+    // given a help.sap.com citation that did not mention it.
+    const allSearchResults = [...tavilyFiltered, ...tavilyNotesFiltered]
+    const relatedLinks     = openAISources
+
 
     debugLog.tavilyRaw      = tavilyRaw.length
     debugLog.tavilyFiltered = tavilyFiltered.length
@@ -1574,11 +1617,12 @@ export default async function handler(req, res) {
     }
 
     // ── Inject search results ──────────────────────────────────────────────
-    if (openAISearchText && openAISources.length > 0) {
-      systemPrompt += `\n\nWEB SEARCH RESULTS (from OpenAI search, ${openAISources.length} source${openAISources.length!==1?'s':''} found):\n${openAISearchText.slice(0, 2000)}`
-    } else if (openAISearchText) {
-      systemPrompt += `\n\n⚠️ WEB SEARCH ATTEMPTED — NO SOURCES FOUND: The search tool returned prose below with zero real source citations backing it. This text is NOT verified against any actual page — treat it the same as your own unverified memory, not as retrieved evidence. Do not state any specific table field, T-code, BAdI, or other technical identifier from this text as fact; if you use it at all, name it as something to verify, not something confirmed.\n${openAISearchText.slice(0, 1500)}`
-    }
+    // OpenAI search text is NOT injected. Measured across real traffic: 23 links
+    // returned over 10 turns, 0 cited in any answer. It contributed ~600 tokens of
+    // prompt per turn (67% of all injected search text) for zero measured effect on
+    // the answer. Its links are still fetched and surfaced to the user as "related
+    // reading" via sourceInfo.relatedLinks — but Sonnet never sees them, so it can
+    // never cite a page it did not read.
 
     if (tavilyFiltered.length > 0) {
       const tavilyText = tavilyFiltered.map((r, i) =>
@@ -2030,6 +2074,10 @@ export default async function handler(req, res) {
         tavilyFiltered: debugLog.tavilyFiltered || 0,
         tavilyNotes:    debugLog.tavilyNotes  || 0,
         openAISources:  debugLog.openAISources || 0,
+        // Links found by OpenAI search but NOT shown to Sonnet. Render these under a
+        // heading that clearly separates them from cited sources (e.g. "Related reading"),
+        // since the answer was written without them.
+        relatedLinks:   (relatedLinks || []).map(r => ({ title: r.title, url: r.url, source: r.source })),
         sonnetVerificationSearches: debugLog.sonnetVerificationSearches || 0,
         needsSearch,
         detectedModule:      debugLog.detectedModule || null,
