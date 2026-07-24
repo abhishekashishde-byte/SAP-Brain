@@ -2046,7 +2046,15 @@ export default function Brain({ session }) {
       setConversations(prev=>[newConv,...prev])
       setActiveConvId(newConv.id)
     } else {
-      await updateConversation(convId,{ messages:currentMsgs })
+      // Guarded: this sits outside the streaming try/catch below, so an unguarded
+      // throw here would surface as an unhandled rejection and abort the send
+      // silently. Local state is authoritative for the turn; a failed pre-save
+      // must not block the user's question from being answered.
+      try {
+        await updateConversation(convId,{ messages:currentMsgs })
+      } catch (e) {
+        console.error('Pre-stream conversation save failed (continuing):', e)
+      }
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:currentMsgs}:c))
     }
 
@@ -2054,6 +2062,9 @@ export default function Brain({ session }) {
     const abortController = new AbortController()
     abortControllersRef.current[convId] = abortController
     let accumulated = ''
+    // Hoisted out of the try block so the catch handler can recover a fully
+    // streamed answer when a POST-stream step (e.g. the Supabase save) fails.
+    let streamedFinal = ''
 
     try {
       const docChunks = uploadedDoc ? await getDocChunks(msgText) : []
@@ -2144,6 +2155,7 @@ export default function Brain({ session }) {
               fullReply = evt.full || (
                 (evt.fsComplete || evt.pptComplete) ? '' : accumulated
               )
+              streamedFinal = fullReply
               modelUsed = evt.model
               deliverableType = evt.deliverableType || 'NONE'
               if (typeof evt.messageCount === 'number') setMessageCount(evt.messageCount)
@@ -2252,10 +2264,23 @@ export default function Brain({ session }) {
       }
 
       const finalMsgs = [...currentMsgs, assistantMsg]
-      const convUpdate = { messages: finalMsgs }
+
+      // The debug doc + full pipeline detail are diagnostics, not conversation
+      // content. Persisting them bloated the row on every turn until the save
+      // failed — AFTER a complete answer had already streamed. They now live in
+      // memory for the session only; the DB keeps a lean summary.
+      const persistMsgs = finalMsgs.map(m => {
+        const { _debugDoc, ...rest } = m
+        if (!rest._sourceInfo) return rest
+        const { pipeline, bookSources, ...leanSource } = rest._sourceInfo
+        return { ...rest, _sourceInfo: leanSource }
+      })
+
+      const convUpdate = { messages: persistMsgs }
       if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
       await updateConversation(convId, convUpdate)
-      setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,updated_at:new Date().toISOString()}:c))
+      // Local state keeps the full-fidelity messages (incl. debug doc) for this session
+      setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,messages:finalMsgs,updated_at:new Date().toISOString()}:c))
       markBusy(convId, false)
       delete abortControllersRef.current[convId]
       // Clear live dual bubble now that saved message has _dualText — prevents duplicate
@@ -2290,6 +2315,20 @@ export default function Brain({ session }) {
       if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('') }
       // Note: dualText and dualLabel intentionally NOT cleared here
       // They persist until next dual_start event so Claude answer stays visible
+
+      // A complete answer may already have streamed — most failures here come from
+      // the SAVE that follows streaming, not from the model. Never discard text the
+      // user has already seen; keep it and flag that persistence failed.
+      const recovered = (streamedFinal || accumulated || '').trim()
+      if (recovered) {
+        const recoveredMsgs = [...currentMsgs, { role:'assistant', content: recovered, _saveFailed: true }]
+        setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:recoveredMsgs}:c))
+        // Retry the save with the lean payload; if it still fails the answer at
+        // least stays on screen rather than being replaced by an error.
+        updateConversation(convId, { messages: recoveredMsgs }).catch(()=>{})
+        return
+      }
+
       const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:errMsgs}:c))
     }
@@ -2718,7 +2757,7 @@ export default function Brain({ session }) {
                   </div>
                 )}
 
-                <div style={{ display:'flex',gap:10,alignItems:'flex-end',background:t.inputBg,border:`1.5px solid ${t.border2}`,borderRadius:14,padding:'10px 12px',transition:'border-color 0.2s, box-shadow 0.2s' }}
+                <div style={{ display:'flex',flexWrap:'wrap',gap:10,alignItems:isMobile?'center':'flex-end',background:t.inputBg,border:`1.5px solid ${t.border2}`,borderRadius:14,padding:'10px 12px',transition:'border-color 0.2s, box-shadow 0.2s' }}
                   onFocusCapture={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)'}}
                   onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow='none'}}
                 >
@@ -2739,7 +2778,7 @@ export default function Brain({ session }) {
 
                   {/* Attached code card */}
                   {attachedCode && (
-                    <div style={{ width:'100%', marginBottom:6 }}>
+                    <div style={{ width:'100%', marginBottom:6, ...(isMobile?{ order:-2 }:{}) }}>
                       <CodeCard
                         language={attachedCode.language}
                         lines={attachedCode.lines}
@@ -2757,9 +2796,9 @@ export default function Brain({ session }) {
                     onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSend()}}}
                     onPaste={handlePaste}
                     placeholder={uploadedDoc ? `Ask about ${uploadedDoc.name}…` : "Ask your SAP question…"} rows={1}
-                    style={{ flex:1,background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
+                    style={{ flex:isMobile?'1 1 100%':1,...(isMobile?{ order:-1,width:'100%' }:{}),background:'transparent',border:'none',resize:'none',fontSize:16,color:t.text,fontFamily:"'Inter','DM Sans',sans-serif",lineHeight:1.65,height:'26px',maxHeight:'160px',overflowY:'auto',padding:0,outline:'none' }}
                   />
-                  <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:10,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                  <button title="Voice input (coming soon)" style={{ width:36,height:36,borderRadius:10,border:'none',background:'transparent',color:t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,...(isMobile?{ marginLeft:'auto' }:{}) }}>
                     <IconMic size={17}/>
                   </button>
                   {activeConvId && busyConvIds[activeConvId] ? (
