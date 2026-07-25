@@ -1358,9 +1358,33 @@ function topFor(slot){return slot===0?0:CARD_H+(slot-1)*PEEK}
 function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
+function TextRoll({ text, style }) {
+  // Rolls each character in with a staggered delay — runs once on mount, then rests.
+  // Pure CSS (letterRoll keyframe), no framer-motion. Spaces are preserved.
+  return (
+    <span style={style} aria-label={text}>
+      {Array.from(text).map((ch, i) => (
+        <span
+          key={i}
+          aria-hidden="true"
+          style={{
+            display: 'inline-block',
+            whiteSpace: 'pre',
+            animation: `letterRoll 0.4s ease both`,
+            animationDelay: `${i * 0.045}s`,
+          }}
+        >
+          {ch}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, filterDropdownOpen, setFilterDropdownOpen, deliverableFilter, setDeliverableFilter, DELIVERABLE_FILTERS, groups, filteredConvs, activeConvId, dbLoading, goHome, goChat, handleDelete, setActiveConvId, setView, setShowSummarise, profile, session, setShowProfile, dark, t, isMobile }) {
   const totalCount = projects.length + filteredConvs.length
   const gridStyle = { display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: isMobile?10:14 }
+  const [collapsedGroups, setCollapsedGroups] = useState({}) // { [groupLabel]: true } when collapsed
   return (
     <div style={{ flex:1, height:'100%', overflow:'hidden', display:'flex', flexDirection:'column', background:t.bg }}>
       <div style={{ padding: isMobile?'14px 18px 10px':'28px 40px 18px', borderBottom:`1px solid ${t.border}`, width:'100%', boxSizing:'border-box' }}>
@@ -1493,13 +1517,22 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
                 <div style={{ padding:'60px 16px',textAlign:'center' }}><div style={{ fontSize:32,marginBottom:10 }}>💬</div><p style={{ fontSize:13,color:t.text4,lineHeight:1.6 }}>No conversations yet</p></div>
               ):(
                 Object.entries(groups).map(([group,convs])=>convs.length===0?null:(
-                  <div key={group} style={{ marginBottom:24 }}>
-                    <div style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',padding:'0 0 10px' }}>{group}</div>
-                    <div style={gridStyle}>
-                      {convs.map(conv=>(
-                        <ConversationItem key={conv.id} conv={conv} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false) }} onDelete={handleDelete}/>
-                      ))}
+                  <div key={group} style={{ marginBottom:16 }}>
+                    <div
+                      onClick={()=>setCollapsedGroups(prev=>({ ...prev, [group]: !prev[group] }))}
+                      style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'6px 0 10px',userSelect:'none' }}
+                    >
+                      <span style={{ display:'inline-block',width:0,height:0,borderTop:'4px solid transparent',borderBottom:'4px solid transparent',borderLeft:`5px solid ${t.text4}`,transform: collapsedGroups[group]?'rotate(0deg)':'rotate(90deg)',transition:'transform 0.18s ease' }}/>
+                      <span style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase' }}>{group}</span>
+                      <span style={{ fontSize:11,fontWeight:500,color:t.text4,opacity:0.6 }}>{convs.length}</span>
                     </div>
+                    {!collapsedGroups[group] && (
+                      <div style={{ ...gridStyle, animation:'fadeIn 0.25s ease' }}>
+                        {convs.map(conv=>(
+                          <ConversationItem key={conv.id} conv={conv} isActive={conv.id===activeConvId} t={t} onClick={()=>{ setActiveConvId(conv.id);setView('chat');setShowSummarise(false) }} onDelete={handleDelete}/>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -1625,6 +1658,13 @@ export default function Brain({ session }) {
   const [knowledgeToast, setKnowledgeToast]       = useState(null)
   const docInputRef = useRef(null)
   const chatScrollRef = useRef(null)
+  const [scrollProgress, setScrollProgress] = useState(0) // 0..1 reading position in the chat
+  const handleChatScroll = () => {
+    const el = chatScrollRef.current
+    if (!el) return
+    const max = el.scrollHeight - el.clientHeight
+    setScrollProgress(max > 0 ? Math.min(1, Math.max(0, el.scrollTop / max)) : 0)
+  }
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -2485,6 +2525,7 @@ export default function Brain({ session }) {
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         @keyframes cursorBlink{0%,100%{opacity:1}50%{opacity:0}}
         @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes letterRoll{from{opacity:0;transform:translateY(0.5em) rotate(8deg)}to{opacity:1;transform:translateY(0) rotate(0deg)}}
         @keyframes blob1{0%,100%{transform:translate(-15%,-15%) scale(1)}50%{transform:translate(20%,15%) scale(1.35)}}
         @keyframes blob2{0%,100%{transform:translate(15%,20%) scale(1.1)}50%{transform:translate(-20%,-10%) scale(1.4)}}
         @keyframes blob3{0%,100%{transform:translate(-5%,10%) scale(1)}50%{transform:translate(10%,-15%) scale(1.2)}}
@@ -2626,7 +2667,13 @@ export default function Brain({ session }) {
 
         {view==='chat'&&(
           <>
-            <div ref={chatScrollRef} className="chat-messages" style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
+            <div ref={chatScrollRef} onScroll={handleChatScroll} className="chat-messages" style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
+              {/* Reading-progress bar: tracks how far down the current chat the user has scrolled.
+                  Sticky so it stays pinned at the top of the scroll viewport; only visible once
+                  there's something to scroll. */}
+              <div style={{ position:'sticky', top:0, left:0, height:3, marginBottom:-3, zIndex:5, background:'transparent', pointerEvents:'none' }}>
+                <div style={{ height:'100%', width:`${scrollProgress*100}%`, background:'#4F46E5', borderRadius:'0 2px 2px 0', transition:'width 0.08s linear', opacity: scrollProgress>0.001?1:0 }}/>
+              </div>
               <div style={{ maxWidth:720,margin:'0 auto' }}>
                 {messages.length===0?(
                   quickLaunchMessages.length > 0 ? (
@@ -2639,7 +2686,7 @@ export default function Brain({ session }) {
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'40px 20px' }}>
                     <WaniLogo size={window.innerWidth<768?48:80} dark={dark}/>
                     <div style={{ marginTop:16,marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:40} dark={dark}/></div>
-                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:12,marginBottom:4 }}>Hello, {profile.name.split(' ')[0]} 👋</div>)}
+                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:12,marginBottom:4 }}>Hello, <TextRoll text={profile.name.split(' ')[0]} style={{ display:'inline-block' }}/> 👋</div>)}
                     <p style={{ fontSize:15,color:bgTheme.text2,maxWidth:300,lineHeight:1.7,marginBottom:22,marginTop:8 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
