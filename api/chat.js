@@ -1007,22 +1007,26 @@ async function fetchRelevantKnowledge(question, userId, userToken) {
     const userClient = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${userToken}` } } })
     const queryEmbedding = await embed(question)
     if (!queryEmbedding) return []
-    // Diagnostic: this matched 0 times across 10 consecutive real turns. Two candidate
-    // causes — (a) threshold too high, (b) asymmetry, since save embeds a declarative
-    // finding while retrieval embeds a conversational question. Fetch unthresholded so
-    // the ACTUAL top scores are visible: ~0.55-0.65 means lower the threshold, ~0.2 means
-    // the embeddings are mismatched and the threshold is irrelevant.
-    try {
-      const probe = await userClient.rpc('match_wani_knowledge', { query_embedding: queryEmbedding, match_threshold: 0.0, match_count: 3 })
-      if (probe?.data?.length) {
-        console.log('[knowledge-probe] top similarities:', probe.data.map(d => (d.similarity ?? d.score ?? '?')).join(', '))
-      } else {
-        console.log('[knowledge-probe] no rows returned even at threshold 0 — table empty for this user, or RLS blocking')
-      }
-    } catch (e) { console.log('[knowledge-probe] failed:', e.message) }
-    const { data, error } = await userClient.rpc('match_wani_knowledge', { query_embedding: queryEmbedding, match_threshold: 0.75, match_count: 3 })
+    // Saved findings are DECLARATIVE ("Startup Date is mandatory for MTBF…") but the
+    // query is a conversational QUESTION. That asymmetry pushes even a correct, same-topic
+    // match below a strict 0.75 cutoff — which is why this returned 0 on every real turn.
+    // Fetch the top matches unthresholded, then keep those clearing a realistic bar for
+    // statement-vs-question similarity. The similarity is attached so the debug doc shows
+    // the real scores (no logs needed) and the threshold can be tuned from evidence.
+    const KNOWLEDGE_THRESHOLD = 0.45
+    const { data, error } = await userClient.rpc('match_wani_knowledge', { query_embedding: queryEmbedding, match_threshold: 0.0, match_count: 5 })
     if (error) { console.error('knowledge search error:', error.message); return [] }
-    return data || []
+    const rows = data || []
+    // The RPC was created directly in Supabase and its return shape isn't guaranteed here.
+    // Handle both cases safely:
+    //  - if rows carry a similarity/score, keep those clearing KNOWLEDGE_THRESHOLD;
+    //  - if they DON'T, the RPC already ordered by relevance, so trust its top rows.
+    const hasScore = rows.length > 0 && (rows[0].similarity != null || rows[0].score != null)
+    const scored = rows.map(d => ({ ...d, similarity: d.similarity ?? d.score ?? null }))
+    const kept = hasScore
+      ? scored.filter(d => d.similarity >= KNOWLEDGE_THRESHOLD).slice(0, 3)
+      : scored.slice(0, 3)
+    return Object.assign(kept, { _allCandidates: scored.map(d => ({ finding: (d.finding||'').slice(0,60), score: d.similarity == null ? 'n/a' : +d.similarity.toFixed(3) })) })
   } catch (err) { console.error('fetchRelevantKnowledge error:', err.message); return [] }
 }
 
@@ -1378,6 +1382,10 @@ export default async function handler(req, res) {
     '─────────────────────────────────────────────────────────',
     `Entries matched: ${dl.knowledgeChunks || 0}`,
     ...(dl.knowledgeList || []).map((k, i) => `[K${i+1}] ${k.module} > ${k.topic} > ${k.object}\n    Finding: ${k.finding}`),
+    `All candidates considered (top 5 by similarity, kept if ≥ 0.45):`,
+    ...((dl.knowledgeCandidates || []).length
+        ? dl.knowledgeCandidates.map(c => `    score ${c.score} — ${c.finding}`)
+        : ['    (none returned by match_wani_knowledge — table empty for this user, RLS blocking, or RPC rejected threshold 0)']),
     '',
     '4. WEB SEARCH',
     '─────────────────────────────────────────────────────────',
@@ -1662,6 +1670,7 @@ export default async function handler(req, res) {
     debugLog.openAISources  = openAISources.length
     debugLog.bookChunks     = bookChunks.length
     debugLog.knowledgeChunks = relevantKnowledge.length
+    debugLog.knowledgeCandidates = relevantKnowledge._allCandidates || []
     debugLog.searchQuery    = searchQuery
     // List copies for the shared buildDebugDoc renderer (used by all answer paths)
     debugLog.bookChunkList  = bookChunks
@@ -2096,13 +2105,14 @@ export default async function handler(req, res) {
       '',
       '3b. CONSULTANT KNOWLEDGE BASE (wani_knowledge — your saved/verified findings)',
       '─────────────────────────────────────────────────────────',
-      `Entries matched: ${debugLog.knowledgeChunks || 0} (match_threshold 0.75)`,
+      `Entries matched: ${debugLog.knowledgeChunks || 0} (kept if similarity ≥ 0.45)`,
       ...(relevantKnowledge || []).map((k, i) =>
         `[K${i+1}] ${k.module} > ${k.topic} > ${k.object}\n    Finding: ${k.finding}`
       ),
-      (relevantKnowledge || []).length === 0
-        ? '(No saved findings matched this question — if you expected one to fire, check match_threshold or how it was tagged/embedded when saved.)'
-        : '',
+      `All candidates considered (top 5 by similarity):`,
+      ...((debugLog.knowledgeCandidates || []).length
+          ? debugLog.knowledgeCandidates.map(c => `    score ${c.score} — ${c.finding}`)
+          : ['    (none returned — table empty for this user, RLS blocking, or RPC rejected threshold 0)']),
       '',
       '4a. WEB SEARCH — TAVILY GENERAL (unrestricted)',
       '─────────────────────────────────────────────────────────',
