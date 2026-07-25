@@ -1293,7 +1293,109 @@ export default async function handler(req, res) {
 
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
   const debugLog = {}  // admin debug info collected throughout
+  debugLog.question = lastMsg
   let todayTopicHint = null // e.g. { module: 'PM', count: 6, totalToday: 8 } — used for occasional light callback
+
+  // Builds the debug doc + full pipeline from whatever state exists at the moment it's
+  // called. EVERY answer path (clarify, doc-wizard confirm/gather/drop, daily limit, and
+  // the main answer) passes its own send() through here so no reply is ever emitted
+  // without debug + pipeline attached. Any variable not yet in scope is read off a state
+  // bag with safe fallbacks, so early-return paths (before search/RAG ran) still get a
+  // valid — if sparser — debug object rather than none.
+  const sendDone = (extra = {}, state = {}) => {
+    const bookChunks_    = state.bookChunks     || []
+    const tavilyFiltered_= state.tavilyFiltered || []
+    const relatedLinks_  = state.relatedLinks   || []
+    const openAIText_    = state.openAISearchText || ''
+    const needsSearch_   = state.needsSearch ?? (debugLog.needsSearch ?? false)
+    const intent_        = state.intent || debugLog.intent || extra.docIntent || 'SAP_QA'
+    debugLog.totalMs = debugLog.totalMs || null
+    const debugDoc_ = state.debugDoc || buildDebugDoc(debugLog, intent_)
+    send({
+      ...extra,
+      type: 'done',
+      debugDoc: debugDoc_,
+      sourceInfo: {
+        intent: intent_,
+        routing:        debugLog.routing      || extra.model || 'n/a',
+        bookChunks:     debugLog.bookChunks    || bookChunks_.length || 0,
+        bookSources:    bookChunks_.map(c => `${c.source_book}, p.${c.page_number}`),
+        tavilyRaw:      debugLog.tavilyRaw     || 0,
+        tavilyFiltered: debugLog.tavilyFiltered|| tavilyFiltered_.length || 0,
+        tavilyNotes:    debugLog.tavilyNotes   || 0,
+        openAISources:  debugLog.openAISources || 0,
+        relatedLinks:   relatedLinks_.map(r => ({ title: r.title, url: r.url, source: r.source })),
+        sonnetVerificationSearches: debugLog.sonnetVerificationSearches || 0,
+        needsSearch:    needsSearch_,
+        detectedModule: debugLog.detectedModule || null,
+        totalMs:        debugLog.totalMs || null,
+        pipeline: {
+          bookChunkDetails: bookChunks_.map(c => ({
+            book: c.source_book, page: c.page_number,
+            title: c.lesson_title || '', content: c.content?.slice(0, 400) || '',
+          })),
+          tavilyResults: tavilyFiltered_.map(r => ({
+            source: r.source, title: r.title?.slice(0, 80) || '',
+            url: r.url || '', snippet: r.snippet?.slice(0, 300) || '',
+          })),
+          openAISnippet: openAIText_.slice(0, 500),
+          gptAnswer:     debugLog.rawGptAnswer    || '',
+          claudeAnswer:  debugLog.rawClaudeAnswer || '',
+          mergedAnswer:  debugLog.rawMergedAnswer || '',
+        },
+      },
+    })
+  }
+
+  // Renders the debug document from debugLog alone (no path-local variables), so any
+  // early-return path can produce a complete, correctly-structured doc. The main answer
+  // path populates the same debugLog fields, so both routes render identically.
+  const buildDebugDoc = (dl, intentVal) => [
+    'WANI DEBUG DOCUMENT',
+    `Generated: ${new Date().toISOString()}`,
+    `Total time: ${dl.totalMs || 0}ms`,
+    '═══════════════════════════════════════════════════════════',
+    '',
+    '1. QUESTION',
+    '─────────────────────────────────────────────────────────',
+    dl.question || '(n/a)',
+    '',
+    '2. CLASSIFICATION (Groq)',
+    '─────────────────────────────────────────────────────────',
+    `Intent: ${intentVal} (confidence: ${dl.confidence ?? 'n/a'})`,
+    `Module detected: ${dl.detectedModule || 'none'}`,
+    `needsSearch: ${dl.needsSearch ?? 'n/a'}`,
+    `Routing: ${dl.routing || 'n/a'}`,
+    `Path: ${dl.answerPath || 'main'}`,
+    '',
+    '3. BOOK RAG',
+    '─────────────────────────────────────────────────────────',
+    `Chunks found: ${dl.bookChunks || 0}`,
+    ...(dl.bookChunkList || []).map((c, i) =>
+      `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`),
+    '',
+    '3b. CONSULTANT KNOWLEDGE BASE (wani_knowledge)',
+    '─────────────────────────────────────────────────────────',
+    `Entries matched: ${dl.knowledgeChunks || 0}`,
+    ...(dl.knowledgeList || []).map((k, i) => `[K${i+1}] ${k.module} > ${k.topic} > ${k.object}\n    Finding: ${k.finding}`),
+    '',
+    '4. WEB SEARCH',
+    '─────────────────────────────────────────────────────────',
+    `Query sent: ${dl.searchQuery || dl.question || '(n/a)'}`,
+    `Tavily general: ${dl.tavilyRaw ?? 0} raw → ${dl.tavilyFiltered ?? 0} filtered`,
+    `Tavily community: ${dl.tavilyNotes ?? 0}`,
+    `OpenAI (related links only, not injected): ${dl.openAISources ?? 0}`,
+    ...(dl.tavilyList || []).map((r, i) => `[TG${i+1}] ${r.source} — ${r.title}\n    URL: ${r.url}`),
+    '',
+    '5. SONNET',
+    '─────────────────────────────────────────────────────────',
+    `Verification searches used: ${dl.sonnetVerificationSearches || 0}`,
+    `Models time: ${dl.modelsMs || 0}ms`,
+    '',
+    '7. FINAL OUTPUT TO USER',
+    '─────────────────────────────────────────────────────────',
+    dl.finalAnswer || '(see answer above)',
+  ].filter(l => l !== undefined).join('\n')
 
   try {
     // ── DAILY LIMIT CHECK ──────────────────────────────────────────────────
@@ -1317,7 +1419,8 @@ export default async function handler(req, res) {
           }).length
         }, 0)
         if (todayCount >= 50) {
-          send({ type: 'done', full: `⏳ You've reached your daily limit of 50 messages. Your limit resets at midnight Berlin time.`, messageCount: 50, dailyLimit: 50, isUnlimited: false, deliverableType: 'NONE', model: 'limit' })
+          debugLog.answerPath = 'daily-limit'
+          sendDone({ full: `⏳ You've reached your daily limit of 50 messages. Your limit resets at midnight Berlin time.`, messageCount: 50, dailyLimit: 50, isUnlimited: false, deliverableType: 'NONE', model: 'limit' }, { intent: 'LIMIT' })
           return res.end()
         }
 
@@ -1379,7 +1482,9 @@ export default async function handler(req, res) {
       if (ambiguityClassification.isAmbiguous && ambiguityClassification.clarifyingQuestion) {
         send({ type: 'start', intent: 'CLARIFY' })
         send({ type: 'chunk', text: ambiguityClassification.clarifyingQuestion })
-        send({ type: 'done', full: ambiguityClassification.clarifyingQuestion, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: null, messageCount: 0, dailyLimit: 50, isUnlimited: false })
+        debugLog.answerPath = 'clarify (ambiguity)'
+        debugLog.routing = 'gpt4o-mini (clarify)'
+        sendDone({ full: ambiguityClassification.clarifyingQuestion, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: null, messageCount: 0, dailyLimit: 50, isUnlimited: false }, { intent: 'CLARIFY' })
         return res.end()
       }
     }
@@ -1401,7 +1506,8 @@ export default async function handler(req, res) {
       const confirmMsg = await buildDocConfirmMessage(intent, messages || [])
       send({ type: 'start', intent })
       send({ type: 'chunk', text: confirmMsg })
-      send({ type: 'done', full: confirmMsg, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: 'awaiting_confirm', docIntent: intent, messageCount: 0, dailyLimit: 50, isUnlimited: false })
+      debugLog.answerPath = 'doc-wizard (confirm)'
+      sendDone({ full: confirmMsg, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: 'awaiting_confirm', docIntent: intent, messageCount: 0, dailyLimit: 50, isUnlimited: false }, { intent })
       return res.end()
     }
 
@@ -1410,7 +1516,8 @@ export default async function handler(req, res) {
       const requirementsMsg = await gatherDocRequirements(body.docIntent || intent, messages || [], lastMsg)
       send({ type: 'start', intent })
       send({ type: 'chunk', text: requirementsMsg })
-      send({ type: 'done', full: requirementsMsg, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: 'gathering', docIntent: body.docIntent || intent, messageCount: 0, dailyLimit: 50, isUnlimited: false })
+      debugLog.answerPath = 'doc-wizard (gathering)'
+      sendDone({ full: requirementsMsg, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: 'gathering', docIntent: body.docIntent || intent, messageCount: 0, dailyLimit: 50, isUnlimited: false }, { intent: body.docIntent || intent })
       return res.end()
     }
 
@@ -1419,7 +1526,8 @@ export default async function handler(req, res) {
       const dropMsg = `No problem — let me know what you'd like to discuss.`
       send({ type: 'start', intent: 'GENERAL' })
       send({ type: 'chunk', text: dropMsg })
-      send({ type: 'done', full: dropMsg, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: null, messageCount: 0, dailyLimit: 50, isUnlimited: false })
+      debugLog.answerPath = 'doc-wizard (drop)'
+      sendDone({ full: dropMsg, model: 'gpt4o-mini', deliverableType: 'NONE', docWizardStage: null, messageCount: 0, dailyLimit: 50, isUnlimited: false }, { intent })
       return res.end()
     }
 
@@ -1555,6 +1663,10 @@ export default async function handler(req, res) {
     debugLog.bookChunks     = bookChunks.length
     debugLog.knowledgeChunks = relevantKnowledge.length
     debugLog.searchQuery    = searchQuery
+    // List copies for the shared buildDebugDoc renderer (used by all answer paths)
+    debugLog.bookChunkList  = bookChunks
+    debugLog.knowledgeList  = relevantKnowledge
+    debugLog.tavilyList     = tavilyFiltered
 
     // Pill links always generated from context-aware query
     const googleLinks = buildPillLinks(searchQuery)
@@ -1869,6 +1981,7 @@ export default async function handler(req, res) {
       send({ type: 'error', error: 'Empty response — please try again' })
       return res.end()
     }
+    debugLog.finalAnswer = chatAnswer
 
     // ── STEP 11: Send search links ────────────────────────────────────────
     if (allSearchResults.length > 0) {
