@@ -253,9 +253,15 @@ function SourceInfoPanel({ info, t, dark }) {
     : info.routing?.includes('gpt4o') ? 'GPT-4o'
     : info.routing || 'Claude Sonnet'
 
+  // Total web activity actually performed = Tavily general + Tavily community +
+  // related links (formerly OpenAI). OpenAI text is no longer injected, so its count
+  // moved to relatedLinks; the badge must reflect real search activity, not the
+  // now-always-zero openAISources field.
+  const webSearchCount = (info.tavilyFiltered || 0) + (info.tavilyNotes || 0) + (info.relatedLinks?.length || 0)
+
   const pills = [
     info.bookChunks > 0     && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
-    info.openAISources > 0  && { icon:'🌐', label:`Web search: ${info.openAISources}`, color:'#2563EB' },
+    webSearchCount > 0       && { icon:'🌐', label:`Web search: ${webSearchCount}`, color:'#2563EB' },
     !info.needsSearch        && { icon:'⚡', label:'No search', color:'#6B7280' },
   ].filter(Boolean)
 
@@ -308,10 +314,12 @@ function SourceInfoPanel({ info, t, dark }) {
               <span style={{ color:'#059669' }}>{info.bookSources.join(' · ')}</span>
             </div>
           )}
-          {info.openAISources > 0 && (
+          {webSearchCount > 0 && (
             <div style={{ marginTop:4 }}>
               <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Web search: </span>
-              <span style={{ color:'#2563EB' }}>{info.openAISources} sources</span>
+              <span style={{ color:'#2563EB' }}>
+                {info.tavilyFiltered || 0} Tavily{(info.tavilyNotes ? ` + ${info.tavilyNotes} community` : '')}{(info.relatedLinks?.length ? ` + ${info.relatedLinks.length} related` : '')}
+              </span>
             </div>
           )}
         </div>
@@ -2265,21 +2273,38 @@ export default function Brain({ session }) {
 
       const finalMsgs = [...currentMsgs, assistantMsg]
 
-      // The debug doc + full pipeline detail are diagnostics, not conversation
-      // content. Persisting them bloated the row on every turn until the save
-      // failed — AFTER a complete answer had already streamed. They now live in
-      // memory for the session only; the DB keeps a lean summary.
-      const persistMsgs = finalMsgs.map(m => {
-        const { _debugDoc, ...rest } = m
-        if (!rest._sourceInfo) return rest
-        const { pipeline, bookSources, ...leanSource } = rest._sourceInfo
-        return { ...rest, _sourceInfo: leanSource }
-      })
+      // Debug doc + full pipeline are attached to EVERY answer and persisted, so they
+      // survive reload on every message with no exceptions. The original crash came from
+      // the row growing without bound, so the ONLY thing guarded here is total size: if
+      // the serialized messages would exceed the row budget, the oldest debug-doc blobs
+      // (the largest, most redundant part) are shed oldest-first until it fits — pipeline
+      // and sourceInfo are always kept. In practice this never triggers until a
+      // conversation is very long; short and normal conversations keep everything.
+      const ROW_BUDGET = 3_000_000 // ~3MB, well under Postgres/Supabase row limits
+      let persistMsgs = finalMsgs
+      const size = arr => JSON.stringify(arr).length
+      if (size(persistMsgs) > ROW_BUDGET) {
+        // Shed oldest _debugDoc blobs first (keep pipeline + sourceInfo intact everywhere)
+        persistMsgs = finalMsgs.map(m => ({ ...m }))
+        for (let i = 0; i < persistMsgs.length && size(persistMsgs) > ROW_BUDGET; i++) {
+          if (persistMsgs[i]._debugDoc) {
+            persistMsgs[i] = { ...persistMsgs[i], _debugDoc: '[debug doc trimmed — conversation exceeded row size budget]' }
+          }
+        }
+      }
 
       const convUpdate = { messages: persistMsgs }
       if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
-      await updateConversation(convId, convUpdate)
-      // Local state keeps the full-fidelity messages (incl. debug doc) for this session
+      try {
+        await updateConversation(convId, convUpdate)
+      } catch (e) {
+        // Last-resort fallback: if the save still fails (size or otherwise), retry once
+        // with debug docs stripped so the ANSWER is never lost — pipeline/sourceInfo kept.
+        console.error('Conversation save failed, retrying without debug docs:', e)
+        const lean = finalMsgs.map(m => { const { _debugDoc, ...rest } = m; return rest })
+        try { await updateConversation(convId, { ...convUpdate, messages: lean }) } catch (e2) { console.error('Lean retry also failed:', e2) }
+      }
+      // Local state always keeps full-fidelity messages (incl. debug doc) for this session
       setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,messages:finalMsgs,updated_at:new Date().toISOString()}:c))
       markBusy(convId, false)
       delete abortControllersRef.current[convId]
