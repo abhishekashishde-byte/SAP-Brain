@@ -575,7 +575,18 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
 
   const inlineFormat = (text) => {
     if (!text) return ''
-    return text.split(/(\*\*[^*]+\*\*|`[^`]+`|_[^_]+_|https?:\/\/[^\s)<>\]]+)/g).map((part, i) => {
+    // Handle markdown links [label](url) FIRST — split them out before the bare-URL rule,
+    // otherwise the raw https:// inside a link leaks as visible text (the "se80.co.uk"
+    // spill). A short numeric label like [1] renders as a compact superscript citation.
+    return text.split(/(\[[^\]]*\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|`[^`]+`|_[^_]+_|https?:\/\/[^\s)<>\]]+)/g).map((part, i) => {
+      const mdLink = part.match(/^\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)$/)
+      if (mdLink) {
+        const label = mdLink[1]
+        const isCitation = /^\d+$/.test(label.trim())
+        return <a key={i} href={mdLink[2]} target="_blank" rel="noopener noreferrer" style={ isCitation
+          ? { color:'#4F46E5',textDecoration:'none',fontSize:'0.72em',verticalAlign:'super',fontWeight:600,padding:'0 1px' }
+          : { color:'#4F46E5',textDecoration:'underline',wordBreak:'break-word' } }>{isCitation ? `[${label}]` : label}</a>
+      }
       if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ fontWeight:600,color:t.text }}>{part.slice(2,-2)}</strong>
       if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily:"'IBM Plex Mono',monospace",background:t.codeBg,padding:'2px 6px',borderRadius:4,fontSize:'0.88em',color:t.codeTxt }}>{part.slice(1,-1)}</code>
       if (part.startsWith('_') && part.endsWith('_')) return <span key={i} style={{ fontSize:11,color:t.text4,fontStyle:'italic' }}>{part.slice(1,-1)}</span>
@@ -677,6 +688,16 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
           </div>)
         }
         continue
+      }
+      // Skip orphan reference-style link definitions ([1]: https://…) and bare citation
+      // numbers left on their own line — these are footnote plumbing, not content. Without
+      // this they fell through to the numbered-list rule below and rendered as stray blue
+      // numbers (the "81 / 38 / 1" on their own lines).
+      if (/^\s*\[\d+\]:\s*https?:\/\//.test(line)) { i++; continue }
+      if (/^\s*\d+\s*$/.test(line) && (els.length === 0 || i > 0)) {
+        // Lone number on its own line, only when it's not part of a real numbered step
+        // (real steps have text after the number, caught by the rule below).
+        i++; continue
       }
       if (line.startsWith('# '))      { els.push(<div key={i} style={{ fontWeight:700,fontSize:20,color:t.text,margin:'16px 0 8px',letterSpacing:'-0.01em' }}>{inlineFormat(line.slice(2).replace(/^#+\s*/,''))}</div>); i++; continue }
       if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700,fontSize:18,color:t.text,margin:'14px 0 6px',letterSpacing:'-0.01em' }}>{inlineFormat(line.slice(3).replace(/^#+\s*/,''))}</div>); i++; continue }
@@ -1358,14 +1379,22 @@ function topFor(slot){return slot===0?0:CARD_H+(slot-1)*PEEK}
 function scaleFor(slot){return 1-slot*0.022}
 function opacityFor(slot){return slot===0?1:slot===1?0.45:0}
 
-function TextRoll({ text, style }) {
-  // Rolls each character in with a staggered delay — runs once on mount, then rests.
-  // Pure CSS (letterRoll keyframe), no framer-motion. Spaces are preserved.
+function TextRoll({ text, style, repeat = false, pauseMs = 2000 }) {
+  // Rolls each character in with a staggered delay. If repeat is true, it re-rolls on a
+  // cycle: full roll, then a pause, then roll again. Pure CSS (letterRoll keyframe).
+  const [cycle, setCycle] = useState(0)
+  const chars = Array.from(text)
+  const rollDurationMs = 400 + (chars.length - 1) * 45 // last letter's delay + its duration
+  useEffect(() => {
+    if (!repeat) return
+    const t = setTimeout(() => setCycle(c => c + 1), rollDurationMs + pauseMs)
+    return () => clearTimeout(t)
+  }, [cycle, repeat, rollDurationMs, pauseMs])
   return (
     <span style={style} aria-label={text}>
-      {Array.from(text).map((ch, i) => (
+      {chars.map((ch, i) => (
         <span
-          key={i}
+          key={`${cycle}-${i}`}
           aria-hidden="true"
           style={{
             display: 'inline-block',
@@ -2526,6 +2555,8 @@ export default function Brain({ session }) {
         @keyframes cursorBlink{0%,100%{opacity:1}50%{opacity:0}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes letterRoll{from{opacity:0;transform:translateY(0.5em) rotate(8deg)}to{opacity:1;transform:translateY(0) rotate(0deg)}}
+        @keyframes fabIn{from{opacity:0;transform:scale(0.6) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}
+        @keyframes fabIn{from{opacity:0;transform:scale(0.6)}to{opacity:1;transform:scale(1)}}
         @keyframes blob1{0%,100%{transform:translate(-15%,-15%) scale(1)}50%{transform:translate(20%,15%) scale(1.35)}}
         @keyframes blob2{0%,100%{transform:translate(15%,20%) scale(1.1)}50%{transform:translate(-20%,-10%) scale(1.4)}}
         @keyframes blob3{0%,100%{transform:translate(-5%,10%) scale(1)}50%{transform:translate(10%,-15%) scale(1.2)}}
@@ -2668,11 +2699,11 @@ export default function Brain({ session }) {
         {view==='chat'&&(
           <>
             <div ref={chatScrollRef} onScroll={handleChatScroll} className="chat-messages" style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
-              {/* Reading-progress bar: tracks how far down the current chat the user has scrolled.
-                  Sticky so it stays pinned at the top of the scroll viewport; only visible once
-                  there's something to scroll. */}
-              <div style={{ position:'sticky', top:0, left:0, height:3, marginBottom:-3, zIndex:5, background:'transparent', pointerEvents:'none' }}>
-                <div style={{ height:'100%', width:`${scrollProgress*100}%`, background:'#4F46E5', borderRadius:'0 2px 2px 0', transition:'width 0.08s linear', opacity: scrollProgress>0.001?1:0 }}/>
+              {/* Reading-progress bar: pinned to the very top edge of the chat viewport,
+                  full-width, thin and low-opacity so it reads as a progress indicator
+                  rather than a line through the text. */}
+              <div style={{ position:'sticky', top:0, left:0, right:0, height:2, marginBottom:-2, zIndex:5, background:'transparent', pointerEvents:'none' }}>
+                <div style={{ height:'100%', width:`${scrollProgress*100}%`, background:'#4F46E5', opacity: scrollProgress>0.01?0.5:0, transition:'width 0.1s linear, opacity 0.2s' }}/>
               </div>
               <div style={{ maxWidth:720,margin:'0 auto' }}>
                 {messages.length===0?(
@@ -2686,7 +2717,7 @@ export default function Brain({ session }) {
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'40px 20px' }}>
                     <WaniLogo size={window.innerWidth<768?48:80} dark={dark}/>
                     <div style={{ marginTop:16,marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:40} dark={dark}/></div>
-                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:12,marginBottom:4 }}>Hello, <TextRoll text={profile.name.split(' ')[0]} style={{ display:'inline-block' }}/> 👋</div>)}
+                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:12,marginBottom:4 }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/> 👋</div>)}
                     <p style={{ fontSize:15,color:bgTheme.text2,maxWidth:300,lineHeight:1.7,marginBottom:22,marginTop:8 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
@@ -2793,6 +2824,27 @@ export default function Brain({ session }) {
                   </>
                 )}
               </div>
+            </div>
+
+            {/* Floating action buttons — pinned bottom-right, just above the input.
+                • Scroll-to-bottom: appears only when the user has scrolled up in a long answer.
+                • New chat: always available, thumb-reachable on mobile. */}
+            <div style={{ position:'absolute', right: isMobile?16:28, bottom: isMobile?150:130, display:'flex', flexDirection:'column', gap:12, zIndex:6, pointerEvents:'none' }}>
+              {scrollProgress < 0.92 && messages.some(m=>m.role==='user') && (
+                <button
+                  onClick={()=>{ if(chatScrollRef.current) chatScrollRef.current.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior:'smooth' }) }}
+                  title="Scroll to latest"
+                  style={{ pointerEvents:'auto', width:40, height:40, borderRadius:'50%', border:`1px solid ${t.border}`, background:t.topbar, color:t.text2, cursor:'pointer', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px rgba(0,0,0,0.28)', backdropFilter:'blur(10px)', animation:'fabIn 0.25s ease' }}
+                >↓</button>
+              )}
+              <button
+                onClick={goHome}
+                title="New chat"
+                style={{ pointerEvents:'auto', width:52, height:52, borderRadius:'50%', border:'none', background:'#4F46E5', color:'#fff', cursor:'pointer', fontSize:26, fontWeight:300, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 20px rgba(79,70,229,0.45)', animation:'fabIn 0.3s ease' }}
+                onMouseDown={e=>{ e.currentTarget.style.transform='scale(0.92)' }}
+                onMouseUp={e=>{ e.currentTarget.style.transform='scale(1)' }}
+                onMouseLeave={e=>{ e.currentTarget.style.transform='scale(1)' }}
+              >+</button>
             </div>
 
             {/* Input */}
