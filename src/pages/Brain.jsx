@@ -575,9 +575,12 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
 
   const inlineFormat = (text) => {
     if (!text) return ''
+    // Strip bold markers that WRAP a link: **[label](url)** → [label](url), so the link
+    // rule below can see it. Without this, the bold rule consumed the ** first and dumped
+    // the raw [label](url) as plain text (the un-clickable source lists in the screenshots).
+    text = text.replace(/\*\*(\[[^\]]*\]\(https?:\/\/[^\s)]+\))\*\*/g, '$1')
     // Handle markdown links [label](url) FIRST — split them out before the bare-URL rule,
-    // otherwise the raw https:// inside a link leaks as visible text (the "se80.co.uk"
-    // spill). A short numeric label like [1] renders as a compact superscript citation.
+    // otherwise the raw https:// inside a link leaks as visible text.
     return text.split(/(\[[^\]]*\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|`[^`]+`|_[^_]+_|https?:\/\/[^\s)<>\]]+)/g).map((part, i) => {
       const mdLink = part.match(/^\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)$/)
       if (mdLink) {
@@ -585,7 +588,7 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         const isCitation = /^\d+$/.test(label.trim())
         return <a key={i} href={mdLink[2]} target="_blank" rel="noopener noreferrer" style={ isCitation
           ? { color:'#4F46E5',textDecoration:'none',fontSize:'0.72em',verticalAlign:'super',fontWeight:600,padding:'0 1px' }
-          : { color:'#4F46E5',textDecoration:'underline',wordBreak:'break-word' } }>{isCitation ? `[${label}]` : label}</a>
+          : { color:'#4F46E5',textDecoration:'underline',fontWeight:600,wordBreak:'break-word' } }>{isCitation ? `[${label}]` : label}</a>
       }
       if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ fontWeight:600,color:t.text }}>{part.slice(2,-2)}</strong>
       if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily:"'IBM Plex Mono',monospace",background:t.codeBg,padding:'2px 6px',borderRadius:4,fontSize:'0.88em',color:t.codeTxt }}>{part.slice(1,-1)}</code>
@@ -2699,12 +2702,6 @@ export default function Brain({ session }) {
         {view==='chat'&&(
           <>
             <div ref={chatScrollRef} onScroll={handleChatScroll} className="chat-messages" style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
-              {/* Reading-progress bar: pinned to the very top edge of the chat viewport,
-                  full-width, thin and low-opacity so it reads as a progress indicator
-                  rather than a line through the text. */}
-              <div style={{ position:'sticky', top:0, left:0, right:0, height:2, marginBottom:-2, zIndex:5, background:'transparent', pointerEvents:'none' }}>
-                <div style={{ height:'100%', width:`${scrollProgress*100}%`, background:'#4F46E5', opacity: scrollProgress>0.01?0.5:0, transition:'width 0.1s linear, opacity 0.2s' }}/>
-              </div>
               <div style={{ maxWidth:720,margin:'0 auto' }}>
                 {messages.length===0?(
                   quickLaunchMessages.length > 0 ? (
