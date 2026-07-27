@@ -1971,13 +1971,25 @@ export default function Brain({ session }) {
   // useEffect removed intentionally
 
   useEffect(()=>{
-    window.history.replaceState({ view:'chat' },'')
+    // Seed the initial entry WITH the current conversation if there is one, so returning
+    // to this entry (e.g. after tapping an external link and coming back) doesn't land on
+    // a convId-less state that would blank the screen.
+    window.history.replaceState({ view:'chat', convId: activeConvIdRef.current || null },'')
     const handlePop=(e)=>{
       const state=e.state
-      if(!state||state.view==='home'){ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);window.history.pushState({ view:'chat' },'') }
-      else if(state.view==='topic'){ setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('topic') }
-      else if(state.view==='chat'){ if(state.convId){ setActiveConvId(state.convId);setView('chat') } else { setActiveConvId(null);setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('chat') } }
-      else { setView('chat');window.history.pushState({ view:'chat' },'') }
+      // Guard: if we can't positively resolve a target from history state, do NOT wipe the
+      // active conversation — that caused the blank screen on returning from an external
+      // link. Only change state when the history entry tells us where to go.
+      if(state && state.view==='topic'){ setBrowseModule(state.mod);setBrowseTopic(state.topic);setView('topic') }
+      else if(state && state.view==='chat' && state.convId){ setActiveConvId(state.convId);setView('chat') }
+      else if(state && state.view==='home'){ setView('chat');setActiveConvId(null);setBrowseModule(null);setBrowseTopic(null);setShowSummarise(false);window.history.pushState({ view:'chat', convId:null },'') }
+      else {
+        // Unknown/empty state (common when returning focus from an external tab): keep the
+        // user where they were. Re-assert a chat entry carrying the CURRENT conversation so
+        // forward/back stay consistent, but never clear what's on screen.
+        setView('chat')
+        try { window.history.replaceState({ view:'chat', convId: activeConvIdRef.current || null },'') } catch(_){}
+      }
     }
     window.addEventListener('popstate',handlePop)
     const handleResize=()=>setIsMobile(isMobileWidth())
