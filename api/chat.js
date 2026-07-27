@@ -15,6 +15,51 @@ import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch } from './_shared.
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
+// ── APPROVED SOURCE DOMAINS ───────────────────────────────────────────────────
+// The ONLY domains allowed to appear as links in a final answer. Tavily lanes are
+// already restricted to these via include_domains; this list also backstops the final
+// answer so that (a) any non-authentic URL a search lane slips through and (b) any URL
+// Sonnet writes from its own memory get stripped before they reach the user. SAP Notes /
+// KBAs are constructible on me.sap.com and covered here.
+const APPROVED_SAP_DOMAINS = [
+  'community.sap.com',
+  'blogs.sap.com',
+  'help.sap.com',
+  'me.sap.com',
+  'support.sap.com',
+  'launchpad.support.sap.com',
+  'fioriappslibrary.hana.ondemand.com',
+  'api.sap.com',
+  'learning.sap.com',
+]
+
+function isApprovedUrl(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    return APPROVED_SAP_DOMAINS.some(d => host === d || host.endsWith('.' + d))
+  } catch { return false }
+}
+
+// Strip any markdown link or bare URL in the answer whose host isn't approved. For a
+// markdown link [label](bad-url) we keep the label text but drop the link, so the answer
+// still reads naturally — it just won't hand the user a non-authentic or invented source.
+function stripUnapprovedLinks(text) {
+  if (!text) return { text, removed: [] }
+  const removed = []
+  // Markdown links (incl. bold-wrapped): keep label, drop link if host not approved
+  let out = text.replace(/(\*\*)?\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)(\*\*)?/g, (m, b1, label, url, b2) => {
+    if (isApprovedUrl(url)) return m
+    removed.push(url)
+    return (b1 || '') + label + (b2 || '') // keep the text, drop the link
+  })
+  // Bare URLs on non-approved domains → remove entirely
+  out = out.replace(/https?:\/\/[^\s)<>\]]+/g, (u) => {
+    if (isApprovedUrl(u)) return u
+    removed.push(u); return ''
+  })
+  return { text: out, removed }
+}
+
 // ── SUPABASE CLIENT ───────────────────────────────────────────────────────────
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -1588,7 +1633,13 @@ export default async function handler(req, res) {
     if (!isDeliverable && needsSearch) {
       tavilyResultsPromise      = searchQueryPromise.then(q => tavilySearch(q, intent)).catch(() => [])
       tavilyNotesResultsPromise = searchQueryPromise.then(q => tavilySearchNotes(q)).catch(() => [])
-      openAIResultPromise       = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)
+      // OpenAI search lane DISABLED. Measured across real traffic: 0 of 23 returned links
+      // were ever cited, it was the most expensive lane, and it was the ONLY source of
+      // non-authentic domains (unogeeks.com, ageistechnova.com, myscmhelp.in) — which then
+      // got laundered into answers as "solid resources". Tavily lanes are domain-restricted
+      // to authentic SAP sources; those now stand alone. Re-enable only behind a domain
+      // allow-list if ever needed.
+      // openAIResultPromise = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)
     }
 
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
@@ -1989,6 +2040,17 @@ export default async function handler(req, res) {
     if (!chatAnswer?.trim()) {
       send({ type: 'error', error: 'Empty response — please try again' })
       return res.end()
+    }
+    // Backstop: strip any link whose host isn't an approved SAP domain — catches both a
+    // non-authentic URL a lane slipped through and any URL Sonnet wrote from memory. The
+    // streamed copy already reached the user, but the primary defense is upstream (only
+    // approved-domain links are in the grounding, and the prompt forbids inventing URLs);
+    // this guarantees the SAVED/reloaded answer and any generated doc are clean.
+    const linkCheck = stripUnapprovedLinks(chatAnswer)
+    if (linkCheck.removed.length) {
+      console.log('[link-backstop] stripped non-approved URLs:', linkCheck.removed.join(', '))
+      debugLog.strippedLinks = linkCheck.removed
+      chatAnswer = linkCheck.text
     }
     debugLog.finalAnswer = chatAnswer
 
