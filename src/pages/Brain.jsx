@@ -453,6 +453,33 @@ function AnswerPipeline({ pipeline, dark }) {
   )
 }
 
+function CardImage({ b64, t }) {
+  const [open, setOpen] = useState(false)
+  const src = `data:image/png;base64,${b64}`
+  return (
+    <div style={{ marginTop:10 }}>
+      <div
+        onClick={()=>setOpen(o=>!o)}
+        style={{ display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none',
+          background:t.inputBg,border:`1px solid ${t.border2}`,borderRadius:10,padding:'8px 13px',
+          fontSize:13,fontWeight:600,color:t.text }}
+      >
+        <span style={{ transform: open?'rotate(90deg)':'none', transition:'transform .2s' }}>▶</span>
+        🖼️ {open ? 'Hide visual note' : 'View as visual note'}
+      </div>
+      {open && (
+        <div style={{ marginTop:10 }}>
+          <img src={src} alt="SAP study note" style={{ maxWidth:'100%',borderRadius:10,border:`1px solid ${t.border}`,display:'block' }} />
+          <a href={src} download="wani-note.png"
+            style={{ display:'inline-block',marginTop:8,fontSize:12.5,color:'#4F46E5',textDecoration:'none',fontWeight:600 }}>
+            ↓ Download note
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FurtherReading({ links, t, dark }) {
   if (!links || links.length === 0) return null
 
@@ -830,6 +857,9 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
               {renderMarkdown(msg._dualText)}
             </div>
           </div>
+        )}
+        {!isStreaming && msg._cardImage && (
+          <CardImage b64={msg._cardImage} t={t} />
         )}
         {!isStreaming && msg._links?.length > 0 && (
           <FurtherReading links={msg._links} t={t} dark={dark} />
@@ -2125,6 +2155,7 @@ export default function Brain({ session }) {
     let localPrimaryLabel = ''
     let localSourceInfo = null
     let localDebugDoc = null
+    let localCardImage = null
 
     let convId = activeConvId
     let currentMod = activeConv?.module||browseModule
@@ -2231,6 +2262,10 @@ export default function Brain({ session }) {
               searchResults = evt.results || []
             } else if (evt.type === 'further_reading') {
               furtherReadingLinks = evt.links || []
+            } else if (evt.type === 'card_image') {
+              // Study-card image (feature-flagged backend). Additive — shown alongside the
+              // text answer, never replacing it. Nothing arrives when the flag is off.
+              localCardImage = evt.imageBase64 || null
             } else if (evt.type === 'done') {
                               // Handle doc wizard stage transitions
                               if (evt.docWizardStage) {
@@ -2353,6 +2388,7 @@ export default function Brain({ session }) {
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
         ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
+        ...(localCardImage ? { _cardImage: localCardImage } : {}),
       }
 
       const finalMsgs = [...currentMsgs, assistantMsg]
