@@ -264,3 +264,86 @@ export async function callOpenAISearch(question) {
     return []
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STUDY-CARD IMAGE GENERATION  (feature-flagged, fully self-contained)
+//
+// REMOVAL: this feature is dormant unless env WANI_CARD_IMAGES === 'on'. To remove
+// it entirely, delete this block and the single call site in chat.js (search
+// "maybeGenerateCardImage"). It has no other dependencies and touches nothing else.
+//
+// SAFETY: the image is generated FROM the already-verified answer text and is only
+// ever shown ALONGSIDE that text — never as the sole source of a field/T-code. If a
+// field couldn't be verified upstream it is passed through with its ⚠ marker intact,
+// so the prompt is instructed to render it as uncertain rather than confident.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Rough per-image price ($) by model+quality, for cost logging. Update if pricing moves.
+const CARD_IMAGE_PRICE_USD = { 'gpt-image-1': { low: 0.02, medium: 0.07, high: 0.19 } }
+
+export function cardImagesEnabled() {
+  return (process.env.WANI_CARD_IMAGES || '').toLowerCase() === 'on'
+}
+
+// Decide whether THIS answer should get a card image.
+// Rules (agreed): explicit user request always wins; otherwise only a fresh
+// explanatory/troubleshooting answer (NOT a follow-up) qualifies. Everything else = no image.
+export function shouldGenerateCard(classification, intent) {
+  if (!cardImagesEnabled()) return false
+  if (!classification) return false
+  if (classification.wantsVisual === true) return true          // explicit ask — honor it
+  if (classification.isFollowUp === true) return false          // drill-downs stay text-only
+  const explanatoryIntents = new Set([
+    'PROCESS_QA', 'ERROR_ANALYSIS', 'PROBLEM_ANALYSIS', 'TEACH_ME', 'BEST_PRACTICES', 'CUSTOMIZING', 'SAP_QA',
+  ])
+  const troubleshoot = classification.isTroubleshoot === true
+  return troubleshoot || explanatoryIntents.has(intent)
+}
+
+// Generate the study-card image from verified answer text. Returns
+// { imageBase64, costUsd, model, quality } or null on any failure (never throws —
+// the text answer must be unaffected whether this succeeds or fails).
+export async function maybeGenerateCardImage({ answerText, question, module, quality = 'medium' }) {
+  try {
+    if (!cardImagesEnabled()) return null
+    const key = process.env.OPENAI_API_KEY
+    if (!key || !answerText) return null
+
+    const model = 'gpt-image-1'
+    const prompt = [
+      'Create a single hand-drawn study-notes style infographic on a clean off-white notebook page,',
+      'in the style of a consultant\'s marker-and-pen study sheet: coloured section headings, numbered',
+      'boxes, simple hand-drawn icons (book, gear, magnifier, clipboard, target, lightbulb), highlighter',
+      'marks on key phrases, and a clear top title. It must fit one portrait A4 sheet — compact, dense, readable.',
+      '',
+      'Render EXACTLY the SAP content below. Do NOT invent or alter any SAP transaction code, table name,',
+      'field name, or SAP Note number — reproduce them verbatim as written. If any identifier is marked with',
+      'a "⚠" or the word "(unverified)", render it visibly as uncertain (e.g. a small "?" or dashed underline),',
+      'do not present it as confirmed.',
+      '',
+      'Put a small footer in the bottom-right corner reading: "Wani · ask-wani.com".',
+      '',
+      module ? `SAP module: ${module}` : '',
+      '',
+      'CONTENT (verbatim):',
+      answerText.slice(0, 3500),
+    ].filter(Boolean).join('\n')
+
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model, prompt, size: '1024x1536', quality, n: 1 }),
+    })
+    if (!res.ok) { console.error('[card-image] API error', res.status, (await res.text()).slice(0, 200)); return null }
+    const data = await res.json()
+    const b64 = data?.data?.[0]?.b64_json
+    if (!b64) { console.error('[card-image] no image in response'); return null }
+
+    const costUsd = (CARD_IMAGE_PRICE_USD[model]?.[quality]) ?? 0.07
+    console.log(`[card-image] generated · model=${model} quality=${quality} ~$${costUsd}`)
+    return { imageBase64: b64, costUsd, model, quality }
+  } catch (err) {
+    console.error('[card-image] exception (answer unaffected):', err.message)
+    return null
+  }
+}
