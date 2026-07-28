@@ -264,3 +264,128 @@ export async function callOpenAISearch(question) {
     return []
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISUAL ROUTING — single-call structured-visual decision for Wani answers.
+// Sonnet decides format + fills data as part of the SAME streamed answer — no
+// separate classifier call, no hardcoded gate. Uses the same trailing-marker
+// convention as WANI_FS_COMPLETE / WANI_PPT_COMPLETE elsewhere in chat.js.
+//
+// No marker in the answer == format is implicitly 'plain_text'. That's the
+// expected majority case — nothing to parse, nothing changes.
+// ─────────────────────────────────────────────────────────────────────────────
+export const VISUAL_MARKER_START = 'WANI_VISUAL_START'
+export const VISUAL_MARKER_END   = 'WANI_VISUAL_END'
+
+export const VISUAL_FORMATS = [
+  'process_flow',
+  'options_comparison',
+  'troubleshooting',
+  'concept_explainer',
+]
+
+export const VISUAL_ROUTING_PROMPT = `
+
+VISUAL FORMAT DECISION:
+After writing your answer, decide whether structured visual formatting would
+materially improve a consultant's understanding of THIS specific answer.
+Plain text is valid and should be preferred by default — most answers,
+including simple lookups, conversational replies, and nuanced explanations
+that don't reduce cleanly into steps/options/causes, should stay plain text.
+Do not select a visual template unless the visual structure clearly earns its
+place. Never pick a template because one exists — an unhelpful visual is
+worse than none.
+
+If (and only if) a template genuinely fits, append this block AFTER your
+complete answer, on new lines, with nothing after it:
+
+${VISUAL_MARKER_START}
+{"format":"<one of: process_flow | options_comparison | troubleshooting | concept_explainer>","data":{...}}
+${VISUAL_MARKER_END}
+
+Format guide — pick at most one:
+- process_flow: the answer explains how something works end-to-end (a
+  sequence of steps/stages). Use for "how does X work" / "walk me through X".
+- options_comparison: the answer weighs 2-4 valid approaches with a
+  recommendation. Use for "which approach should I use" / trade-off questions.
+- troubleshooting: the answer diagnoses why something isn't working, with
+  multiple candidate causes and checks. Use for "why isn't X happening/showing".
+- concept_explainer: the answer explains what something IS conceptually,
+  without a flow or diagnosis. Use sparingly — only for genuinely broad
+  conceptual questions, never as a catch-all for "answer doesn't fit elsewhere".
+
+Data shapes (fields you don't have content for: omit the whole key, don't
+send empty placeholders):
+
+process_flow.data = {
+  "title": "short title",
+  "steps": [ { "title": "...", "description": "..." } ]  // 3-6 steps
+}
+
+options_comparison.data = {
+  "title": "short title",
+  "recommendation": { "preferredOption": "A|B|C label", "reason": "one sentence" },
+  "options": [
+    { "id": "A", "name": "...", "bestWhen": "...", "pros": ["..."], "cons": ["..."], "recommended": false }
+  ],  // 2-4 options; exactly one may have "recommended": true
+  "decisionMatrix": {  // OPTIONAL — only if you have real comparable criteria
+    "criteria": ["Implementation speed", "..."],
+    "rows": { "A": ["High", "..."], "B": ["Medium", "..."] }
+  }
+}
+
+troubleshooting.data = {
+  "title": "short title",
+  "issueSummary": "one-sentence framing of the symptom",
+  "checkFirst": "the single cheapest/most-likely check to do before anything else",
+  "causes": [
+    { "id": "1", "title": "short cause name", "description": "...", "check": "how to verify this cause" }
+  ]  // 2-5 causes, ordered cheapest-to-verify first
+}
+
+concept_explainer.data = {
+  "title": "short title",
+  "coreConcept": "one-paragraph plain-language answer to 'what is this'",
+  "concepts": [ { "title": "...", "description": "..." } ]  // 2-3 max — this
+    // format must stay lightweight; it is explicitly NOT a poster layout.
+}
+
+Rules for the JSON:
+- Must be valid JSON, single line or pretty-printed, no trailing commas.
+- Never restate technical objects (T-codes, tables, BAdIs) in the visual data
+  that weren't already grounded/verified in your written answer above — the
+  same accuracy rules apply here, the visual is a rendering of the same
+  verified content, not a second, less careful pass.
+- If you're not confident structuring the answer this way is clearly better
+  than plain text, don't emit the block at all.`
+
+// Call this on fullAnswer in chat.js STEP 10, before building chatAnswer.
+// Fails closed: any parse error, unknown format, or malformed JSON results in
+// visualFormat: null and the ORIGINAL text returned untouched — a broken
+// visual block must never surface as broken text or crash the answer.
+export function extractVisualBlock(fullAnswer) {
+  if (!fullAnswer || !fullAnswer.includes(VISUAL_MARKER_START)) {
+    return { cleanText: fullAnswer, visualFormat: null, visualData: null }
+  }
+
+  const startIdx = fullAnswer.indexOf(VISUAL_MARKER_START)
+  const endIdx   = fullAnswer.indexOf(VISUAL_MARKER_END)
+
+  if (endIdx === -1 || endIdx < startIdx) {
+    return { cleanText: fullAnswer.slice(0, startIdx).trim(), visualFormat: null, visualData: null }
+  }
+
+  const cleanText = fullAnswer.slice(0, startIdx).trim()
+  const jsonBlock = fullAnswer.slice(startIdx + VISUAL_MARKER_START.length, endIdx).trim()
+
+  try {
+    const parsed = JSON.parse(jsonBlock)
+    if (!parsed.format || !VISUAL_FORMATS.includes(parsed.format) || !parsed.data) {
+      return { cleanText, visualFormat: null, visualData: null }
+    }
+    return { cleanText, visualFormat: parsed.format, visualData: parsed.data }
+  } catch (e) {
+    console.error('[VISUAL BLOCK] JSON parse failed:', e.message)
+    return { cleanText, visualFormat: null, visualData: null }
+  }
+}
