@@ -11,7 +11,7 @@
 //   OpenAI search  → SAP Notes + broader official docs
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, shouldGenerateCard, maybeGenerateCardImage, cardImagesEnabled } from './_shared.js'
+import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
@@ -117,12 +117,10 @@ isCode: true if ABAP keywords present
 isError: true if error text, dump, ST22 present
 isCorrection: true if user is correcting previous answer
 needsSearch: true if question needs live/specific data verification
-wantsVisual: true ONLY if the user explicitly asks for a graphic/diagram/visual/image/note/card (e.g. "make a visual", "as a diagram", "give me a note", "draw this", "show it as an image"). Do NOT infer it from topic — only a clear explicit request.
-isFollowUp: true if this message is a follow-up, drill-down, or refinement of the immediately preceding topic rather than a fresh new question/topic. A short question that only makes sense given the previous answer ("and for maintenance orders?", "what about setup times?", "why is that?") is a follow-up. A self-contained new question introducing a new topic is NOT a follow-up, even if it's not the first message.
 
 Question: "${question.slice(0, 500)}"
 
-{"intent":"SAP_QA","confidence":0.9,"secondaryIntent":null,"isCode":false,"isError":false,"isCorrection":false,"needsSearch":false,"wantsVisual":false,"isFollowUp":false}`
+{"intent":"SAP_QA","confidence":0.9,"secondaryIntent":null,"isCode":false,"isError":false,"isCorrection":false,"needsSearch":false}`
         }]
       })
     })
@@ -248,8 +246,6 @@ Question: "${question.slice(0, 500)}"
       isTroubleshoot, isVersionSpecific,
       isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isExplicitSearchRequest,
       hasTabularSignal, hasOverloadedTermSignal,
-      wantsVisual: result.wantsVisual === true,
-      isFollowUp: result.isFollowUp === true,
     }
   } catch {
     return {
@@ -259,7 +255,6 @@ Question: "${question.slice(0, 500)}"
       isTroubleshoot: false, isVersionSpecific: false,
       isBapiSearch: false, isExitSearch: false, isNoteSearch: false, isErrorSearch: false, isExplicitSearchRequest: false,
       hasTabularSignal: false, hasOverloadedTermSignal: false,
-      wantsVisual: false, isFollowUp: false,
     }
   }
 }
@@ -1449,7 +1444,6 @@ export default async function handler(req, res) {
     '─────────────────────────────────────────────────────────',
     `Verification searches used: ${dl.sonnetVerificationSearches || 0}`,
     `Models time: ${dl.modelsMs || 0}ms`,
-    ...(dl.cardImageCostUsd != null ? [`Study-card image: ${dl.cardImageModel || 'gpt-image-1'} · ~$${dl.cardImageCostUsd}`] : []),
     '',
     '7. FINAL OUTPUT TO USER',
     '─────────────────────────────────────────────────────────',
@@ -2063,28 +2057,6 @@ export default async function handler(req, res) {
     // ── STEP 11: Send search links ────────────────────────────────────────
     if (allSearchResults.length > 0) {
       send({ type: 'search_results', results: allSearchResults })
-    }
-
-    // ── STEP 11b: STUDY-CARD IMAGE (feature-flagged, additive, non-blocking) ──
-    // Dormant unless WANI_CARD_IMAGES=on. Fires only for a fresh explanatory/
-    // troubleshooting answer or an explicit user request — never on follow-ups.
-    // Generated from the already-verified chatAnswer; the text answer is unaffected
-    // whether this succeeds or fails. To remove the feature: delete this block and the
-    // helpers in _shared.js (search "maybeGenerateCardImage").
-    if (cardImagesEnabled() && shouldGenerateCard(classification, intent)) {
-      try {
-        const card = await maybeGenerateCardImage({
-          answerText: chatAnswer,
-          question: lastMsg,
-          module: debugLog.detectedModule || null,
-          quality: 'medium',
-        })
-        if (card?.imageBase64) {
-          debugLog.cardImageCostUsd = card.costUsd
-          debugLog.cardImageModel = card.model
-          send({ type: 'card_image', imageBase64: card.imageBase64, costUsd: card.costUsd })
-        }
-      } catch (e) { console.error('[card-image] trigger failed (answer unaffected):', e.message) }
     }
 
     const isSubstantialAnswer = /\b(T-code|SPRO|table|BAdI|BAPI|transaction|configuration|SAP|S\/4HANA|ABAP|Fiori|order|material|routing|BOM|settlement|movement|notification|equipment)\b/i.test(fullAnswer || '')
