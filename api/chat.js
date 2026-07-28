@@ -11,7 +11,7 @@
 //   OpenAI search  → SAP Notes + broader official docs
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch } from './_shared.js'
+import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, VISUAL_ROUTING_PROMPT, extractVisualBlock } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
@@ -1761,6 +1761,7 @@ export default async function handler(req, res) {
 - Never explain what a T-code is. Never add generic SAP background.
 - The non-obvious insight is worth 10x more than the obvious step
 - If you are uncertain about a T-code or technical term — say "verify in your system" rather than guessing`
+    if (SHORT_INTENTS.has(intent))  systemPrompt += VISUAL_ROUTING_PROMPT
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable. Be thorough and complete all sections.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nNever invent SAP T-codes, table names, BAdI names, or Fiori app IDs. Write "verify in your system" when uncertain.`
 
@@ -2024,6 +2025,12 @@ export default async function handler(req, res) {
     const pptComplete = fullAnswer.includes('WANI_PPT_COMPLETE') || (intent === 'WORKSHOP_PPT' && slideBlockCount >= 5)
     const cleanPPTAnswer = fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim()
 
+    // Visual routing block — only relevant for the plain-answer path (fsComplete/
+    // pptComplete branches below produce their own fixed-text confirmation and
+    // never carry a visual). Fails closed to plain text on any parse issue.
+    const { cleanText: visualCleanText, visualFormat, visualData } = extractVisualBlock(cleanAnswer)
+    debugLog.visualFormat = visualFormat || 'plain_text'
+
     let chatAnswer
     if (fsComplete) {
       const fsTitleMatch = cleanAnswer.match(/FS_TITLE:\s*(.+)/i)
@@ -2034,7 +2041,7 @@ export default async function handler(req, res) {
       const slideCount = (cleanPPTAnswer.match(/---SLIDE \d+---/g) || []).length
       chatAnswer = `✅ **Workshop Presentation generated — ${slideCount} slides**\n\n📊 Your PowerPoint file has been downloaded automatically.\n\n_If the download didn't start, use the button below to download again._`
     } else {
-      chatAnswer = cleanAnswer
+      chatAnswer = visualCleanText
     }
 
     if (!chatAnswer?.trim()) {
@@ -2249,6 +2256,8 @@ export default async function handler(req, res) {
       isUnlimited: UNLIMITED_EMAILS.includes(userEmail || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
+      visualFormat: (!fsComplete && !pptComplete) ? (visualFormat || null) : null,
+      visualData:   (!fsComplete && !pptComplete) ? (visualData   || null) : null,
       debugDoc,
       sourceInfo: {
         intent,
