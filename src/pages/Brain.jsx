@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { TOPICS, MODULE_META, STARTERS, SUMMARISE_THRESHOLD } from '../constants'
 import { WaniLogo, WaniWordmark } from './Login.jsx'
 import { useTheme } from '../App.jsx'
+import AnswerVisual from '../components/visuals/AnswerVisual.jsx'
 import {
   supabase, signOut,
   loadConversations, createConversation, updateConversation, deleteConversation,
@@ -830,6 +831,9 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
               {renderMarkdown(msg._dualText)}
             </div>
           </div>
+        )}
+        {!isStreaming && msg._visualFormat && (
+          <AnswerVisual visualFormat={msg._visualFormat} visualData={msg._visualData} />
         )}
         {!isStreaming && msg._links?.length > 0 && (
           <FurtherReading links={msg._links} t={t} dark={dark} />
@@ -2140,6 +2144,8 @@ export default function Brain({ session }) {
     let localPrimaryLabel = ''
     let localSourceInfo = null
     let localDebugDoc = null
+    let localVisualFormat = null
+    let localVisualData = null
 
     let convId = activeConvId
     let currentMod = activeConv?.module||browseModule
@@ -2274,6 +2280,7 @@ export default function Brain({ session }) {
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
               if (evt.sourceInfo) localSourceInfo = evt.sourceInfo
               if (evt.debugDoc)    localDebugDoc   = evt.debugDoc
+              if (evt.visualFormat) { localVisualFormat = evt.visualFormat; localVisualData = evt.visualData }
               if (evt.isCorrection) {
                 setPendingCorrection({
                   userMsg: currentMsgs[currentMsgs.length - 1]?.content || '',
@@ -2373,6 +2380,7 @@ export default function Brain({ session }) {
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
         ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
+        ...(localVisualFormat ? { _visualFormat: localVisualFormat, _visualData: localVisualData } : {}),
       }
 
       const finalMsgs = [...currentMsgs, assistantMsg]
