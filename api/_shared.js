@@ -309,24 +309,53 @@ export async function maybeGenerateCardImage({ answerText, question, module, qua
     const key = process.env.OPENAI_API_KEY
     if (!key || !answerText) return null
 
+    // STEP 1 — Condense the full answer into a compact "jist" for the card. Sending the
+    // whole essay made the card dense and unreadable; the card should carry only the key
+    // blocks. A cheap model turns the answer into short titled points, preserving SAP
+    // identifiers verbatim. Falls back to a trimmed answer if summarization fails.
+    let jist = answerText.slice(0, 1500)
+    try {
+      const sres = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini', temperature: 0, max_tokens: 500,
+          messages: [{ role: 'user', content:
+`Condense this SAP answer into a COMPACT study-card outline. Keep it SHORT — a card, not an essay.
+Rules: preserve every SAP transaction code, table, field name and Note number EXACTLY (do not alter or invent any). Use these blocks where they apply, each just a few words:
+- TITLE: (short)
+- WHY: (one line)
+- CHECKS: (numbered, each: short label + the T-code/field, one line)
+- FIX / WORKAROUND: (one line)
+- TAKEAWAY: (one line)
+Return plain text only, no markdown.
+
+ANSWER:
+${answerText.slice(0, 3000)}` }],
+        }),
+      })
+      if (sres.ok) {
+        const sd = await sres.json()
+        const out = sd?.choices?.[0]?.message?.content?.trim()
+        if (out) jist = out
+      }
+    } catch (e) { console.error('[card-image] jist step failed, using trimmed answer:', e.message) }
+
+    // STEP 2 — Generate the hand-drawn card from the JIST (not the full essay).
     const model = 'gpt-image-1'
     const prompt = [
-      'Create a single hand-drawn study-notes style infographic on a clean off-white notebook page,',
-      'in the style of a consultant\'s marker-and-pen study sheet: coloured section headings, numbered',
-      'boxes, simple hand-drawn icons (book, gear, magnifier, clipboard, target, lightbulb), highlighter',
-      'marks on key phrases, and a clear top title. It must fit one portrait A4 sheet — compact, dense, readable.',
+      'A hand-drawn study-notes infographic on a clean off-white notebook page, portrait A4, neat consultant marker-and-pen style: coloured section boxes, numbered circles, simple hand-drawn icons (book, gear, magnifier, clipboard, flag, target, lightbulb, star), a clear large title, and highlighter marks on a few key phrases. Compact and well-spaced — fits one sheet.',
       '',
-      'Render EXACTLY the SAP content below. Do NOT invent or alter any SAP transaction code, table name,',
-      'field name, or SAP Note number — reproduce them verbatim as written. If any identifier is marked with',
-      'a "⚠" or the word "(unverified)", render it visibly as uncertain (e.g. a small "?" or dashed underline),',
-      'do not present it as confirmed.',
+      'CRITICAL — TEXT LEGIBILITY: every SAP code, transaction, table and field name must be printed in clear, correctly-spelled BLOCK CAPITALS, treated as exact labels (not decorative script). Spell each one EXACTLY as written below. Do NOT invent, alter, translate, or add any SAP term or word. Keep labels short and isolated so they render cleanly.',
       '',
-      'Put a small footer in the bottom-right corner reading: "Wani · ask-wani.com".',
+      'If any identifier is marked "⚠" or "(unverified)", show it with a small "?" so it does not look confirmed.',
+      '',
+      'Bottom-right footer, in a small CLEAN PRINTED font (not handwritten): "© Wani AI".',
       '',
       module ? `SAP module: ${module}` : '',
       '',
-      'CONTENT (verbatim):',
-      answerText.slice(0, 3500),
+      'CARD CONTENT (render exactly this, laid out as titled coloured sections):',
+      jist,
     ].filter(Boolean).join('\n')
 
     const res = await fetch('https://api.openai.com/v1/images/generations', {
