@@ -831,10 +831,36 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         <WaniLogo size={26} dark={dark}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
-        <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
-          {renderMarkdown(content)}
-          {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
-        </div>
+        {(() => {
+          // Reading hierarchy: when a visual note exists, show a short intro (first
+          // paragraph) FIRST, then the note, then the rest of the answer. The card carries
+          // the gist; the full text below is the fallback for anyone who needs more.
+          // Falls back to the normal single-block render when there's no card.
+          const hasCard = !isStreaming && msg._cardImage
+          if (!hasCard) {
+            return (
+              <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
+                {renderMarkdown(content)}
+                {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
+              </div>
+            )
+          }
+          const nl = content.indexOf('\n\n')
+          const intro = nl > 0 ? content.slice(0, nl) : content
+          const rest = nl > 0 ? content.slice(nl + 2) : ''
+          return (
+            <>
+              <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>{renderMarkdown(intro)}</div>
+              <CardImage b64={msg._cardImage} t={t} />
+              {rest && (
+                <details style={{ marginTop:12 }}>
+                  <summary style={{ cursor:'pointer',fontSize:13,fontWeight:600,color:t.text4,userSelect:'none' }}>Read the full explanation</summary>
+                  <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word',marginTop:8 }}>{renderMarkdown(rest)}</div>
+                </details>
+              )}
+            </>
+          )
+        })()}
         {!isStreaming && <ActionBar/>}
 
         {!isStreaming && msg._dualText && (
@@ -846,9 +872,6 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
               {renderMarkdown(msg._dualText)}
             </div>
           </div>
-        )}
-        {!isStreaming && msg._cardImage && (
-          <CardImage b64={msg._cardImage} t={t} />
         )}
         {!isStreaming && msg._links?.length > 0 && (
           <FurtherReading links={msg._links} t={t} dark={dark} />
