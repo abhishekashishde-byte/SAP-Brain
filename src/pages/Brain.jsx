@@ -454,28 +454,17 @@ function AnswerPipeline({ pipeline, dark }) {
 }
 
 function CardImage({ b64, t }) {
-  const [open, setOpen] = useState(false)
   const src = `data:image/png;base64,${b64}`
   return (
-    <div style={{ marginTop:10 }}>
-      <div
-        onClick={()=>setOpen(o=>!o)}
-        style={{ display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer',userSelect:'none',
-          background:t.inputBg,border:`1px solid ${t.border2}`,borderRadius:10,padding:'8px 13px',
-          fontSize:13,fontWeight:600,color:t.text }}
-      >
-        <span style={{ transform: open?'rotate(90deg)':'none', transition:'transform .2s' }}>▶</span>
-        🖼️ {open ? 'Hide visual note' : 'View as visual note'}
+    <div style={{ marginTop:12 }}>
+      <div style={{ fontSize:12, fontWeight:600, color:t.text4, marginBottom:6, display:'flex', alignItems:'center', gap:6 }}>
+        🖼️ Visual note
       </div>
-      {open && (
-        <div style={{ marginTop:10 }}>
-          <img src={src} alt="SAP study note" style={{ maxWidth:'100%',borderRadius:10,border:`1px solid ${t.border}`,display:'block' }} />
-          <a href={src} download="wani-note.png"
-            style={{ display:'inline-block',marginTop:8,fontSize:12.5,color:'#4F46E5',textDecoration:'none',fontWeight:600 }}>
-            ↓ Download note
-          </a>
-        </div>
-      )}
+      <img src={src} alt="SAP study note" style={{ maxWidth:'100%',borderRadius:10,border:`1px solid ${t.border}`,display:'block' }} />
+      <a href={src} download="wani-note.png"
+        style={{ display:'inline-block',marginTop:8,fontSize:12.5,color:'#4F46E5',textDecoration:'none',fontWeight:600 }}>
+        ↓ Download note
+      </a>
     </div>
   )
 }
