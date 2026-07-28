@@ -453,22 +453,6 @@ function AnswerPipeline({ pipeline, dark }) {
   )
 }
 
-function CardImage({ b64, t }) {
-  const src = `data:image/png;base64,${b64}`
-  return (
-    <div style={{ marginTop:12 }}>
-      <div style={{ fontSize:12, fontWeight:600, color:t.text4, marginBottom:6, display:'flex', alignItems:'center', gap:6 }}>
-        🖼️ Visual note
-      </div>
-      <img src={src} alt="SAP study note" style={{ maxWidth:'100%',borderRadius:10,border:`1px solid ${t.border}`,display:'block' }} />
-      <a href={src} download="wani-note.png"
-        style={{ display:'inline-block',marginTop:8,fontSize:12.5,color:'#4F46E5',textDecoration:'none',fontWeight:600 }}>
-        ↓ Download note
-      </a>
-    </div>
-  )
-}
-
 function FurtherReading({ links, t, dark }) {
   if (!links || links.length === 0) return null
 
@@ -831,36 +815,10 @@ function MessageBubble({ msg, isStreaming, streamingText, t, dark, userInitial, 
         <WaniLogo size={26} dark={dark}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
-        {(() => {
-          // Reading hierarchy: when a visual note exists, show a short intro (first
-          // paragraph) FIRST, then the note, then the rest of the answer. The card carries
-          // the gist; the full text below is the fallback for anyone who needs more.
-          // Falls back to the normal single-block render when there's no card.
-          const hasCard = !isStreaming && msg._cardImage
-          if (!hasCard) {
-            return (
-              <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
-                {renderMarkdown(content)}
-                {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
-              </div>
-            )
-          }
-          const nl = content.indexOf('\n\n')
-          const intro = nl > 0 ? content.slice(0, nl) : content
-          const rest = nl > 0 ? content.slice(nl + 2) : ''
-          return (
-            <>
-              <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>{renderMarkdown(intro)}</div>
-              <CardImage b64={msg._cardImage} t={t} />
-              {rest && (
-                <details style={{ marginTop:12 }}>
-                  <summary style={{ cursor:'pointer',fontSize:13,fontWeight:600,color:t.text4,userSelect:'none' }}>Read the full explanation</summary>
-                  <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word',marginTop:8 }}>{renderMarkdown(rest)}</div>
-                </details>
-              )}
-            </>
-          )
-        })()}
+        <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
+          {renderMarkdown(content)}
+          {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
+        </div>
         {!isStreaming && <ActionBar/>}
 
         {!isStreaming && msg._dualText && (
@@ -1745,13 +1703,28 @@ export default function Brain({ session }) {
   // ── AUTHENTICATED FETCH — always sends JWT, backend derives userId from token ──
   const chatFetch = async (body) => {
     const token = session?.access_token
+    // Strip heavy client-only fields from the message history before sending. The model
+    // only needs role + content; debug docs, source pipelines, and any large attachments
+    // must never be echoed back up — they bloat the request body and caused 413
+    // FUNCTION_PAYLOAD_TOO_LARGE on long conversations. This runs for every request.
+    let safeBody = body
+    if (Array.isArray(body?.messages)) {
+      safeBody = {
+        ...body,
+        messages: body.messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          ...(m._deliverable ? { _deliverable: m._deliverable } : {}),
+        })),
+      }
+    }
     return fetch('/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(safeBody)
     })
   }
 
@@ -2167,7 +2140,6 @@ export default function Brain({ session }) {
     let localPrimaryLabel = ''
     let localSourceInfo = null
     let localDebugDoc = null
-    let localCardImage = null
 
     let convId = activeConvId
     let currentMod = activeConv?.module||browseModule
@@ -2204,13 +2176,18 @@ export default function Brain({ session }) {
     try {
       const docChunks = uploadedDoc ? await getDocChunks(msgText) : []
       const token = session?.access_token
+      // Send only role + content for history. Prior messages carry heavy client-only
+      // fields (_debugDoc, _sourceInfo.pipeline, deliverable text) that the model doesn't
+      // need — echoing them back bloated the request body and caused 413
+      // FUNCTION_PAYLOAD_TOO_LARGE on long conversations.
+      const leanMsgs = (currentMsgs || []).map(m => ({ role: m.role, content: m.content }))
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ messages:currentMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
+        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
         signal: abortController.signal,
       })
 
@@ -2274,10 +2251,6 @@ export default function Brain({ session }) {
               searchResults = evt.results || []
             } else if (evt.type === 'further_reading') {
               furtherReadingLinks = evt.links || []
-            } else if (evt.type === 'card_image') {
-              // Study-card image (feature-flagged backend). Additive — shown alongside the
-              // text answer, never replacing it. Nothing arrives when the flag is off.
-              localCardImage = evt.imageBase64 || null
             } else if (evt.type === 'done') {
                               // Handle doc wizard stage transitions
                               if (evt.docWizardStage) {
@@ -2400,7 +2373,6 @@ export default function Brain({ session }) {
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
         ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
-        ...(localCardImage ? { _cardImage: localCardImage } : {}),
       }
 
       const finalMsgs = [...currentMsgs, assistantMsg]
