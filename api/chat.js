@@ -935,6 +935,8 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
   const decoder = new TextDecoder()
   let buffer = '', fullText = ''
   let webSearchCount = 0
+  let inputTokens = 0, outputTokens = 0
+  let cacheCreationTokens = 0, cacheReadTokens = 0
   const webSearchQueries = []
   while (true) {
     const { done, value } = await reader.read()
@@ -960,10 +962,29 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
         if (json.type === 'content_block_delta' && json.delta?.type === 'input_json_delta' && json.delta?.partial_json) {
           // Query text streams in as partial JSON on the server_tool_use block — best-effort capture, not critical
         }
+        // Token usage: input/cache fields arrive once on message_start; output_tokens
+        // arrives (cumulative) on message_delta, most reliably on the final one.
+        // Wani doesn't set cache_control anywhere today, so the cache fields will
+        // read 0 in practice — captured anyway so the numbers are correct the
+        // moment caching is ever introduced, instead of silently under-counting.
+        if (json.type === 'message_start' && json.message?.usage) {
+          inputTokens = json.message.usage.input_tokens || 0
+          cacheCreationTokens = json.message.usage.cache_creation_input_tokens || 0
+          cacheReadTokens = json.message.usage.cache_read_input_tokens || 0
+        }
+        if (json.type === 'message_delta' && json.usage?.output_tokens) {
+          outputTokens = json.usage.output_tokens
+        }
       } catch {}
     }
   }
-  return opts.enableWebSearch ? { text: fullText, webSearchCount, webSearchQueries } : fullText
+  // Per-tier pricing for claude-sonnet-4-5: input $3/MTok, cache write (5m,
+  // the default ephemeral duration) $3.75/MTok, cache read $0.30/MTok,
+  // output $15/MTok. Only ordinary input + output are ever non-zero today.
+  const estimatedCostUsd =
+    (inputTokens * 3 + cacheCreationTokens * 3.75 + cacheReadTokens * 0.30 + outputTokens * 15) / 1_000_000
+  const usage = { inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, estimatedCostUsd }
+  return opts.enableWebSearch ? { text: fullText, webSearchCount, webSearchQueries, usage } : { text: fullText, usage }
 }
 
 // ── 12. MISC HELPERS ──────────────────────────────────────────────────────────
@@ -1003,6 +1024,45 @@ async function saveMemory(userId, fact) {
       body: JSON.stringify([{ user_id: userId, content: fact, source: 'user_saved', created_at: new Date().toISOString() }])
     })
   } catch(e) { console.error('saveMemory error:', e.message) }
+}
+
+// Per-answer cost logging — the numbers from the cost-measurement plan:
+// request id, intent, visual mode, model, token breakdown (including cache,
+// for when caching is eventually introduced), estimated cost. Fire-and-
+// forget in spirit but awaited by the caller (safer in serverless — see
+// call site). Requires a `wani_cost_log` table:
+//   create table wani_cost_log (
+//     id bigint generated always as identity primary key,
+//     created_at timestamptz default now(),
+//     request_id text, intent text, visual_mode text,
+//     provider text default 'anthropic', model text,
+//     input_tokens int default 0, output_tokens int default 0,
+//     cache_creation_input_tokens int default 0, cache_read_input_tokens int default 0,
+//     hidden_json_chars int default 0, visual_data_chars int default 0,
+//     anthropic_cost_usd numeric(12,8)
+//   );
+// Named anthropic_cost_usd (not "total cost") deliberately — this is only
+// the Sonnet call. Wani also spends on Groq/Tavily/OpenAI per answer; this
+// table doesn't claim to cover those.
+async function logCostMetric({ requestId, intent, visualMode, model, usage, hiddenJsonChars, visualDataChars }) {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+  if (!url || !key || !usage) return
+  try {
+    await fetch(`${url}/rest/v1/wani_cost_log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=minimal' },
+      body: JSON.stringify([{
+        request_id: requestId, intent, visual_mode: visualMode || 'plain_text',
+        provider: 'anthropic', model,
+        input_tokens: usage.inputTokens, output_tokens: usage.outputTokens,
+        cache_creation_input_tokens: usage.cacheCreationTokens || 0,
+        cache_read_input_tokens: usage.cacheReadTokens || 0,
+        hidden_json_chars: hiddenJsonChars || 0, visual_data_chars: visualDataChars || 0,
+        anthropic_cost_usd: usage.estimatedCostUsd,
+      }])
+    })
+  } catch (e) { console.error('logCostMetric error:', e.message) }
 }
 
 async function saveGlobalCorrection(userMsg, assistantMsg, userId) {
@@ -1135,6 +1195,7 @@ function extractNoteNumbers(results) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  const requestId = crypto.randomUUID()
   const body = req.body
 
   // ── EARLY-EXIT: classify_doc — no auth needed ─────────────────────────────
@@ -1900,7 +1961,9 @@ export default async function handler(req, res) {
     if (isRealCode || isComplexAbap) {
       // Real ABAP code pasted → Claude Sonnet only
       send({ type: 'model_label', label: 'by Claude Sonnet' })
-      fullAnswer = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
+      const codeResult = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
+      fullAnswer = codeResult.text
+      debugLog.tokenUsage = codeResult.usage
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (code)'
       debugLog.rawClaudeAnswer = fullAnswer
@@ -1916,7 +1979,9 @@ export default async function handler(req, res) {
     } else if (isComplexDeliverable || shouldGenerateDoc) {
       // Deliverables → Claude Sonnet only
       send({ type: 'model_label', label: 'by Claude Sonnet' })
-      fullAnswer = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
+      const deliverableResult = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
+      fullAnswer = deliverableResult.text
+      debugLog.tokenUsage = deliverableResult.usage
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (deliverable)'
       debugLog.rawClaudeAnswer = fullAnswer
@@ -2012,6 +2077,7 @@ export default async function handler(req, res) {
       )
       fullAnswer = sonnetResult.text
       debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
+      debugLog.tokenUsage = sonnetResult.usage
 
       // Final flush: send whatever text (up to, but not including, any
       // marker) was held back by HOLDBACK and never got flushed mid-stream —
@@ -2337,8 +2403,19 @@ export default async function handler(req, res) {
       downgradedFrom ? `⚠ Sonnet picked "${downgradedFrom}" but it was downgraded to plain_text (low confidence or failed schema validation — see logs)` : null,
       visualData ? `Data: ${JSON.stringify(visualData).slice(0, 500)}` : '(no visual data)',
       usedContainerFormat ? `Container format used: true (parseOk: ${containerResult.parseOk})` : 'Container format used: false (legacy trailing-marker path)',
-      usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as detailed_explanation, quick_answer/technical_details/references/visual all empty for this answer' : null,
+      usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as the answer, quick_answer/references/visual all empty for this answer' : null,
       usedContainerFormat ? `References: ${containerResult.references.length}` : null,
+      '',
+      '6c. COST (anthropic_cost_usd for THIS Sonnet call only — Wani also spends on Groq/Tavily/OpenAI, not included here)',
+      '─────────────────────────────────────────────────────────',
+      `request_id: ${requestId}`,
+      debugLog.tokenUsage ? `model: claude-sonnet-4-5` : 'Token usage: not captured for this routing path',
+      debugLog.tokenUsage ? `input_tokens: ${debugLog.tokenUsage.inputTokens} | output_tokens: ${debugLog.tokenUsage.outputTokens}` : null,
+      debugLog.tokenUsage ? `cache_creation_input_tokens: ${debugLog.tokenUsage.cacheCreationTokens || 0} | cache_read_input_tokens: ${debugLog.tokenUsage.cacheReadTokens || 0}` : null,
+      debugLog.tokenUsage ? `anthropic_cost_usd: $${debugLog.tokenUsage.estimatedCostUsd.toFixed(6)}` : null,
+      usedContainerFormat ? `hidden_json_chars: ${containerResult.hiddenJsonChars || 0} (~${Math.round((containerResult.hiddenJsonChars || 0) / 4)} est. tokens)` : null,
+      usedContainerFormat ? `visual_data_chars: ${containerResult.visualDataChars || 0} (~${Math.round((containerResult.visualDataChars || 0) / 4)} est. tokens)` : null,
+      `visual_mode (for aggregation): ${visualFormat || 'plain_text'}`,
     ].filter(Boolean).concat([
       '',
       '7. FINAL OUTPUT TO USER',
@@ -2349,6 +2426,22 @@ export default async function handler(req, res) {
       'END OF DEBUG DOCUMENT',
       '═══════════════════════════════════════════════════════════',
     ]).join('\n')
+
+    if (debugLog.tokenUsage) {
+      try {
+        await logCostMetric({
+          requestId, intent, visualMode: visualFormat, model: 'claude-sonnet-4-5',
+          usage: debugLog.tokenUsage,
+          hiddenJsonChars: usedContainerFormat ? (containerResult.hiddenJsonChars || 0) : 0,
+          visualDataChars: usedContainerFormat ? (containerResult.visualDataChars || 0) : 0,
+        })
+      } catch (e) {
+        // Belt-and-suspenders: logCostMetric already catches internally and
+        // never throws, but per the "never lose an answer to analytics"
+        // requirement, this call is wrapped regardless.
+        console.error('[COST_LOG_FAILED]', e.message)
+      }
+    }
 
     send({
       type: 'done',
