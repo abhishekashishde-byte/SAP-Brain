@@ -463,3 +463,177 @@ export function extractVisualBlock(fullAnswer) {
 
   return { cleanText, visualFormat: parsed.format, visualData: parsed.data, visualConfidence: confidence, visualReason: reason }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANSWER CONTAINER — fixed five-section response structure.
+//
+// Supersedes the trailing-marker VISUAL_ROUTING_PROMPT/extractVisualBlock
+// above for VISUAL_ELIGIBLE_INTENTS (that pair is left in place, unused, as
+// a documented fallback rather than deleted).
+//
+// The template choice (visual) and the section structure (container) are two
+// separate decisions. Wani always has the same five-section shape; Sonnet
+// only decides what goes in the "visual" slot (one template, or none).
+//
+// IMPORTANT TRADEOFF: this requires Sonnet's entire response to be one JSON
+// object, which means the client can no longer render live token-by-token
+// text for these intents — there is nothing coherent to show until the whole
+// object is valid. The frontend must show a "preparing answer" state instead
+// of a live-typing effect for any intent using this format. This is a
+// deliberate, known regression from token streaming, accepted specifically
+// to avoid the alternative (partial-JSON streaming parsing), which is far
+// more fragile for comparatively little UX gain.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ANSWER_CONTAINER_PROMPT = `
+
+RESPONSE FORMAT — MANDATORY:
+Your entire response must be a single valid JSON object. Nothing before it,
+nothing after it — no markdown fences, no preamble, no trailing commentary.
+The very first character of your response must be { and the very last must
+be }.
+
+Build your answer in this order internally, then emit only the final JSON:
+1. Work out the full, verified, accurate answer to the question (same
+   accuracy standards as always — verify uncertain T-codes/tables/BAdIs
+   before stating them, hedge with "verify in your system" when unsure).
+2. Write the complete detailed explanation — this is the same quality bar
+   and depth as a normal Wani answer, nothing is shortened or lost by this
+   format.
+3. Write a 2-3 sentence quick_answer summarizing the core takeaway.
+4. Decide whether a visual would materially help THIS answer (see visual
+   format guide below) — most answers should have "mode":"none".
+5. Pull out any technical objects (transactions, tables, fields, BAPIs,
+   function modules, classes, CDS views, config paths) that you stated with
+   confidence in the explanation — only objects you're actually certain
+   exist, never invented ones to fill the section.
+6. List any SAP Notes, SAP Help pages, SAP Community threads, or other
+   external sources you actually used/verified against — never invent URLs
+   or note numbers.
+7. Write 2-3 natural follow-up questions, same spirit as Wani's existing
+   "You may also ask" suggestions.
+
+Output this exact shape:
+
+{
+  "quick_answer": "2-3 sentence summary of the core takeaway",
+  "visual": {
+    "mode": "none | process_flow | options_comparison | troubleshooting | concept_explainer",
+    "confidence": 0.0,
+    "reason": "one sentence: why this mode fits, or why none does",
+    "data": {}
+  },
+  "technical_details": {
+    "transactions": [ { "code": "...", "purpose": "..." } ],
+    "tables": [ { "name": "...", "purpose": "..." } ],
+    "fields": [ { "name": "...", "table": "...", "purpose": "..." } ],
+    "bapis": [ { "name": "...", "purpose": "..." } ],
+    "config_paths": [ "SPRO > ..." ]
+  },
+  "references": [
+    { "type": "sap_note | sap_help | community | blog", "title": "...", "url": "..." }
+  ],
+  "detailed_explanation": "The complete written answer, full markdown, same as a normal Wani answer today — headers, bold, code ticks, bullet lists all allowed here.",
+  "follow_ups": [ "...", "...", "..." ]
+}
+
+Rules:
+- Omit an entire technical_details sub-array if you have nothing verified for
+  it (e.g. "bapis": [] or omit the key) — never invent placeholder entries.
+- "references" may be an empty array — do not invent SAP Notes or URLs to
+  fill it.
+- visual.data is omitted (or {}) when mode is "none".
+- When mode is not "none", data must follow the shape for that mode:
+
+  process_flow:      { "title": "...", "steps": [ { "title": "...", "description": "..." } ] }  // 3-6 steps
+  options_comparison: { "title": "...", "recommendation": { "preferredOption": "A", "reason": "..." }, "options": [ { "id": "A", "name": "...", "bestWhen": "...", "pros": [], "cons": [], "recommended": true } ] }  // 2-4 options
+  troubleshooting:    { "title": "...", "issueSummary": "...", "checkFirst": "...", "causes": [ { "id": "1", "title": "...", "description": "...", "check": "..." } ] }  // 1+ causes
+  concept_explainer:  { "title": "...", "coreConcept": "...", "concepts": [ { "title": "...", "description": "..." } ] }  // 2-3 max
+
+- Never pick a visual mode because one exists. "none" should be the common
+  outcome — be honest, a routine "none" can and should carry high confidence.
+- detailed_explanation must be complete and correctly escaped as a JSON
+  string (escape quotes, newlines as \\n) — this is the full answer, do not
+  abbreviate it because it's inside JSON.
+- Do not include the "💡 You may also ask" formatting inside
+  detailed_explanation — those go only in follow_ups, as plain question
+  strings without numbering.`
+
+// Minimum structural bar per visual mode, same rule as isDataStructurallyValid
+// above — kept separate since the container's shape is slightly different
+// (data lives at answer.visual.data, not top-level).
+function isContainerVisualValid(mode, data) {
+  if (mode === 'none') return true
+  if (!data) return false
+  switch (mode) {
+    case 'process_flow':       return Array.isArray(data.steps) && data.steps.length >= 3
+    case 'options_comparison': return Array.isArray(data.options) && data.options.length >= 2
+    case 'troubleshooting':    return Array.isArray(data.causes) && data.causes.length >= 1
+    case 'concept_explainer':  return typeof data.coreConcept === 'string' && data.coreConcept.length > 0
+    default:                   return false
+  }
+}
+
+// Parses Sonnet's raw JSON-only response into the five-section shape.
+// FAILS SAFE: this is the most important property of this function. Unlike
+// the old trailing-marker approach (where a parse failure only meant "no
+// visual, text is still fine"), a parse failure here would mean losing the
+// ENTIRE answer if not handled — the whole response is JSON now. So on any
+// parse error, malformed shape, or missing detailed_explanation, we treat
+// the raw text as the detailed_explanation verbatim and return empty/none
+// for everything else. The user always gets a usable answer, worst case
+// they just don't get the nicer sections that turn.
+export function parseAnswerContainer(rawText) {
+  const fallback = (text) => ({
+    quickAnswer: '',
+    visual: { mode: 'none', confidence: null, reason: null, data: null },
+    technicalDetails: null,
+    references: [],
+    detailedExplanation: (text || '').trim(),
+    followUps: [],
+    parseOk: false,
+  })
+
+  if (!rawText || !rawText.trim()) return fallback(rawText)
+
+  // Sonnet occasionally wraps JSON in ```json fences despite instructions —
+  // strip those defensively before parsing rather than failing outright.
+  let candidate = rawText.trim()
+  candidate = candidate.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+
+  let parsed
+  try {
+    parsed = JSON.parse(candidate)
+  } catch (e) {
+    console.error('[ANSWER CONTAINER] JSON parse failed, falling back to raw text:', e.message)
+    return fallback(rawText)
+  }
+
+  if (typeof parsed.detailed_explanation !== 'string' || !parsed.detailed_explanation.trim()) {
+    console.error('[ANSWER CONTAINER] Missing detailed_explanation, falling back to raw text')
+    return fallback(rawText)
+  }
+
+  const visualModeRaw = parsed.visual?.mode
+  const visualMode = ['none', 'process_flow', 'options_comparison', 'troubleshooting', 'concept_explainer'].includes(visualModeRaw)
+    ? visualModeRaw
+    : 'none'
+  const visualValid = isContainerVisualValid(visualMode, parsed.visual?.data)
+  const visualConfidence = typeof parsed.visual?.confidence === 'number' ? parsed.visual.confidence : null
+  const visualDowngraded = visualMode !== 'none' && (!visualValid || (visualConfidence !== null && visualConfidence < VISUAL_CONFIDENCE_THRESHOLD))
+
+  return {
+    quickAnswer: typeof parsed.quick_answer === 'string' ? parsed.quick_answer.trim() : '',
+    visual: {
+      mode: visualDowngraded ? 'none' : visualMode,
+      confidence: visualConfidence,
+      reason: typeof parsed.visual?.reason === 'string' ? parsed.visual.reason : null,
+      data: visualDowngraded ? null : (parsed.visual?.data || null),
+    },
+    technicalDetails: parsed.technical_details || null,
+    references: Array.isArray(parsed.references) ? parsed.references : [],
+    detailedExplanation: parsed.detailed_explanation.trim(),
+    followUps: Array.isArray(parsed.follow_ups) ? parsed.follow_ups.slice(0, 3) : [],
+    parseOk: true,
+    visualDowngradedFrom: visualDowngraded ? visualModeRaw : null,
+  }
+}
