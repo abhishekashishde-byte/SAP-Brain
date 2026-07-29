@@ -5,7 +5,6 @@
 //   decisionMatrix?: { criteria:[], rows: { [optionId]: [...] } }
 // }
 import { useState, useEffect } from 'react'
-import { useTheme } from '../../App.jsx'
 
 const BREAKPOINT = 768
 function useIsMobile() {
@@ -144,7 +143,9 @@ function OptionsMobile({ data, dark }) {
 }
 
 export default function OptionsComparison({ data }) {
-  const { dark } = useTheme()
+  // Visuals are always rendered light — client-ready/shareable output
+  // shouldn't follow the consultant's personal dark-mode preference.
+  const dark = false
   const isMobile = useIsMobile()
   if (!data?.options?.length) return null
   return isMobile ? <OptionsMobile data={data} dark={dark} /> : <OptionsDesktop data={data} dark={dark} />
