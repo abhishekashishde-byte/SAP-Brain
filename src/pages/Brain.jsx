@@ -834,6 +834,7 @@ function MessageBubble({ msg, isStreaming, streamingText, isPreparing, t, dark, 
               visualData={msg._visualData}
               technicalDetails={msg._technicalDetails}
               references={msg._references}
+              followUps={msg._followUps}
               detailedExplanation={content}
               renderMarkdown={renderMarkdown}
             />
@@ -2434,6 +2435,7 @@ export default function Brain({ session }) {
           _quickAnswer: localQuickAnswer,
           _technicalDetails: localTechnicalDetails,
           _references: localReferences,
+          _followUps: localFollowUps,
         } : {}),
       }
 
