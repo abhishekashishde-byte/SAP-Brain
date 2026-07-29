@@ -589,6 +589,8 @@ export function parseAnswerContainer(rawText) {
     references: [],
     followUps: [],
     parseOk: false,
+    hiddenJsonChars: 0,
+    visualDataChars: 0,
   })
 
   if (!rawText || !rawText.includes(VISUAL_MARKER_START)) return fallback(rawText)
@@ -606,7 +608,7 @@ export function parseAnswerContainer(rawText) {
     parsed = JSON.parse(jsonBlock)
   } catch (e) {
     console.error('[ANSWER CONTAINER] Trailing block JSON parse failed:', e.message)
-    return { ...fallback(rawText), cleanText }
+    return { ...fallback(rawText), cleanText, hiddenJsonChars: jsonBlock.length }
   }
 
   const visualModeRaw = parsed.visual?.mode
@@ -630,5 +632,11 @@ export function parseAnswerContainer(rawText) {
     followUps: Array.isArray(parsed.follow_ups) ? parsed.follow_ups.slice(0, 3) : [],
     parseOk: true,
     visualDowngradedFrom: visualDowngraded ? visualModeRaw : null,
+    // Char counts, not token counts — a real tokenizer would need a new
+    // dependency (e.g. @anthropic-ai/tokenizer) this codebase doesn't have
+    // yet. chars/4 is the standard rough English/JSON approximation; good
+    // enough to see the shape of the cost breakdown, not exact billing math.
+    hiddenJsonChars: jsonBlock.length,
+    visualDataChars: parsed.visual?.data ? JSON.stringify(parsed.visual.data).length : 0,
   }
 }
