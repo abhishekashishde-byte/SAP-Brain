@@ -122,12 +122,17 @@ export default function AnswerContainer({
       )}
 
       {followUpsPresent && (
-        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: dark ? '#94A3B8' : '#666', textTransform: 'uppercase' }}>
             💡 You may also ask
           </div>
           {followUps.map((q, i) => (
-            <div key={i} style={{ fontSize: 13, color: '#0A6ED1' }}>{q}</div>
+            <div key={i} style={{
+              fontSize: 13, lineHeight: 1.4, color: dark ? '#D1D5DB' : '#374151',
+              padding: '8px 10px', borderRadius: 8,
+              background: dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+              borderLeft: `2px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`,
+            }}>{q}</div>
           ))}
         </div>
       )}
