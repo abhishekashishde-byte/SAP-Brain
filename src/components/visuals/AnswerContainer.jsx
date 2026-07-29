@@ -1,12 +1,12 @@
 // src/components/visuals/AnswerContainer.jsx
 //
-// Renders the fixed five-section answer shape from the `done` event when
-// containerMode is true. Sections appear in this order:
+// Renders the answer shape from the `done` event when containerMode is true.
+// Sections appear in this order:
 //   1. Quick Answer        — always shown if present
 //   2. Visual               — shown only if visualFormat !== null
 //   3. Full Written Answer  — the complete markdown explanation
-//   4. Technical Details    — shown only if it has real content
-//   5. Verified Links       — shown only if references.length > 0
+//   4. Verified Links       — shown only if references.length > 0
+//   5. Follow-ups           — shown only if present
 //
 // Sonnet decides section 2's content (or absence). This component and its
 // defaultOpen map decide what's expanded — that split is deliberate, per the
@@ -14,12 +14,6 @@
 import { useState } from 'react'
 import { useTheme } from '../../App.jsx'
 import AnswerVisual from './AnswerVisual.jsx'
-
-function hasTechnicalContent(td) {
-  if (!td) return false
-  return ['transactions', 'tables', 'fields', 'bapis', 'config_paths']
-    .some(key => Array.isArray(td[key]) ? td[key].length > 0 : !!td[key])
-}
 
 function ChevronIcon({ open, dark }) {
   return (
@@ -64,40 +58,6 @@ function Section({ id, title, defaultOpen, dark, children, badge }) {
   )
 }
 
-function TechnicalDetailsTable({ td, dark }) {
-  const rows = []
-  ;(td.transactions || []).forEach(t => rows.push(['Transaction', t.code, t.context || t.purpose]))
-  ;(td.tables || []).forEach(t => rows.push(['Table', t.name, t.context || t.purpose]))
-  ;(td.fields || []).forEach(f => rows.push(['Field', `${f.name}${f.table ? ` (${f.table})` : ''}`, f.context || f.purpose]))
-  ;(td.bapis || []).forEach(b => rows.push(['BAPI', b.name, b.context || b.purpose]))
-  ;(td.config_paths || []).forEach(c => rows.push(['Config', c, '']))
-
-  if (!rows.length) return null
-  // Context is now a verbatim quoted sentence from the answer, not a short
-  // label — stacked layout reads better than a cramped table row once
-  // context is a full clause rather than a few words.
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {rows.map((r, i) => (
-        <div key={i} style={{
-          paddingBottom: i < rows.length - 1 ? 10 : 0,
-          borderBottom: i < rows.length - 1 ? `1px solid ${dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` : 'none',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: r[2] ? 4 : 0 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0A6ED1', textTransform: 'uppercase' }}>{r[0]}</span>
-            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: dark ? '#fff' : '#111' }}>{r[1]}</span>
-          </div>
-          {r[2] && (
-            <div style={{ fontSize: 12.5, lineHeight: 1.5, color: dark ? '#94A3B8' : '#666', fontStyle: 'italic' }}>
-              "{r[2]}"
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function ReferencesList({ refs, dark }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -119,10 +79,9 @@ function ReferencesList({ refs, dark }) {
 // renderMarkdown is passed in from Brain.jsx (already exists there) so this
 // component doesn't need its own markdown renderer.
 export default function AnswerContainer({
-  quickAnswer, visualFormat, visualData, technicalDetails, references, detailedExplanation, followUps, renderMarkdown,
+  quickAnswer, visualFormat, visualData, references, detailedExplanation, followUps, renderMarkdown,
 }) {
   const { dark } = useTheme()
-  const techPresent = hasTechnicalContent(technicalDetails)
   const refsPresent = Array.isArray(references) && references.length > 0
   const followUpsPresent = Array.isArray(followUps) && followUps.length > 0
 
@@ -146,12 +105,6 @@ export default function AnswerContainer({
       <Section id="full" title="Full Written Answer" defaultOpen={true} dark={dark}>
         {renderMarkdown(detailedExplanation || '')}
       </Section>
-
-      {techPresent && (
-        <Section id="technical" title="Technical Details" defaultOpen={false} dark={dark}>
-          <TechnicalDetailsTable td={technicalDetails} dark={dark} />
-        </Section>
-      )}
 
       {refsPresent && (
         <Section id="references" title="Verified Links" defaultOpen={false} dark={dark} badge={String(references.length)}>
