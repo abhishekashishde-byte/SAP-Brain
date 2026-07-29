@@ -561,6 +561,26 @@ function isContainerVisualValid(mode, data) {
 // extractVisualBlock. Nothing about a broken trailing block can ever lose or
 // corrupt the visible answer, because the answer was already fully streamed
 // to the user before this function even runs.
+// Corrects a reference's "type" from its actual URL rather than trusting
+// whatever label Sonnet guessed — the URL is ground truth, the model's
+// classification of its own citation isn't. Pure domain/path pattern
+// matching, not SAP business logic, same category as the schema-validity
+// checks elsewhere in this file.
+function inferReferenceType(url) {
+  if (!url) return null
+  const u = url.toLowerCase()
+  if (u.includes('community.sap.com')) return 'community'
+  if (u.includes('blogs.sap.com') || u.includes('/blogs/')) return 'blog'
+  if (u.includes('help.sap.com')) return 'sap_help'
+  if (u.includes('launchpad.support.sap.com') || u.includes('/notes/') || /\/notes\/\d+/.test(u)) return 'sap_note'
+  return null // unrecognized domain — leave Sonnet's original label as-is
+}
+
+function correctReferences(refs) {
+  if (!Array.isArray(refs)) return []
+  return refs.map(r => ({ ...r, type: inferReferenceType(r.url) || r.type }))
+}
+
 export function parseAnswerContainer(rawText) {
   const fallback = (text) => ({
     cleanText: (text || '').trim(),
@@ -606,7 +626,7 @@ export function parseAnswerContainer(rawText) {
       reason: typeof parsed.visual?.reason === 'string' ? parsed.visual.reason : null,
       data: visualDowngraded ? null : (parsed.visual?.data || null),
     },
-    references: Array.isArray(parsed.references) ? parsed.references : [],
+    references: correctReferences(Array.isArray(parsed.references) ? parsed.references : []),
     followUps: Array.isArray(parsed.follow_ups) ? parsed.follow_ups.slice(0, 3) : [],
     parseOk: true,
     visualDowngradedFrom: visualDowngraded ? visualModeRaw : null,
