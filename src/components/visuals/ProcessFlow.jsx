@@ -7,7 +7,6 @@
 // data = { title: string, steps: [{ title, description }] }
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect } from 'react'
-import { useTheme } from '../../App.jsx'
 
 const BREAKPOINT = 768
 
@@ -150,7 +149,9 @@ function FullscreenOverlay({ data, dark, onClose }) {
 // `done` event's visualData, unchanged. This component owns the desktop/
 // mobile decision; nothing upstream needs to know about it.
 export default function ProcessFlow({ data }) {
-  const { dark } = useTheme()
+  // Visuals are always rendered light — client-ready/shareable output
+  // shouldn't follow the consultant's personal dark-mode preference.
+  const dark = false
   const isMobile = useIsMobile()
   const [fullscreen, setFullscreen] = useState(false)
 
