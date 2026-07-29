@@ -1980,6 +1980,11 @@ export default async function handler(req, res) {
           if (toSend) send({ type: 'chunk', text: toSend })
           sentPos = idx
           markerFound = true
+          // The visible answer just finished but generation hasn't — Sonnet
+          // is still writing the trailing JSON (visual/references/follow-ups).
+          // Without this, the cursor just sits there for several more
+          // seconds looking stalled/broken. One-shot signal, not a heartbeat.
+          send({ type: 'generating_visual' })
           return
         }
         const safeUpTo = Math.max(sentPos, streamAccum.length - HOLDBACK)
@@ -2333,7 +2338,6 @@ export default async function handler(req, res) {
       visualData ? `Data: ${JSON.stringify(visualData).slice(0, 500)}` : '(no visual data)',
       usedContainerFormat ? `Container format used: true (parseOk: ${containerResult.parseOk})` : 'Container format used: false (legacy trailing-marker path)',
       usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as detailed_explanation, quick_answer/technical_details/references/visual all empty for this answer' : null,
-      usedContainerFormat ? `Technical details present: ${!!containerResult.technicalDetails}` : null,
       usedContainerFormat ? `References: ${containerResult.references.length}` : null,
     ].filter(Boolean).concat([
       '',
@@ -2364,7 +2368,6 @@ export default async function handler(req, res) {
       ...(usedContainerFormat ? {
         containerMode: true,
         quickAnswer: containerResult.quickAnswer || null,
-        technicalDetails: containerResult.technicalDetails || null,
         references: containerResult.references || [],
         followUps: containerResult.followUps || [],
       } : { containerMode: false }),
