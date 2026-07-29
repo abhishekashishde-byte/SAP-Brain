@@ -271,37 +271,67 @@ export async function callOpenAISearch(question) {
 // separate classifier call, no hardcoded gate. Uses the same trailing-marker
 // convention as WANI_FS_COMPLETE / WANI_PPT_COMPLETE elsewhere in chat.js.
 //
-// No marker in the answer == format is implicitly 'plain_text'. That's the
-// expected majority case — nothing to parse, nothing changes.
+// The decision block is now MANDATORY on every eligible answer (format may be
+// 'plain_text' — that's a normal, expected value, not an omission). This is
+// deliberate: an optional "only append if you're using a visual" ask turned
+// out to almost never get taken (Sonnet defaulted to silently skipping it),
+// and a mandatory field also gives us a `reason` + `confidence` on EVERY
+// answer for real telemetry, not just the rare hit. This still streams live —
+// the block comes after the full markdown answer, not wrapped around it, so
+// there is no JSON-mode / no-streaming-until-done tradeoff.
 // ─────────────────────────────────────────────────────────────────────────────
 export const VISUAL_MARKER_START = 'WANI_VISUAL_START'
 export const VISUAL_MARKER_END   = 'WANI_VISUAL_END'
 
 export const VISUAL_FORMATS = [
+  'plain_text',
   'process_flow',
   'options_comparison',
   'troubleshooting',
   'concept_explainer',
 ]
 
+// Confidence below this: server forces plain_text regardless of what Sonnet
+// picked. This is a presentation safety net, not a hardcoded routing rule —
+// Sonnet still made the call; we're just not trusting a low-confidence one.
+export const VISUAL_CONFIDENCE_THRESHOLD = 0.75
+
 export const VISUAL_ROUTING_PROMPT = `
 
 VISUAL FORMAT DECISION:
-After writing your answer, decide whether structured visual formatting would
-materially improve a consultant's understanding of THIS specific answer.
-Plain text is valid and should be preferred by default — most answers,
-including simple lookups, conversational replies, and nuanced explanations
-that don't reduce cleanly into steps/options/causes, should stay plain text.
-Do not select a visual template unless the visual structure clearly earns its
-place. Never pick a template because one exists — an unhelpful visual is
-worse than none.
+After writing your COMPLETE answer above, look back at what you actually
+wrote and decide how it should be presented. Do this in order:
+1. You've already generated and verified the substantive answer — don't
+   change it now.
+2. Examine the answer's actual structure (not the question's phrasing) — a
+   question that sounds like a process question can turn into an options
+   answer if that's what the reasoning actually produced, and vice versa.
+3. Decide whether a visual structure would materially improve a consultant's
+   understanding of THIS specific answer, or whether plain text already
+   serves it well.
+4. Pick exactly one: plain_text, process_flow, options_comparison,
+   troubleshooting, or concept_explainer.
+5. Only if you picked something other than plain_text: populate the data
+   fields for that format.
 
-If (and only if) a template genuinely fits, append this block AFTER your
-complete answer, on new lines, with nothing after it:
+plain_text should be the common outcome — most answers, including simple
+lookups, conversational replies, and nuanced explanations that don't reduce
+cleanly into steps/options/causes, stay plain text. Never pick a visual
+template because one exists — an unhelpful visual is worse than none.
+
+This decision block is MANDATORY on every answer — always append it, even
+when the format is plain_text. Append it AFTER your complete answer, on new
+lines, with nothing after it:
 
 ${VISUAL_MARKER_START}
-{"format":"<one of: process_flow | options_comparison | troubleshooting | concept_explainer>","data":{...}}
+{"format":"<plain_text | process_flow | options_comparison | troubleshooting | concept_explainer>","confidence":<0.0-1.0>,"reason":"<one sentence: why this format fits, or why plain_text does>","data":{...}}
 ${VISUAL_MARKER_END}
+
+For plain_text, omit "data" entirely (or leave it as {}) — only confidence
+and reason are needed. confidence reflects how sure you are the FORMAT
+you picked (including plain_text) is the right call for this specific
+answer — a routine plain_text answer can and should still get high
+confidence (e.g. 0.9+); confidence is not exclusively about visual formats.
 
 Format guide — pick at most one:
 - process_flow: the answer explains how something works end-to-end (a
@@ -326,7 +356,7 @@ send empty placeholders):
 
 process_flow.data = {
   "title": "short title",
-  "steps": [ { "title": "...", "description": "..." } ]  // 3-6 steps
+  "steps": [ { "title": "...", "description": "..." } ]  // 3-6 steps required
 }
 
 options_comparison.data = {
@@ -334,7 +364,7 @@ options_comparison.data = {
   "recommendation": { "preferredOption": "A|B|C label", "reason": "one sentence" },
   "options": [
     { "id": "A", "name": "...", "bestWhen": "...", "pros": ["..."], "cons": ["..."], "recommended": false }
-  ],  // 2-4 options; exactly one may have "recommended": true
+  ],  // 2-4 options required; exactly one may have "recommended": true
   "decisionMatrix": {  // OPTIONAL — only if you have real comparable criteria
     "criteria": ["Implementation speed", "..."],
     "rows": { "A": ["High", "..."], "B": ["Medium", "..."] }
@@ -347,7 +377,7 @@ troubleshooting.data = {
   "checkFirst": "the single cheapest/most-likely check to do before anything else",
   "causes": [
     { "id": "1", "title": "short cause name", "description": "...", "check": "how to verify this cause" }
-  ]  // 2-5 causes, ordered cheapest-to-verify first
+  ]  // 2-5 causes required, ordered cheapest-to-verify first
 }
 
 concept_explainer.data = {
@@ -363,36 +393,73 @@ Rules for the JSON:
   that weren't already grounded/verified in your written answer above — the
   same accuracy rules apply here, the visual is a rendering of the same
   verified content, not a second, less careful pass.
-- If you're not confident structuring the answer this way is clearly better
-  than plain text, don't emit the block at all.`
+- Be honest about confidence — a low number here is not a failure, it's
+  useful signal. It's fine and expected to be uncertain sometimes.`
+
+// Minimum structural bar per format — independent of Sonnet's own confidence
+// score. If the returned data doesn't actually meet this, we don't trust the
+// format even at high confidence. Schema-validity, not SAP business logic.
+function isDataStructurallyValid(format, data) {
+  if (!data) return false
+  switch (format) {
+    case 'process_flow':
+      return Array.isArray(data.steps) && data.steps.length >= 3
+    case 'options_comparison':
+      return Array.isArray(data.options) && data.options.length >= 2
+    case 'troubleshooting':
+      return Array.isArray(data.causes) && data.causes.length >= 1
+    case 'concept_explainer':
+      return typeof data.coreConcept === 'string' && data.coreConcept.length > 0
+    default:
+      return false
+  }
+}
 
 // Call this on fullAnswer in chat.js STEP 10, before building chatAnswer.
-// Fails closed: any parse error, unknown format, or malformed JSON results in
-// visualFormat: null and the ORIGINAL text returned untouched — a broken
-// visual block must never surface as broken text or crash the answer.
+// Fails closed at every stage: any parse error, unknown format, low
+// confidence, or structurally invalid data results in visualFormat: null
+// (renders as plain text) — a broken or under-confident visual block must
+// never surface as broken text, crash the answer, or force a bad layout.
 export function extractVisualBlock(fullAnswer) {
   if (!fullAnswer || !fullAnswer.includes(VISUAL_MARKER_START)) {
-    return { cleanText: fullAnswer, visualFormat: null, visualData: null }
+    return { cleanText: fullAnswer, visualFormat: null, visualData: null, visualConfidence: null, visualReason: null }
   }
 
   const startIdx = fullAnswer.indexOf(VISUAL_MARKER_START)
   const endIdx   = fullAnswer.indexOf(VISUAL_MARKER_END)
 
   if (endIdx === -1 || endIdx < startIdx) {
-    return { cleanText: fullAnswer.slice(0, startIdx).trim(), visualFormat: null, visualData: null }
+    return { cleanText: fullAnswer.slice(0, startIdx).trim(), visualFormat: null, visualData: null, visualConfidence: null, visualReason: null }
   }
 
   const cleanText = fullAnswer.slice(0, startIdx).trim()
   const jsonBlock = fullAnswer.slice(startIdx + VISUAL_MARKER_START.length, endIdx).trim()
 
+  let parsed
   try {
-    const parsed = JSON.parse(jsonBlock)
-    if (!parsed.format || !VISUAL_FORMATS.includes(parsed.format) || !parsed.data) {
-      return { cleanText, visualFormat: null, visualData: null }
-    }
-    return { cleanText, visualFormat: parsed.format, visualData: parsed.data }
+    parsed = JSON.parse(jsonBlock)
   } catch (e) {
     console.error('[VISUAL BLOCK] JSON parse failed:', e.message)
-    return { cleanText, visualFormat: null, visualData: null }
+    return { cleanText, visualFormat: null, visualData: null, visualConfidence: null, visualReason: null }
   }
+
+  const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : null
+  const reason = typeof parsed.reason === 'string' ? parsed.reason : null
+
+  if (!parsed.format || !VISUAL_FORMATS.includes(parsed.format) || parsed.format === 'plain_text') {
+    // Explicit plain_text, or malformed format — either way, no visual.
+    // confidence/reason are still returned for telemetry even on plain_text.
+    return { cleanText, visualFormat: null, visualData: null, visualConfidence: confidence, visualReason: reason }
+  }
+
+  if (confidence !== null && confidence < VISUAL_CONFIDENCE_THRESHOLD) {
+    return { cleanText, visualFormat: null, visualData: null, visualConfidence: confidence, visualReason: reason, downgradedFrom: parsed.format }
+  }
+
+  if (!isDataStructurallyValid(parsed.format, parsed.data)) {
+    console.error('[VISUAL BLOCK] Schema validation failed for format:', parsed.format)
+    return { cleanText, visualFormat: null, visualData: null, visualConfidence: confidence, visualReason: reason, downgradedFrom: parsed.format }
+  }
+
+  return { cleanText, visualFormat: parsed.format, visualData: parsed.data, visualConfidence: confidence, visualReason: reason }
 }
