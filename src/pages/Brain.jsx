@@ -566,7 +566,7 @@ function DownloadDeliverableButton({ label, color, onClick, t }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, isPreparing, t, dark, userInitial, prevUserMsg, onAnalyse, session }) {
+function MessageBubble({ msg, isStreaming, streamingText, isPreparing, isGeneratingVisual, t, dark, userInitial, prevUserMsg, onAnalyse, session }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -832,7 +832,6 @@ function MessageBubble({ msg, isStreaming, streamingText, isPreparing, t, dark, 
               quickAnswer={msg._quickAnswer}
               visualFormat={msg._visualFormat}
               visualData={msg._visualData}
-              technicalDetails={msg._technicalDetails}
               references={msg._references}
               followUps={msg._followUps}
               detailedExplanation={content}
@@ -841,7 +840,17 @@ function MessageBubble({ msg, isStreaming, streamingText, isPreparing, t, dark, 
           ) : (
             <>
               {renderMarkdown(content)}
-              {isStreaming && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
+              {isStreaming && !isGeneratingVisual && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
+              {isStreaming && isGeneratingVisual && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, color: dark ? '#94A3B8' : '#666', fontSize: 13 }}>
+                  <span style={{
+                    width: 12, height: 12, borderRadius: '50%',
+                    border: `2px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}`,
+                    borderTopColor: '#0A6ED1', animation: 'spin 0.8s linear infinite',
+                  }} />
+                  Generating a graphical view for better understanding…
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1671,6 +1680,7 @@ export default function Brain({ session }) {
   const activeConvIdRef                   = useRef(null)
   const [streamingText, setStreamingText] = useState('')
   const [isPreparingAnswer, setIsPreparingAnswer] = useState(false)
+  const [isGeneratingVisual, setIsGeneratingVisual] = useState(false)
   const [streamingIntent, setStreamingIntent] = useState('SAP_QA')
   const [dualStreaming, setDualStreaming] = useState(false)
   const [dualText, setDualText] = useState('')
@@ -2173,7 +2183,6 @@ export default function Brain({ session }) {
     let localVisualFormat = null
     let localVisualData = null
     let localQuickAnswer = null
-    let localTechnicalDetails = null
     let localReferences = []
     let localFollowUps = []
 
@@ -2229,7 +2238,7 @@ export default function Brain({ session }) {
 
       if (!res.ok) throw new Error('Network error')
 
-      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true); setIsPreparingAnswer(false) }
+      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true); setIsPreparingAnswer(false); setIsGeneratingVisual(false) }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -2252,15 +2261,12 @@ export default function Brain({ session }) {
             if (evt.type === 'chunk') {
               accumulated += evt.text
               if (isMine(convId)) setStreamingText(accumulated)
-            } else if (evt.type === 'answer_mode') {
-              if (evt.mode === 'container') {
-                localContainerMode = true
-                if (isMine(convId)) setIsPreparingAnswer(true)
-              }
-            } else if (evt.type === 'thinking') {
-              // Heartbeat only — keeps the connection/UI feeling alive during
-              // container-mode generation. No state change needed beyond the
-              // preparing flag already set by answer_mode.
+            } else if (evt.type === 'generating_visual') {
+              // Visible answer text just finished streaming, but Sonnet is
+              // still writing the trailing JSON (visual/references/follow-
+              // ups) — without this signal the cursor just sits there
+              // looking stalled for several seconds.
+              if (isMine(convId)) setIsGeneratingVisual(true)
             } else if (evt.type === 'save_to_memory_confirm') {
               // User said "save this" — show popup with summary for confirmation
               // Delete the trigger message from chat (last user message)
@@ -2277,6 +2283,7 @@ export default function Brain({ session }) {
                 setIsLoading(false)
                 setIsStreaming(false)
                 setIsPreparingAnswer(false)
+                setIsGeneratingVisual(false)
                 setStreamingText('')
               }
               return
@@ -2325,7 +2332,6 @@ export default function Brain({ session }) {
               if (evt.containerMode) {
                 localContainerMode = true
                 localQuickAnswer = evt.quickAnswer || null
-                localTechnicalDetails = evt.technicalDetails || null
                 localReferences = evt.references || []
                 localFollowUps = evt.followUps || []
               }
@@ -2410,7 +2416,7 @@ export default function Brain({ session }) {
 
       const finalReply = fullReply || accumulated
 
-      if (isMine(convId)) { setIsStreaming(false); setIsPreparingAnswer(false); setStreamingText(''); setStreamingIntent('SAP_QA') }
+      if (isMine(convId)) { setIsStreaming(false); setIsPreparingAnswer(false); setIsGeneratingVisual(false); setStreamingText(''); setStreamingIntent('SAP_QA') }
 
       // No separate links section — sources are now cited inline in the answer
       const replyContent = finalReply
@@ -2433,7 +2439,6 @@ export default function Brain({ session }) {
         ...(localContainerMode ? {
           _containerMode: true,
           _quickAnswer: localQuickAnswer,
-          _technicalDetails: localTechnicalDetails,
           _references: localReferences,
           _followUps: localFollowUps,
         } : {}),
@@ -2495,7 +2500,7 @@ export default function Brain({ session }) {
 
       if (err.name === 'AbortError') {
         // User clicked Stop — save whatever was streamed so far as the message, marked as stopped
-        if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false) }
+        if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsGeneratingVisual(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false) }
         const partialText = (accumulated || '').trim()
         const stoppedMsgs = partialText
           ? [...currentMsgs,{ role:'assistant',content:partialText,_stopped:true }]
@@ -2505,7 +2510,7 @@ export default function Brain({ session }) {
         return
       }
 
-      if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('') }
+      if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsGeneratingVisual(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('') }
       // Note: dualText and dualLabel intentionally NOT cleared here
       // They persist until next dual_start event so Claude answer stays visible
 
@@ -2901,7 +2906,7 @@ export default function Brain({ session }) {
                       </div>
                     ) : isStreaming ? (
                       <>
-                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} isPreparing={isPreparingAnswer} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} isPreparing={isPreparingAnswer} isGeneratingVisual={isGeneratingVisual} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       </>
                     ) : null}
                     {/* Dual model bubble — only show while actively streaming */}
