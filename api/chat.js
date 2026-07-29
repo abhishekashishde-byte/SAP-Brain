@@ -1976,6 +1976,7 @@ export default async function handler(req, res) {
       debugLog.modelsMs    = t4 - t3
       debugLog.synthesisMs = 0
       debugLog.enrichedPromptSnippet = enrichedSystemPrompt.slice(0, 4000)
+      debugLog.visualPromptIncluded = enrichedSystemPrompt.includes('VISUAL FORMAT DECISION')
     } else {
       // Short/greeting — GPT-4o only
       send({ type: 'model_label', label: 'by GPT-4o' })
@@ -2034,7 +2035,7 @@ export default async function handler(req, res) {
     // Visual routing block — only relevant for the plain-answer path (fsComplete/
     // pptComplete branches below produce their own fixed-text confirmation and
     // never carry a visual). Fails closed to plain text on any parse issue.
-    const { cleanText: visualCleanText, visualFormat, visualData } = extractVisualBlock(cleanAnswer)
+    const { cleanText: visualCleanText, visualFormat, visualData, visualConfidence, visualReason, downgradedFrom } = extractVisualBlock(cleanAnswer)
     debugLog.visualFormat = visualFormat || 'plain_text'
 
     let chatAnswer
@@ -2245,9 +2246,14 @@ export default async function handler(req, res) {
       '6b. VISUAL ROUTING',
       '─────────────────────────────────────────────────────────',
       `Eligible for routing prompt (VISUAL_ELIGIBLE_INTENTS): ${VISUAL_ELIGIBLE_INTENTS.has(intent)}`,
+      `Routing prompt actually in text sent to Sonnet: ${debugLog.visualPromptIncluded ?? 'n/a for this routing path'}`,
       `Marker present in raw answer: ${fullAnswer.includes('WANI_VISUAL_START')}`,
-      `Format selected: ${debugLog.visualFormat || 'plain_text'}`,
+      `Format selected: ${visualFormat || 'plain_text'}`,
+      `Sonnet's confidence: ${visualConfidence ?? 'n/a'}`,
+      `Sonnet's reason: ${visualReason || 'n/a'}`,
+      downgradedFrom ? `⚠ Sonnet picked "${downgradedFrom}" but it was downgraded to plain_text (low confidence or failed schema validation — see logs)` : null,
       visualData ? `Data: ${JSON.stringify(visualData).slice(0, 500)}` : '(no visual data)',
+    ].filter(Boolean).concat([
       '',
       '7. FINAL OUTPUT TO USER',
       '─────────────────────────────────────────────────────────',
@@ -2256,7 +2262,7 @@ export default async function handler(req, res) {
       '═══════════════════════════════════════════════════════════',
       'END OF DEBUG DOCUMENT',
       '═══════════════════════════════════════════════════════════',
-    ].join('\n')
+    ]).join('\n')
 
     send({
       type: 'done',
@@ -2269,8 +2275,10 @@ export default async function handler(req, res) {
       isUnlimited: UNLIMITED_EMAILS.includes(userEmail || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
-      visualFormat: (!fsComplete && !pptComplete) ? (visualFormat || null) : null,
-      visualData:   (!fsComplete && !pptComplete) ? (visualData   || null) : null,
+      visualFormat:     (!fsComplete && !pptComplete) ? (visualFormat || null)     : null,
+      visualData:       (!fsComplete && !pptComplete) ? (visualData   || null)     : null,
+      visualConfidence: (!fsComplete && !pptComplete) ? (visualConfidence ?? null) : null,
+      visualReason:     (!fsComplete && !pptComplete) ? (visualReason || null)     : null,
       debugDoc,
       sourceInfo: {
         intent,
