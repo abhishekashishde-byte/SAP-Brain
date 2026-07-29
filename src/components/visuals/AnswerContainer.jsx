@@ -3,10 +3,19 @@
 // Renders the answer shape from the `done` event when containerMode is true.
 // Sections appear in this order:
 //   1. Quick Answer        — always shown if present
-//   2. Visual               — shown only if visualFormat !== null
-//   3. Full Written Answer  — the complete markdown explanation
+//   2. Full Written Answer  — the complete markdown explanation
+//   3. Visual               — shown only if visualFormat !== null
 //   4. Verified Links       — shown only if references.length > 0
 //   5. Follow-ups           — shown only if present
+//
+// Order matters here beyond just reading flow: Visual sits AFTER the written
+// answer specifically so it only ever appends below content the user has
+// already read while streaming, rather than being inserted above it and
+// pushing already-read text out of view (a real, jarring layout-shift bug
+// this order was changed to fix). Quick Answer is the one section that still
+// gets inserted above the text on completion — unavoidable, since it isn't
+// known until generation finishes — but it's small enough not to cause the
+// same problem.
 //
 // Sonnet decides section 2's content (or absence). This component and its
 // defaultOpen map decide what's expanded — that split is deliberate, per the
@@ -96,15 +105,15 @@ export default function AnswerContainer({
         </div>
       )}
 
+      <Section id="full" title="Full Written Answer" defaultOpen={true} dark={dark}>
+        {renderMarkdown(detailedExplanation || '')}
+      </Section>
+
       {visualFormat && (
         <div style={{ marginBottom: 12 }}>
           <AnswerVisual visualFormat={visualFormat} visualData={visualData} />
         </div>
       )}
-
-      <Section id="full" title="Full Written Answer" defaultOpen={true} dark={dark}>
-        {renderMarkdown(detailedExplanation || '')}
-      </Section>
 
       {refsPresent && (
         <Section id="references" title="Verified Links" defaultOpen={false} dark={dark} badge={String(references.length)}>
