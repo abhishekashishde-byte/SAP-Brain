@@ -6,7 +6,6 @@
 // bucket, so it stays a short card stack rather than a full one-pager even
 // on desktop.
 import { useState, useEffect } from 'react'
-import { useTheme } from '../../App.jsx'
 
 const BREAKPOINT = 768
 function useIsMobile() {
@@ -20,7 +19,9 @@ function useIsMobile() {
 }
 
 export default function ConceptExplainer({ data }) {
-  const { dark } = useTheme()
+  // Visuals are always rendered light — client-ready/shareable output
+  // shouldn't follow the consultant's personal dark-mode preference.
+  const dark = false
   const isMobile = useIsMobile()
   if (!data?.coreConcept) return null
 
