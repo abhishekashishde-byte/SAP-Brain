@@ -467,100 +467,84 @@ export function extractVisualBlock(fullAnswer) {
 // ─────────────────────────────────────────────────────────────────────────────
 // ANSWER CONTAINER — fixed five-section response structure.
 //
-// Supersedes the trailing-marker VISUAL_ROUTING_PROMPT/extractVisualBlock
-// above for VISUAL_ELIGIBLE_INTENTS (that pair is left in place, unused, as
-// a documented fallback rather than deleted).
+// v2: trailing-marker based, NOT whole-response JSON. The v1 approach (whole
+// answer as one JSON object) caused real, measured problems in production:
+// users waited up to ~2 minutes with nothing on screen, since there was
+// nothing coherent to show until the entire JSON object was valid. This
+// version restores live token streaming — Sonnet writes the normal markdown
+// answer exactly as always, streamed live, then appends a JSON block after
+// it (same WANI_VISUAL_START/END convention used throughout this file)
+// containing everything else: quick_answer, visual, technical_details,
+// references, follow_ups. detailed_explanation is no longer a JSON field —
+// it's just the streamed markdown text itself (the "cleanText" returned by
+// the parser below).
 //
-// The template choice (visual) and the section structure (container) are two
-// separate decisions. Wani always has the same five-section shape; Sonnet
-// only decides what goes in the "visual" slot (one template, or none).
-//
-// IMPORTANT TRADEOFF: this requires Sonnet's entire response to be one JSON
-// object, which means the client can no longer render live token-by-token
-// text for these intents — there is nothing coherent to show until the whole
-// object is valid. The frontend must show a "preparing answer" state instead
-// of a live-typing effect for any intent using this format. This is a
-// deliberate, known regression from token streaming, accepted specifically
-// to avoid the alternative (partial-JSON streaming parsing), which is far
-// more fragile for comparatively little UX gain.
+// The remaining known issue this does NOT fix on its own: the marker JSON
+// still streams to the client like any other text before the server has a
+// chance to strip it. That must be handled frontend-side by buffering/hiding
+// anything from WANI_VISUAL_START onward as it arrives, rather than trusting
+// speed — see the Brain.jsx integration notes.
 // ─────────────────────────────────────────────────────────────────────────────
 export const ANSWER_CONTAINER_PROMPT = `
 
-RESPONSE FORMAT — MANDATORY:
-Your entire response must be a single valid JSON object. Nothing before it,
-nothing after it — no markdown fences, no preamble, no trailing commentary.
-The very first character of your response must be { and the very last must
-be }.
+VISUAL FORMAT AND ANSWER SECTIONS:
+Write your complete answer as normal markdown, exactly as you always do —
+headers, bold, code ticks, bullet lists, everything. This is streamed live to
+the user as you write it. Do NOT wrap your answer in JSON — write it as plain
+text, same quality and depth as any other Wani answer.
 
-Build your answer in this order internally, then emit only the final JSON:
-1. Work out the full, verified, accurate answer to the question (same
-   accuracy standards as always — verify uncertain T-codes/tables/BAdIs
-   before stating them, hedge with "verify in your system" when unsure).
-2. Write the complete detailed explanation — this is the same quality bar
-   and depth as a normal Wani answer, nothing is shortened or lost by this
-   format.
-3. Write a 2-3 sentence quick_answer summarizing the core takeaway.
-4. Decide whether a visual would materially help THIS answer (see visual
-   format guide below) — most answers should have "mode":"none".
-5. Pull out any technical objects (transactions, tables, fields, BAPIs,
-   function modules, classes, CDS views, config paths) that you stated with
-   confidence in the explanation — only objects you're actually certain
-   exist, never invented ones to fill the section.
-6. List any SAP Notes, SAP Help pages, SAP Community threads, or other
-   external sources you actually used/verified against — never invent URLs
-   or note numbers.
-7. Write 2-3 natural follow-up questions, same spirit as Wani's existing
-   "You may also ask" suggestions.
+After your complete written answer, on new lines, with nothing after it,
+append this block:
 
-Output this exact shape:
+${VISUAL_MARKER_START}
+{"quick_answer":"...","visual":{...},"technical_details":{...},"references":[...],"follow_ups":["...","...","..."]}
+${VISUAL_MARKER_END}
 
-{
-  "quick_answer": "2-3 sentence summary of the core takeaway",
-  "visual": {
-    "mode": "none | process_flow | options_comparison | troubleshooting | concept_explainer",
-    "confidence": 0.0,
-    "reason": "one sentence: why this mode fits, or why none does",
-    "data": {}
-  },
-  "technical_details": {
-    "transactions": [ { "code": "...", "purpose": "..." } ],
-    "tables": [ { "name": "...", "purpose": "..." } ],
-    "fields": [ { "name": "...", "table": "...", "purpose": "..." } ],
-    "bapis": [ { "name": "...", "purpose": "..." } ],
-    "config_paths": [ "SPRO > ..." ]
-  },
-  "references": [
-    { "type": "sap_note | sap_help | community | blog", "title": "...", "url": "..." }
-  ],
-  "detailed_explanation": "The complete written answer, full markdown, same as a normal Wani answer today — headers, bold, code ticks, bullet lists all allowed here.",
-  "follow_ups": [ "...", "...", "..." ]
-}
+Build that JSON like this:
+1. quick_answer: 2-3 sentences summarizing the core takeaway of what you just wrote.
+2. visual: decide whether a visual would materially help THIS answer.
+   {"mode":"none | process_flow | options_comparison | troubleshooting | concept_explainer","confidence":0.0,"reason":"one sentence","data":{...}}
+   "none" should be the common outcome — a routine "none" can and should
+   carry high confidence. Never pick a mode because one exists. Format guide:
+   - process_flow: the answer explains how something works end-to-end. Use
+     for "how does X work" / "walk me through X".
+   - options_comparison: the answer weighs 2-4 approaches with a
+     recommendation. Use for "which approach should I use" / trade-offs.
+   - troubleshooting: an ordered diagnostic/verification checklist — open
+     multi-cause OR already narrowed to one likely cause with checks, both
+     count. Use for "why isn't X happening/showing" and follow-up checklists.
+   - concept_explainer: explains what something IS conceptually. Use
+     sparingly, only for genuinely broad conceptual questions.
+   When mode is not "none", data follows:
+     process_flow:       {"title":"...","steps":[{"title":"...","description":"..."}]}  // 3-6 steps
+     options_comparison:  {"title":"...","recommendation":{"preferredOption":"A","reason":"..."},"options":[{"id":"A","name":"...","bestWhen":"...","pros":[],"cons":[],"recommended":true}]}  // 2-4 options
+     troubleshooting:     {"title":"...","issueSummary":"...","checkFirst":"...","causes":[{"id":"1","title":"...","description":"...","check":"..."}]}  // 1+ causes
+     concept_explainer:   {"title":"...","coreConcept":"...","concepts":[{"title":"...","description":"..."}]}  // 2-3 max
+3. technical_details: pull out transactions/tables/fields/BAPIs/config paths
+   you stated with confidence in your answer above. CRITICAL — this is a
+   direct-quote extraction, not a re-summary: for each object, the "context"
+   field must be the ACTUAL SENTENCE (or clause) copied verbatim from your
+   written answer where you mentioned it — not a new, shorter paraphrase.
+   The point is for a consultant scanning only this section to see the exact
+   same reasoning you gave in the full answer, not a stripped-down label that
+   loses why the object matters. Repetition between the written answer and
+   this section is expected and fine. Shape:
+   {"transactions":[{"code":"CM01","context":"<verbatim sentence/clause from your answer mentioning CM01>"}],"tables":[{"name":"...","context":"..."}],"fields":[{"name":"...","table":"...","context":"..."}],"bapis":[{"name":"...","context":"..."}],"config_paths":["SPRO > ..."]}
+   Omit an entire sub-array if you have nothing verified for it — never
+   invent placeholder entries. Only objects you're actually certain exist.
+4. references: SAP Notes/Help/Community/blog sources you actually
+   used/verified — {"type":"sap_note | sap_help | community | blog","title":"...","url":"..."}.
+   May be an empty array — never invent URLs or note numbers to fill it.
+5. follow_ups: 2-3 natural follow-up questions, same spirit as Wani's
+   existing "You may also ask" suggestions — plain question strings, no
+   numbering. Do not also write a "💡 You may also ask" section inside your
+   written answer above — follow-ups belong only in this field now.
 
-Rules:
-- Omit an entire technical_details sub-array if you have nothing verified for
-  it (e.g. "bapis": [] or omit the key) — never invent placeholder entries.
-- "references" may be an empty array — do not invent SAP Notes or URLs to
-  fill it.
-- visual.data is omitted (or {}) when mode is "none".
-- When mode is not "none", data must follow the shape for that mode:
+Rules for the JSON block:
+- Must be valid JSON, no trailing commas.
+- Be honest about visual confidence — a low number is useful signal, not a failure.`
 
-  process_flow:      { "title": "...", "steps": [ { "title": "...", "description": "..." } ] }  // 3-6 steps
-  options_comparison: { "title": "...", "recommendation": { "preferredOption": "A", "reason": "..." }, "options": [ { "id": "A", "name": "...", "bestWhen": "...", "pros": [], "cons": [], "recommended": true } ] }  // 2-4 options
-  troubleshooting:    { "title": "...", "issueSummary": "...", "checkFirst": "...", "causes": [ { "id": "1", "title": "...", "description": "...", "check": "..." } ] }  // 1+ causes
-  concept_explainer:  { "title": "...", "coreConcept": "...", "concepts": [ { "title": "...", "description": "..." } ] }  // 2-3 max
-
-- Never pick a visual mode because one exists. "none" should be the common
-  outcome — be honest, a routine "none" can and should carry high confidence.
-- detailed_explanation must be complete and correctly escaped as a JSON
-  string (escape quotes, newlines as \\n) — this is the full answer, do not
-  abbreviate it because it's inside JSON.
-- Do not include the "💡 You may also ask" formatting inside
-  detailed_explanation — those go only in follow_ups, as plain question
-  strings without numbering.`
-
-// Minimum structural bar per visual mode, same rule as isDataStructurallyValid
-// above — kept separate since the container's shape is slightly different
-// (data lives at answer.visual.data, not top-level).
+// Minimum structural bar per visual mode.
 function isContainerVisualValid(mode, data) {
   if (mode === 'none') return true
   if (!data) return false
@@ -573,44 +557,40 @@ function isContainerVisualValid(mode, data) {
   }
 }
 
-// Parses Sonnet's raw JSON-only response into the five-section shape.
-// FAILS SAFE: this is the most important property of this function. Unlike
-// the old trailing-marker approach (where a parse failure only meant "no
-// visual, text is still fine"), a parse failure here would mean losing the
-// ENTIRE answer if not handled — the whole response is JSON now. So on any
-// parse error, malformed shape, or missing detailed_explanation, we treat
-// the raw text as the detailed_explanation verbatim and return empty/none
-// for everything else. The user always gets a usable answer, worst case
-// they just don't get the nicer sections that turn.
+// Parses the trailing WANI_VISUAL_START/END block off the end of a normally-
+// streamed answer. FAILS SAFE: no marker, malformed JSON, or any parse
+// problem just means "no extra sections" — cleanText (the actual streamed
+// answer) is always returned intact either way, exactly like the original
+// extractVisualBlock. Nothing about a broken trailing block can ever lose or
+// corrupt the visible answer, because the answer was already fully streamed
+// to the user before this function even runs.
 export function parseAnswerContainer(rawText) {
   const fallback = (text) => ({
+    cleanText: (text || '').trim(),
     quickAnswer: '',
     visual: { mode: 'none', confidence: null, reason: null, data: null },
     technicalDetails: null,
     references: [],
-    detailedExplanation: (text || '').trim(),
     followUps: [],
     parseOk: false,
   })
 
-  if (!rawText || !rawText.trim()) return fallback(rawText)
+  if (!rawText || !rawText.includes(VISUAL_MARKER_START)) return fallback(rawText)
 
-  // Sonnet occasionally wraps JSON in ```json fences despite instructions —
-  // strip those defensively before parsing rather than failing outright.
-  let candidate = rawText.trim()
-  candidate = candidate.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+  const startIdx = rawText.indexOf(VISUAL_MARKER_START)
+  const endIdx   = rawText.indexOf(VISUAL_MARKER_END)
+  const cleanText = rawText.slice(0, startIdx).trim()
+
+  if (endIdx === -1 || endIdx < startIdx) return { ...fallback(rawText), cleanText }
+
+  const jsonBlock = rawText.slice(startIdx + VISUAL_MARKER_START.length, endIdx).trim()
 
   let parsed
   try {
-    parsed = JSON.parse(candidate)
+    parsed = JSON.parse(jsonBlock)
   } catch (e) {
-    console.error('[ANSWER CONTAINER] JSON parse failed, falling back to raw text:', e.message)
-    return fallback(rawText)
-  }
-
-  if (typeof parsed.detailed_explanation !== 'string' || !parsed.detailed_explanation.trim()) {
-    console.error('[ANSWER CONTAINER] Missing detailed_explanation, falling back to raw text')
-    return fallback(rawText)
+    console.error('[ANSWER CONTAINER] Trailing block JSON parse failed:', e.message)
+    return { ...fallback(rawText), cleanText }
   }
 
   const visualModeRaw = parsed.visual?.mode
@@ -622,6 +602,7 @@ export function parseAnswerContainer(rawText) {
   const visualDowngraded = visualMode !== 'none' && (!visualValid || (visualConfidence !== null && visualConfidence < VISUAL_CONFIDENCE_THRESHOLD))
 
   return {
+    cleanText,
     quickAnswer: typeof parsed.quick_answer === 'string' ? parsed.quick_answer.trim() : '',
     visual: {
       mode: visualDowngraded ? 'none' : visualMode,
@@ -631,7 +612,6 @@ export function parseAnswerContainer(rawText) {
     },
     technicalDetails: parsed.technical_details || null,
     references: Array.isArray(parsed.references) ? parsed.references : [],
-    detailedExplanation: parsed.detailed_explanation.trim(),
     followUps: Array.isArray(parsed.follow_ups) ? parsed.follow_ups.slice(0, 3) : [],
     parseOk: true,
     visualDowngradedFrom: visualDowngraded ? visualModeRaw : null,
