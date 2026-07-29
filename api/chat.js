@@ -11,7 +11,7 @@
 //   OpenAI search  → SAP Notes + broader official docs
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, VISUAL_ROUTING_PROMPT, extractVisualBlock, ANSWER_CONTAINER_PROMPT, parseAnswerContainer } from './_shared.js'
+import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, VISUAL_ROUTING_PROMPT, extractVisualBlock, ANSWER_CONTAINER_PROMPT, parseAnswerContainer, VISUAL_MARKER_START } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
@@ -1955,36 +1955,48 @@ export default async function handler(req, res) {
 
       send({ type: 'model_label', label: '' })
 
-      // Container-mode intents (VISUAL_ELIGIBLE_INTENTS) get the fixed five-
-      // section JSON response — the whole answer is one JSON object, so there
-      // is nothing coherent to stream token-by-token. Tell the frontend up
-      // front so it shows a "preparing answer" state instead of waiting for
-      // chunks that won't meaningfully arrive.
       const useContainer = VISUAL_ELIGIBLE_INTENTS.has(intent)
       usedContainerFormat = useContainer
-      if (useContainer) send({ type: 'answer_mode', mode: 'container' })
 
-      // Heartbeat instead of raw text for container mode — keeps the UI from
-      // looking frozen during the (longer, since it's JSON-wrapped) generation
-      // without ever exposing partial/broken JSON on screen. Throttled to
-      // avoid spamming the SSE connection on every tiny delta.
-      let lastHeartbeat = 0
-      const onChunk = useContainer
-        ? () => {
-            const now = Date.now()
-            if (now - lastHeartbeat > 1200) { lastHeartbeat = now; send({ type: 'thinking' }) }
-          }
-        : (chunk) => send({ type: 'chunk', text: chunk })
+      // Live streaming is back — the v1 whole-JSON-response approach caused
+      // real ~2-minute blank waits in production and was reverted. The
+      // trailing WANI_VISUAL_START/END block still streams in like any other
+      // text, so we buffer it server-side rather than trust the client to
+      // catch it in time: everything is forwarded to the client immediately
+      // EXCEPT the last (marker-length) characters, held back just long
+      // enough to detect the marker starting before it's already on screen.
+      // Once the marker is found, forwarding stops entirely — nothing after
+      // it (the raw JSON) ever reaches the client as visible chunk text.
+      let streamAccum = ''
+      let sentPos = 0
+      let markerFound = false
+      const HOLDBACK = VISUAL_MARKER_START.length
+      const onChunk = (chunk) => {
+        if (markerFound) return
+        streamAccum += chunk
+        const idx = streamAccum.indexOf(VISUAL_MARKER_START)
+        if (idx !== -1) {
+          const toSend = streamAccum.slice(sentPos, idx)
+          if (toSend) send({ type: 'chunk', text: toSend })
+          sentPos = idx
+          markerFound = true
+          return
+        }
+        const safeUpTo = Math.max(sentPos, streamAccum.length - HOLDBACK)
+        if (safeUpTo > sentPos) {
+          send({ type: 'chunk', text: streamAccum.slice(sentPos, safeUpTo) })
+          sentPos = safeUpTo
+        }
+      }
 
-      // Sonnet answers directly — THIS is the final answer. Native web_search
-      // tool is enabled here specifically for self-verification: before
-      // stating a specific technical identifier not already grounded above,
-      // Sonnet can check itself rather than rely solely on the prompt
-      // instruction to hedge.
-      // Container mode gets a higher token budget — JSON structure, key names,
-      // and escaping add real overhead on top of the same-length prose, and a
-      // response truncated mid-JSON is a hard parse failure, not a
-      // gracefully-shorter answer the way truncated plain text would be.
+      // Sonnet answers directly — THIS is the final answer, streamed live.
+      // Native web_search tool is enabled here specifically for self-
+      // verification: before stating a specific technical identifier not
+      // already grounded above, Sonnet can check itself rather than rely
+      // solely on the prompt instruction to hedge.
+      // Container-eligible intents get a higher token budget — the trailing
+      // JSON block (technical details with verbatim quoted context, plus
+      // references/follow-ups) adds real length on top of the answer itself.
       const sonnetResult = await streamClaude(
         'claude-sonnet-4-5',
         enrichedSystemPrompt,
@@ -1996,6 +2008,18 @@ export default async function handler(req, res) {
       fullAnswer = sonnetResult.text
       debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
 
+      // Final flush: send whatever text (up to, but not including, any
+      // marker) was held back by HOLDBACK and never got flushed mid-stream —
+      // covers both "no marker at all, last few chars were never sent" and
+      // "marker arrived in the very last delta before the buffer could react".
+      {
+        const markerIdx = fullAnswer.indexOf(VISUAL_MARKER_START)
+        const cleanForStream = markerIdx !== -1 ? fullAnswer.slice(0, markerIdx) : fullAnswer
+        if (cleanForStream.length > sentPos) {
+          send({ type: 'chunk', text: cleanForStream.slice(sentPos) })
+        }
+      }
+
       debugLog.rawClaudeAnswer = fullAnswer
       debugLog.rawMergedAnswer = fullAnswer
       debugLog.rawGptAnswer    = ''
@@ -2004,7 +2028,7 @@ export default async function handler(req, res) {
       debugLog.modelsMs    = t4 - t3
       debugLog.synthesisMs = 0
       debugLog.enrichedPromptSnippet = enrichedSystemPrompt.slice(0, 4000)
-      debugLog.visualPromptIncluded = enrichedSystemPrompt.includes('VISUAL FORMAT DECISION') || enrichedSystemPrompt.includes('RESPONSE FORMAT')
+      debugLog.visualPromptIncluded = enrichedSystemPrompt.includes('VISUAL FORMAT AND ANSWER SECTIONS')
 
       // Parse the container now, this early, so downstream code (STEP 10
       // onward) can treat fullAnswer as already-clean text either way —
@@ -2081,7 +2105,7 @@ export default async function handler(req, res) {
     // marker extraction. Fails closed to plain text on any parse issue either way.
     let visualCleanText, visualFormat, visualData, visualConfidence, visualReason, downgradedFrom
     if (usedContainerFormat) {
-      visualCleanText  = containerResult.detailedExplanation
+      visualCleanText  = containerResult.cleanText
       visualFormat     = containerResult.visual.mode !== 'none' ? containerResult.visual.mode : null
       visualData       = containerResult.visual.data
       visualConfidence = containerResult.visual.confidence
