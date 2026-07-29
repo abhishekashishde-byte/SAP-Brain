@@ -308,8 +308,15 @@ Format guide — pick at most one:
   sequence of steps/stages). Use for "how does X work" / "walk me through X".
 - options_comparison: the answer weighs 2-4 valid approaches with a
   recommendation. Use for "which approach should I use" / trade-off questions.
-- troubleshooting: the answer diagnoses why something isn't working, with
-  multiple candidate causes and checks. Use for "why isn't X happening/showing".
+- troubleshooting: the answer gives an ordered diagnostic or verification
+  checklist for something not working — whether the cause is still genuinely
+  open among several candidates, OR already narrowed down to one likely/
+  confirmed cause with a sequence of checks to verify and fix it. The
+  "multiple candidates" framing and the "one high-confidence cause, verify
+  in this order" framing are BOTH this template — don't withhold it just
+  because the answer already states which cause is most likely. Use for
+  "why isn't X happening/showing" and equally for "here's what to check,
+  in order" follow-ups within an ongoing diagnosis.
 - concept_explainer: the answer explains what something IS conceptually,
   without a flow or diagnosis. Use sparingly — only for genuinely broad
   conceptual questions, never as a catch-all for "answer doesn't fit elsewhere".
