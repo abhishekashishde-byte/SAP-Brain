@@ -11,7 +11,7 @@
 //   OpenAI search  → SAP Notes + broader official docs
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, VISUAL_ROUTING_PROMPT, extractVisualBlock } from './_shared.js'
+import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, VISUAL_ROUTING_PROMPT, extractVisualBlock, ANSWER_CONTAINER_PROMPT, parseAnswerContainer } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
@@ -1767,7 +1767,7 @@ export default async function handler(req, res) {
 - Never explain what a T-code is. Never add generic SAP background.
 - The non-obvious insight is worth 10x more than the obvious step
 - If you are uncertain about a T-code or technical term — say "verify in your system" rather than guessing`
-    if (VISUAL_ELIGIBLE_INTENTS.has(intent))  systemPrompt += VISUAL_ROUTING_PROMPT
+    if (VISUAL_ELIGIBLE_INTENTS.has(intent))  systemPrompt += ANSWER_CONTAINER_PROMPT
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable. Be thorough and complete all sections.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nNever invent SAP T-codes, table names, BAdI names, or Fiori app IDs. Write "verify in your system" when uncertain.`
 
@@ -1870,6 +1870,8 @@ export default async function handler(req, res) {
     send({ type: 'start', intent })
     let fullAnswer = ''
     let modelUsed  = ''
+    let containerResult = null
+    let usedContainerFormat = false
 
     const t3 = Date.now()
     debugLog.promptBuildMs = t3 - t2
@@ -1953,16 +1955,42 @@ export default async function handler(req, res) {
 
       send({ type: 'model_label', label: '' })
 
-      // Sonnet answers directly — streaming to user — THIS is the final answer.
-      // Native web_search tool is enabled here specifically for self-verification: before
-      // stating a specific technical identifier not already grounded above, Sonnet can check
-      // itself rather than rely solely on the prompt instruction to hedge.
+      // Container-mode intents (VISUAL_ELIGIBLE_INTENTS) get the fixed five-
+      // section JSON response — the whole answer is one JSON object, so there
+      // is nothing coherent to stream token-by-token. Tell the frontend up
+      // front so it shows a "preparing answer" state instead of waiting for
+      // chunks that won't meaningfully arrive.
+      const useContainer = VISUAL_ELIGIBLE_INTENTS.has(intent)
+      usedContainerFormat = useContainer
+      if (useContainer) send({ type: 'answer_mode', mode: 'container' })
+
+      // Heartbeat instead of raw text for container mode — keeps the UI from
+      // looking frozen during the (longer, since it's JSON-wrapped) generation
+      // without ever exposing partial/broken JSON on screen. Throttled to
+      // avoid spamming the SSE connection on every tiny delta.
+      let lastHeartbeat = 0
+      const onChunk = useContainer
+        ? () => {
+            const now = Date.now()
+            if (now - lastHeartbeat > 1200) { lastHeartbeat = now; send({ type: 'thinking' }) }
+          }
+        : (chunk) => send({ type: 'chunk', text: chunk })
+
+      // Sonnet answers directly — THIS is the final answer. Native web_search
+      // tool is enabled here specifically for self-verification: before
+      // stating a specific technical identifier not already grounded above,
+      // Sonnet can check itself rather than rely solely on the prompt
+      // instruction to hedge.
+      // Container mode gets a higher token budget — JSON structure, key names,
+      // and escaping add real overhead on top of the same-length prose, and a
+      // response truncated mid-JSON is a hard parse failure, not a
+      // gracefully-shorter answer the way truncated plain text would be.
       const sonnetResult = await streamClaude(
         'claude-sonnet-4-5',
         enrichedSystemPrompt,
         validMessages,
-        chunk => send({ type: 'chunk', text: chunk }),
-        4096,
+        onChunk,
+        useContainer ? 6144 : 4096,
         { enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true' }
       )
       fullAnswer = sonnetResult.text
@@ -1976,7 +2004,19 @@ export default async function handler(req, res) {
       debugLog.modelsMs    = t4 - t3
       debugLog.synthesisMs = 0
       debugLog.enrichedPromptSnippet = enrichedSystemPrompt.slice(0, 4000)
-      debugLog.visualPromptIncluded = enrichedSystemPrompt.includes('VISUAL FORMAT DECISION')
+      debugLog.visualPromptIncluded = enrichedSystemPrompt.includes('VISUAL FORMAT DECISION') || enrichedSystemPrompt.includes('RESPONSE FORMAT')
+
+      // Parse the container now, this early, so downstream code (STEP 10
+      // onward) can treat fullAnswer as already-clean text either way —
+      // container mode's "text" for cost logging / debug doc purposes is the
+      // detailed_explanation, same role cleanAnswer played before.
+      if (useContainer) {
+        containerResult = parseAnswerContainer(fullAnswer)
+        debugLog.containerParseOk = containerResult.parseOk
+        if (!containerResult.parseOk) {
+          console.error('[CONTAINER] Parse failed for intent', intent, '— falling back to raw text as detailed_explanation')
+        }
+      }
     } else {
       // Short/greeting — GPT-4o only
       send({ type: 'model_label', label: 'by GPT-4o' })
@@ -2024,18 +2064,32 @@ export default async function handler(req, res) {
     }
 
     // ── STEP 10: FS / PPT completion detection ────────────────────────────
-    const fsSectionCount = (fullAnswer.match(/---SECTION \d+:/g) || []).length
-    const fsComplete = fullAnswer.includes('WANI_FS_COMPLETE') || (intent === 'FS_SPEC' && fsSectionCount >= 6)
-    const cleanAnswer = fullAnswer.replace(/WANI_FS_COMPLETE[\s\S]*$/, '').trim()
+    // Container-mode intents (VISUAL_ELIGIBLE_INTENTS) never produce FS/PPT
+    // markers — those live entirely in LONG_INTENTS deliverables, a separate
+    // branch above. Skip fsComplete/pptComplete detection and the old
+    // trailing-marker extraction entirely when the container was used.
+    const fsSectionCount = usedContainerFormat ? 0 : (fullAnswer.match(/---SECTION \d+:/g) || []).length
+    const fsComplete = !usedContainerFormat && (fullAnswer.includes('WANI_FS_COMPLETE') || (intent === 'FS_SPEC' && fsSectionCount >= 6))
+    const cleanAnswer = usedContainerFormat ? fullAnswer : fullAnswer.replace(/WANI_FS_COMPLETE[\s\S]*$/, '').trim()
 
-    const slideBlockCount = (fullAnswer.match(/---SLIDE \d+---/g) || []).length
-    const pptComplete = fullAnswer.includes('WANI_PPT_COMPLETE') || (intent === 'WORKSHOP_PPT' && slideBlockCount >= 5)
-    const cleanPPTAnswer = fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim()
+    const slideBlockCount = usedContainerFormat ? 0 : (fullAnswer.match(/---SLIDE \d+---/g) || []).length
+    const pptComplete = !usedContainerFormat && (fullAnswer.includes('WANI_PPT_COMPLETE') || (intent === 'WORKSHOP_PPT' && slideBlockCount >= 5))
+    const cleanPPTAnswer = usedContainerFormat ? '' : fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim()
 
-    // Visual routing block — only relevant for the plain-answer path (fsComplete/
-    // pptComplete branches below produce their own fixed-text confirmation and
-    // never carry a visual). Fails closed to plain text on any parse issue.
-    const { cleanText: visualCleanText, visualFormat, visualData, visualConfidence, visualReason, downgradedFrom } = extractVisualBlock(cleanAnswer)
+    // Visual routing: container mode reads from the already-parsed
+    // containerResult; everything else falls back to the legacy trailing-
+    // marker extraction. Fails closed to plain text on any parse issue either way.
+    let visualCleanText, visualFormat, visualData, visualConfidence, visualReason, downgradedFrom
+    if (usedContainerFormat) {
+      visualCleanText  = containerResult.detailedExplanation
+      visualFormat     = containerResult.visual.mode !== 'none' ? containerResult.visual.mode : null
+      visualData       = containerResult.visual.data
+      visualConfidence = containerResult.visual.confidence
+      visualReason     = containerResult.visual.reason
+      downgradedFrom   = containerResult.visualDowngradedFrom
+    } else {
+      ({ cleanText: visualCleanText, visualFormat, visualData, visualConfidence, visualReason, downgradedFrom } = extractVisualBlock(cleanAnswer))
+    }
     debugLog.visualFormat = visualFormat || 'plain_text'
 
     let chatAnswer
@@ -2253,6 +2307,10 @@ export default async function handler(req, res) {
       `Sonnet's reason: ${visualReason || 'n/a'}`,
       downgradedFrom ? `⚠ Sonnet picked "${downgradedFrom}" but it was downgraded to plain_text (low confidence or failed schema validation — see logs)` : null,
       visualData ? `Data: ${JSON.stringify(visualData).slice(0, 500)}` : '(no visual data)',
+      usedContainerFormat ? `Container format used: true (parseOk: ${containerResult.parseOk})` : 'Container format used: false (legacy trailing-marker path)',
+      usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as detailed_explanation, quick_answer/technical_details/references/visual all empty for this answer' : null,
+      usedContainerFormat ? `Technical details present: ${!!containerResult.technicalDetails}` : null,
+      usedContainerFormat ? `References: ${containerResult.references.length}` : null,
     ].filter(Boolean).concat([
       '',
       '7. FINAL OUTPUT TO USER',
@@ -2279,6 +2337,13 @@ export default async function handler(req, res) {
       visualData:       (!fsComplete && !pptComplete) ? (visualData   || null)     : null,
       visualConfidence: (!fsComplete && !pptComplete) ? (visualConfidence ?? null) : null,
       visualReason:     (!fsComplete && !pptComplete) ? (visualReason || null)     : null,
+      ...(usedContainerFormat ? {
+        containerMode: true,
+        quickAnswer: containerResult.quickAnswer || null,
+        technicalDetails: containerResult.technicalDetails || null,
+        references: containerResult.references || [],
+        followUps: containerResult.followUps || [],
+      } : { containerMode: false }),
       debugDoc,
       sourceInfo: {
         intent,
