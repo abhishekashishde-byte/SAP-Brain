@@ -1754,6 +1754,12 @@ export default async function handler(req, res) {
 
     const LONG_INTENTS  = new Set(['FS_SPEC','FS_EDIT','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','EXCEL_VALIDATION','GENERAL_DOC'])
     const SHORT_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','FIORI_REC','GENERAL'])
+    // Separate from SHORT_INTENTS on purpose: TEACH_ME answers are deliberately
+    // longer/deeper and should NOT get the "skip obvious steps, peer-level" tone
+    // rules below — but they're exactly the kind of explanatory answer a
+    // process_flow/concept_explainer visual helps most, so they ARE eligible
+    // for the visual routing decision.
+    const VISUAL_ELIGIBLE_INTENTS = new Set([...SHORT_INTENTS, 'TEACH_ME'])
     if (SHORT_INTENTS.has(intent))  systemPrompt += `\n\nAUDIENCE AND TONE: You are speaking to a senior SAP consultant with 10+ years experience. They are mid-project and need the insight, not the manual.
 - Skip obvious steps like "enter material number" or "go to transaction"
 - Open with the mechanism, the gotcha, or the version-specific behaviour — not a definition
@@ -1761,7 +1767,7 @@ export default async function handler(req, res) {
 - Never explain what a T-code is. Never add generic SAP background.
 - The non-obvious insight is worth 10x more than the obvious step
 - If you are uncertain about a T-code or technical term — say "verify in your system" rather than guessing`
-    if (SHORT_INTENTS.has(intent))  systemPrompt += VISUAL_ROUTING_PROMPT
+    if (VISUAL_ELIGIBLE_INTENTS.has(intent))  systemPrompt += VISUAL_ROUTING_PROMPT
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable. Be thorough and complete all sections.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nNever invent SAP T-codes, table names, BAdI names, or Fiori app IDs. Write "verify in your system" when uncertain.`
 
@@ -2238,7 +2244,7 @@ export default async function handler(req, res) {
       '',
       '6b. VISUAL ROUTING',
       '─────────────────────────────────────────────────────────',
-      `Eligible for routing prompt (SHORT_INTENTS): ${SHORT_INTENTS.has(intent)}`,
+      `Eligible for routing prompt (VISUAL_ELIGIBLE_INTENTS): ${VISUAL_ELIGIBLE_INTENTS.has(intent)}`,
       `Marker present in raw answer: ${fullAnswer.includes('WANI_VISUAL_START')}`,
       `Format selected: ${debugLog.visualFormat || 'plain_text'}`,
       visualData ? `Data: ${JSON.stringify(visualData).slice(0, 500)}` : '(no visual data)',
