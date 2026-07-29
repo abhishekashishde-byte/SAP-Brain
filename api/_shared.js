@@ -474,7 +474,7 @@ export function extractVisualBlock(fullAnswer) {
 // version restores live token streaming — Sonnet writes the normal markdown
 // answer exactly as always, streamed live, then appends a JSON block after
 // it (same WANI_VISUAL_START/END convention used throughout this file)
-// containing everything else: quick_answer, visual, technical_details,
+// containing everything else: quick_answer, visual,
 // references, follow_ups. detailed_explanation is no longer a JSON field —
 // it's just the streamed markdown text itself (the "cleanText" returned by
 // the parser below).
@@ -497,7 +497,7 @@ After your complete written answer, on new lines, with nothing after it,
 append this block:
 
 ${VISUAL_MARKER_START}
-{"quick_answer":"...","visual":{...},"technical_details":{...},"references":[...],"follow_ups":["...","...","..."]}
+{"quick_answer":"...","visual":{...},"references":[...],"follow_ups":["...","...","..."]}
 ${VISUAL_MARKER_END}
 
 Build that JSON like this:
@@ -520,22 +520,10 @@ Build that JSON like this:
      options_comparison:  {"title":"...","recommendation":{"preferredOption":"A","reason":"..."},"options":[{"id":"A","name":"...","bestWhen":"...","pros":[],"cons":[],"recommended":true}]}  // 2-4 options
      troubleshooting:     {"title":"...","issueSummary":"...","checkFirst":"...","causes":[{"id":"1","title":"...","description":"...","check":"..."}]}  // 1+ causes
      concept_explainer:   {"title":"...","coreConcept":"...","concepts":[{"title":"...","description":"..."}]}  // 2-3 max
-3. technical_details: pull out transactions/tables/fields/BAPIs/config paths
-   you stated with confidence in your answer above. CRITICAL — this is a
-   direct-quote extraction, not a re-summary: for each object, the "context"
-   field must be the ACTUAL SENTENCE (or clause) copied verbatim from your
-   written answer where you mentioned it — not a new, shorter paraphrase.
-   The point is for a consultant scanning only this section to see the exact
-   same reasoning you gave in the full answer, not a stripped-down label that
-   loses why the object matters. Repetition between the written answer and
-   this section is expected and fine. Shape:
-   {"transactions":[{"code":"CM01","context":"<verbatim sentence/clause from your answer mentioning CM01>"}],"tables":[{"name":"...","context":"..."}],"fields":[{"name":"...","table":"...","context":"..."}],"bapis":[{"name":"...","context":"..."}],"config_paths":["SPRO > ..."]}
-   Omit an entire sub-array if you have nothing verified for it — never
-   invent placeholder entries. Only objects you're actually certain exist.
-4. references: SAP Notes/Help/Community/blog sources you actually
+3. references: SAP Notes/Help/Community/blog sources you actually
    used/verified — {"type":"sap_note | sap_help | community | blog","title":"...","url":"..."}.
    May be an empty array — never invent URLs or note numbers to fill it.
-5. follow_ups: 2-3 natural follow-up questions, same spirit as Wani's
+4. follow_ups: 2-3 natural follow-up questions, same spirit as Wani's
    existing "You may also ask" suggestions — plain question strings, no
    numbering. Do not also write a "💡 You may also ask" section inside your
    written answer above — follow-ups belong only in this field now.
@@ -569,7 +557,6 @@ export function parseAnswerContainer(rawText) {
     cleanText: (text || '').trim(),
     quickAnswer: '',
     visual: { mode: 'none', confidence: null, reason: null, data: null },
-    technicalDetails: null,
     references: [],
     followUps: [],
     parseOk: false,
@@ -610,7 +597,6 @@ export function parseAnswerContainer(rawText) {
       reason: typeof parsed.visual?.reason === 'string' ? parsed.visual.reason : null,
       data: visualDowngraded ? null : (parsed.visual?.data || null),
     },
-    technicalDetails: parsed.technical_details || null,
     references: Array.isArray(parsed.references) ? parsed.references : [],
     followUps: Array.isArray(parsed.follow_ups) ? parsed.follow_ups.slice(0, 3) : [],
     parseOk: true,
