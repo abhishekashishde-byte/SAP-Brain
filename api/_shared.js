@@ -501,7 +501,16 @@ ${VISUAL_MARKER_START}
 ${VISUAL_MARKER_END}
 
 Build that JSON like this:
-1. quick_answer: 2-3 sentences summarizing the core takeaway of what you just wrote.
+1. quick_answer: 2-3 sentences summarizing the core takeaway of what you just
+   wrote. This is shown to the reader BEFORE the full written answer, so it
+   must be strictly accurate on its own — never a claim that needs the full
+   answer's caveats to be correct. Compress faithfully; do not simplify away
+   a condition, exception, or version-dependency that changes the answer.
+   If your written answer is genuinely conditional ("it depends on X"), the
+   quick_answer must say so rather than picking one branch and stating it
+   as unconditional fact. Introduce nothing here that isn't already stated
+   in the written answer above — this is a compression of it, not a second
+   independent take.
 2. visual: decide whether a visual would materially help THIS answer.
    {"mode":"none | process_flow | options_comparison | troubleshooting | concept_explainer","confidence":0.0,"reason":"one sentence","data":{...}}
    "none" should be the common outcome — a routine "none" can and should
