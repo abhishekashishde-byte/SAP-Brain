@@ -567,7 +567,59 @@ function DownloadDeliverableButton({ label, color, onClick, t }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, isPreparing, isGeneratingVisual, t, dark, userInitial, prevUserMsg, onAnalyse, session }) {
+// "View as visual" — on-demand only. The button restructures the answer
+// that's ALREADY on screen via a separate, cheap (Haiku) call — nothing here
+// touches or re-runs the main answer. Result is cached on the message
+// itself (msg._visualFormat/_visualData) by the parent once generated, so
+// re-opening it after a toggle is instant and never re-calls the API.
+function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
+  const [requesting, setRequesting] = useState(false)
+  const [error, setError] = useState('')
+  const [visible, setVisible] = useState(false)
+  const hasVisual = !!(msg._visualFormat && msg._visualData)
+
+  const handleClick = async () => {
+    if (hasVisual) { setVisible(v => !v); return }
+    setRequesting(true); setError('')
+    try {
+      await onRequestVisual()
+      setVisible(true)
+    } catch (e) {
+      setError(e.message || 'Could not generate a visual for this answer.')
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <button onClick={handleClick} disabled={requesting} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        background: 'transparent', border: `1px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
+        borderRadius: 8, padding: '6px 14px', fontSize: 12.5, fontWeight: 600,
+        color: dark ? '#C8C4DC' : '#374151', cursor: requesting ? 'default' : 'pointer',
+        fontFamily: "'Inter','DM Sans',sans-serif",
+      }}>
+        {requesting ? (
+          <>
+            <span style={{
+              width: 12, height: 12, borderRadius: '50%',
+              border: `2px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}`,
+              borderTopColor: '#0A6ED1', animation: 'spin 0.8s linear infinite',
+            }} />
+            Building visual…
+          </>
+        ) : hasVisual ? (visible ? '▲ Hide visual' : '🖼️ View as visual') : '🖼️ View as visual'}
+      </button>
+      {error && <div style={{ marginTop: 6, fontSize: 12, color: '#DC2626' }}>{error}</div>}
+      {hasVisual && visible && (
+        <AnswerVisual visualFormat={msg._visualFormat} visualData={msg._visualData} />
+      )}
+    </div>
+  )
+}
+
+function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, session }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -831,8 +883,6 @@ function MessageBubble({ msg, isStreaming, streamingText, isPreparing, isGenerat
           ) : (!isStreaming && msg._containerMode) ? (
             <AnswerContainer
               quickAnswer={msg._quickAnswer}
-              visualFormat={msg._visualFormat}
-              visualData={msg._visualData}
               references={msg._references}
               followUps={msg._followUps}
               detailedExplanation={content}
@@ -840,22 +890,42 @@ function MessageBubble({ msg, isStreaming, streamingText, isPreparing, isGenerat
             />
           ) : (
             <>
+              {/* Quick answer streams in FIRST, well before the full answer
+                  is done — it never pops in later. Same banner markup as
+                  AnswerContainer's finished-state version, so nothing shifts
+                  when the message flips from streaming to done. */}
+              {isStreaming && streamingQuickAnswer && (
+                <div style={{
+                  borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13.5, lineHeight: 1.5,
+                  background: 'linear-gradient(135deg, #0A6ED1, #0F828F)', color: '#fff',
+                }}>
+                  {streamingQuickAnswer}
+                </div>
+              )}
               {renderMarkdown(content)}
-              {isStreaming && !isGeneratingVisual && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
-              {isStreaming && isGeneratingVisual && (
+              {isStreaming && !isFinalizing && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
+              {isStreaming && isFinalizing && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, color: dark ? '#94A3B8' : '#666', fontSize: 13 }}>
                   <span style={{
                     width: 12, height: 12, borderRadius: '50%',
                     border: `2px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}`,
                     borderTopColor: '#0A6ED1', animation: 'spin 0.8s linear infinite',
                   }} />
-                  Generating a graphical view for better understanding…
+                  Finalizing sources and follow-ups…
                 </div>
               )}
             </>
           )}
         </div>
         {!isStreaming && <ActionBar/>}
+
+        {/* On-demand visual — never generated automatically. One button per
+            finished answer; clicking it restructures the answer already on
+            screen via a separate, cheap call. Skipped for deliverables
+            (FS/PPT already have their own download) and stopped/empty replies. */}
+        {!isStreaming && !msg._deliverable && !msg._stopped && content?.trim() && onRequestVisual && (
+          <OnDemandVisual msg={msg} onRequestVisual={onRequestVisual} t={t} dark={dark} />
+        )}
 
         {!isStreaming && msg._dualText && (
           <div style={{ marginTop:16, borderTop:`1px solid rgba(255,255,255,0.08)`, paddingTop:14 }}>
@@ -866,9 +936,6 @@ function MessageBubble({ msg, isStreaming, streamingText, isPreparing, isGenerat
               {renderMarkdown(msg._dualText)}
             </div>
           </div>
-        )}
-        {!isStreaming && !msg._containerMode && msg._visualFormat && (
-          <AnswerVisual visualFormat={msg._visualFormat} visualData={msg._visualData} />
         )}
         {!isStreaming && msg._links?.length > 0 && (
           <FurtherReading links={msg._links} t={t} dark={dark} />
@@ -1681,7 +1748,8 @@ export default function Brain({ session }) {
   const activeConvIdRef                   = useRef(null)
   const [streamingText, setStreamingText] = useState('')
   const [isPreparingAnswer, setIsPreparingAnswer] = useState(false)
-  const [isGeneratingVisual, setIsGeneratingVisual] = useState(false)
+  const [isFinalizing, setIsFinalizing] = useState(false) // true while Sonnet is still writing the trailing references/follow-ups JSON after the visible answer finished
+  const [streamingQuickAnswer, setStreamingQuickAnswer] = useState('') // arrives first — shown above the streaming answer text, never pops in later
   const [streamingIntent, setStreamingIntent] = useState('SAP_QA')
   const [dualStreaming, setDualStreaming] = useState(false)
   const [dualText, setDualText] = useState('')
@@ -2233,13 +2301,13 @@ export default function Brain({ session }) {
     setDualText('')
     setDualLabel('')
     setPrimaryLabel('')
+    setStreamingQuickAnswer('')
+    setIsFinalizing(false)
     let localDualText = ''
     let localDualLabel = ''
     let localPrimaryLabel = ''
     let localSourceInfo = null
     let localDebugDoc = null
-    let localVisualFormat = null
-    let localVisualData = null
     let localQuickAnswer = null
     let localReferences = []
     let localFollowUps = []
@@ -2296,7 +2364,7 @@ export default function Brain({ session }) {
 
       if (!res.ok) throw new Error('Network error')
 
-      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true); setIsPreparingAnswer(false); setIsGeneratingVisual(false) }
+      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true); setIsPreparingAnswer(false); setIsFinalizing(false) }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -2319,12 +2387,17 @@ export default function Brain({ session }) {
             if (evt.type === 'chunk') {
               accumulated += evt.text
               if (isMine(convId)) setStreamingText(accumulated)
-            } else if (evt.type === 'generating_visual') {
+            } else if (evt.type === 'quick_answer') {
+              // Arrives well before the full answer is done — shown above
+              // the streaming text immediately, so it never pops in later.
+              localQuickAnswer = evt.text || ''
+              if (isMine(convId)) setStreamingQuickAnswer(localQuickAnswer)
+            } else if (evt.type === 'finalizing') {
               // Visible answer text just finished streaming, but Sonnet is
-              // still writing the trailing JSON (visual/references/follow-
-              // ups) — without this signal the cursor just sits there
-              // looking stalled for several seconds.
-              if (isMine(convId)) setIsGeneratingVisual(true)
+              // still writing the trailing references/follow-ups JSON —
+              // without this signal the cursor just sits there looking
+              // stalled for a moment.
+              if (isMine(convId)) setIsFinalizing(true)
             } else if (evt.type === 'save_to_memory_confirm') {
               // User said "save this" — show popup with summary for confirmation
               // Delete the trigger message from chat (last user message)
@@ -2341,7 +2414,7 @@ export default function Brain({ session }) {
                 setIsLoading(false)
                 setIsStreaming(false)
                 setIsPreparingAnswer(false)
-                setIsGeneratingVisual(false)
+                setIsFinalizing(false)
                 setStreamingText('')
               }
               return
@@ -2386,7 +2459,6 @@ export default function Brain({ session }) {
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
               if (evt.sourceInfo) localSourceInfo = evt.sourceInfo
               if (evt.debugDoc)    localDebugDoc   = evt.debugDoc
-              if (evt.visualFormat) { localVisualFormat = evt.visualFormat; localVisualData = evt.visualData }
               if (evt.containerMode) {
                 localContainerMode = true
                 localQuickAnswer = evt.quickAnswer || null
@@ -2474,7 +2546,7 @@ export default function Brain({ session }) {
 
       const finalReply = fullReply || accumulated
 
-      if (isMine(convId)) { setIsStreaming(false); setIsPreparingAnswer(false); setIsGeneratingVisual(false); setStreamingText(''); setStreamingIntent('SAP_QA') }
+      if (isMine(convId)) { setIsStreaming(false); setIsPreparingAnswer(false); setIsFinalizing(false); setStreamingText(''); setStreamingQuickAnswer(''); setStreamingIntent('SAP_QA') }
 
       // No separate links section — sources are now cited inline in the answer
       const replyContent = finalReply
@@ -2493,7 +2565,6 @@ export default function Brain({ session }) {
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
         ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
-        ...(localVisualFormat ? { _visualFormat: localVisualFormat, _visualData: localVisualData } : {}),
         ...(localContainerMode ? {
           _containerMode: true,
           _quickAnswer: localQuickAnswer,
@@ -2558,7 +2629,7 @@ export default function Brain({ session }) {
 
       if (err.name === 'AbortError') {
         // User clicked Stop — save whatever was streamed so far as the message, marked as stopped
-        if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsGeneratingVisual(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false) }
+        if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsFinalizing(false);setStreamingText('');setStreamingQuickAnswer('');setStreamingIntent('SAP_QA');setDualStreaming(false) }
         const partialText = (accumulated || '').trim()
         const stoppedMsgs = partialText
           ? [...currentMsgs,{ role:'assistant',content:partialText,_stopped:true }]
@@ -2568,7 +2639,7 @@ export default function Brain({ session }) {
         return
       }
 
-      if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsGeneratingVisual(false);setStreamingText('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('') }
+      if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsFinalizing(false);setStreamingText('');setStreamingQuickAnswer('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('') }
       // Note: dualText and dualLabel intentionally NOT cleared here
       // They persist until next dual_start event so Claude answer stays visible
 
@@ -2681,6 +2752,35 @@ export default function Brain({ session }) {
       setAutoCompacting(false)
       setCompactProgress(0)
     }
+  }
+
+  // On-demand visual — called only when the reader clicks "View as visual"
+  // on an already-finished answer. Restructures that answer's own text via
+  // a separate, cheap (Haiku) call; never touches or re-runs the main
+  // answer. Result is cached onto the message (both in local state and
+  // persisted) so re-viewing it later never re-calls the API.
+  const handleGenerateVisual = async (convId, msgIndex, questionText, answerText) => {
+    const token = session?.access_token
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ action: 'generate_visual', question: questionText, answerText }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Could not generate a visual for this answer.')
+
+    let updatedMsgs = null
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c
+      const msgs = [...(c.messages || [])]
+      if (msgs[msgIndex]) msgs[msgIndex] = { ...msgs[msgIndex], _visualFormat: data.format, _visualData: data.data }
+      updatedMsgs = msgs
+      return { ...c, messages: msgs }
+    }))
+    if (updatedMsgs) updateConversation(convId, { messages: updatedMsgs }).catch(() => {})
   }
 
   const handleSummarise = async () => {
@@ -2924,6 +3024,7 @@ export default function Brain({ session }) {
                           const cleanCode = codeMatch ? codeMatch[0] : prevUser
                           handleSendText(`${prompt}\n\nCode:\n${cleanCode}`)
                         }}
+                        onRequestVisual={msg.role === 'assistant' ? () => handleGenerateVisual(activeConvId, i, prevUser, msg.content) : null}
                       />
                     })}
                     {isLoading&&!isStreaming&&(
@@ -2965,7 +3066,7 @@ export default function Brain({ session }) {
                       </div>
                     ) : isStreaming ? (
                       <>
-                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} isPreparing={isPreparingAnswer} isGeneratingVisual={isGeneratingVisual} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} streamingQuickAnswer={streamingQuickAnswer} isPreparing={isPreparingAnswer} isFinalizing={isFinalizing} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       </>
                     ) : null}
                     {/* Dual model bubble — only show while actively streaming */}
