@@ -1773,6 +1773,7 @@ export default function Brain({ session }) {
   const messages   = activeConv?.messages || []
   const isHeroLanding = view==='chat' && messages.length===0 && quickLaunchMessages.length===0
   const [heroBoxHeight, setHeroBoxHeight] = useState(0)
+  const [heroBoxWidth, setHeroBoxWidth] = useState(0)
   useEffect(() => {
     if (!isHeroLanding) return
     const el = chatScrollRef.current
@@ -1786,7 +1787,7 @@ export default function Brain({ session }) {
     // just grew to fit the image, which was then measured to make the image
     // bigger, which grew the container further — a runaway feedback loop,
     // which is exactly why the image ballooned out of control on mobile.
-    const measure = () => setHeroBoxHeight(el.clientHeight)
+    const measure = () => { setHeroBoxHeight(el.clientHeight); setHeroBoxWidth(el.clientWidth) }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -1809,9 +1810,24 @@ export default function Brain({ session }) {
     (heroWillShowHistory ? (18 /* "Recently Updated" label */ + 8 + Math.min(4, conversations.length) * 47 + 20 /* panel padding */) : 0) +
     (heroWillShowStarters ? 40 : 0) +
     12 /* bottom padding */
-  const heroImageHeight = heroBoxHeight
+  const heroImageHeightBudget = heroBoxHeight
     ? Math.min(440, Math.max(120, heroBoxHeight - heroReservedForText))
     : 200
+  const PHOTO_RATIO = 1448 / 1086 // width / height
+  // Take whichever constraint actually binds: the vertical budget above, or
+  // the available width (minus the hero's own side padding) converted to a
+  // height via the photo's real ratio. Deriving BOTH final pixel dimensions
+  // here — instead of setting height and letting CSS aspect-ratio derive
+  // width, then clamping that width with maxWidth — is what actually
+  // guarantees the rendered box stays correctly proportioned. The previous
+  // version could end up with an explicit height that no longer matched the
+  // clamped width, leaving the photo (via object-fit:contain) letterboxed
+  // inside its own container — empty space that wasn't visible in the CSS,
+  // only in the render.
+  const availableWidth = heroBoxWidth ? Math.max(120, heroBoxWidth - 40) : 300
+  const heightFromWidthBudget = availableWidth / PHOTO_RATIO
+  const heroImageHeight = Math.round(Math.min(heroImageHeightBudget, heightFromWidthBudget))
+  const heroImageWidth = Math.round(heroImageHeight * PHOTO_RATIO)
 
   // ── DOCUMENT FUNCTIONS ────────────────────────────────────────────────────
   const extractDocText = async (file) => {
@@ -2857,7 +2873,7 @@ export default function Brain({ session }) {
                     </div>
                   ) : (
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'8px 20px 12px',background:'#000000',gap:6 }}>
-                    <WaniHeroCard heightPx={heroImageHeight}/>
+                    <WaniHeroCard widthPx={heroImageWidth} heightPx={heroImageHeight}/>
                     {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#F5F5F7' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
                     <p style={{ fontSize:15,color:'#94A3B8',maxWidth:340,lineHeight:1.5,margin:0 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
