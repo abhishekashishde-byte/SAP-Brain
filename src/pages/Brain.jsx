@@ -4,6 +4,7 @@ import { WaniLogo, WaniWordmark } from './Login.jsx'
 import { useTheme } from '../App.jsx'
 import AnswerVisual from '../components/visuals/AnswerVisual.jsx'
 import AnswerContainer from '../components/visuals/AnswerContainer.jsx'
+import WaniHeroCard from '../components/WaniHeroCard.jsx'
 import {
   supabase, signOut,
   loadConversations, createConversation, updateConversation, deleteConversation,
@@ -2813,9 +2814,8 @@ export default function Brain({ session }) {
                     </div>
                   ) : (
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'40px 20px' }}>
-                    <WaniLogo size={window.innerWidth<768?48:80} dark={dark}/>
-                    <div style={{ marginTop:16,marginBottom:8 }}><WaniWordmark height={window.innerWidth<768?24:40} dark={dark}/></div>
-                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:12,marginBottom:4 }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/> 👋</div>)}
+                    <WaniHeroCard size={window.innerWidth<768?'mobile':'desktop'}/>
+                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:20,marginBottom:4 }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
                     <p style={{ fontSize:15,color:bgTheme.text2,maxWidth:300,lineHeight:1.7,marginBottom:22,marginTop:8 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
