@@ -1771,6 +1771,7 @@ export default function Brain({ session }) {
 
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
+  const isHeroLanding = view==='chat' && messages.length===0 && quickLaunchMessages.length===0
 
   // ── DOCUMENT FUNCTIONS ────────────────────────────────────────────────────
   const extractDocText = async (file) => {
@@ -2677,14 +2678,16 @@ export default function Brain({ session }) {
       
       {/* Main */}
       <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0,position:'relative' }}>
-        <div style={{ position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0,background:bgTheme.bgGrad }}>
+        <div style={{ position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0,background: isHeroLanding ? '#000000' : bgTheme.bgGrad }}>
+          {!isHeroLanding && (<>
           <div style={{ position:'absolute',width:600,height:600,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobA} 0%,transparent 65%)`,top:'-15%',right:'0%',animation:'blob1 9s ease-in-out infinite alternate' }}/>
           <div style={{ position:'absolute',width:500,height:500,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobB} 0%,transparent 65%)`,bottom:'-10%',left:'5%',animation:'blob2 10s ease-in-out infinite alternate' }}/>
           <div style={{ position:'absolute',width:380,height:380,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobC} 0%,transparent 65%)`,top:'35%',right:'25%',animation:'blob3 11s ease-in-out infinite alternate' }}/>
+          </>)}
         </div>
 
         {/* Topbar */}
-        <div className="main-topbar" style={{ borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap:isMobile?12:8,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingLeft:isMobile?'18px':'12px',paddingRight:isMobile?'18px':'12px',paddingBottom:isMobile?'0':'9px',paddingTop:isMobile?'max(14px, calc(env(safe-area-inset-top) + 10px))':'9px',height:isMobile?'auto':48,minHeight:isMobile?68:48 }}>
+        <div className="main-topbar" style={{ borderBottom:`1px solid ${isHeroLanding ? '#000000' : t.border}`,display:'flex',alignItems:'center',gap:isMobile?12:8,background: isHeroLanding ? '#000000' : t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingLeft:isMobile?'18px':'12px',paddingRight:isMobile?'18px':'12px',paddingBottom:isMobile?'0':'9px',paddingTop:isMobile?'max(14px, calc(env(safe-area-inset-top) + 10px))':'9px',height:isMobile?'auto':48,minHeight:isMobile?68:48 }}>
           <div style={{ display:'flex',alignItems:'center',background:t.surface2,borderRadius:10,padding:2,gap:2,flexShrink:0 }}>
             <button onClick={goHome} title="Chat"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
@@ -2813,7 +2816,7 @@ export default function Brain({ session }) {
                       ))}
                     </div>
                   ) : (
-                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'0 20px 16px',background:'linear-gradient(180deg, transparent 0%, #000000 14%, #000000 100%)',gap:8 }}>
+                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'0 20px 16px',background:'#000000',gap:8 }}>
                     <div style={{ height:24 }}/>
                     <WaniHeroCard/>
                     {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#F5F5F7' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
