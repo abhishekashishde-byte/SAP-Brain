@@ -1772,23 +1772,31 @@ export default function Brain({ session }) {
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
   const isHeroLanding = view==='chat' && messages.length===0 && quickLaunchMessages.length===0
-  const heroRef = useRef(null)
   const [heroBoxHeight, setHeroBoxHeight] = useState(0)
   useEffect(() => {
     if (!isHeroLanding) return
-    const el = heroRef.current
+    const el = chatScrollRef.current
     if (!el) return
+    // Measuring chatScrollRef itself (not the hero div) is what actually
+    // avoids a circular dependency: chatScrollRef's clientHeight is fixed by
+    // the outer flex layout regardless of what's inside it (that's what
+    // overflowY:auto guarantees) — it does NOT grow to fit its content.
+    // An earlier version measured the hero div directly, whose own height
+    // depended on an intermediate wrapper with no explicit height, so it
+    // just grew to fit the image, which was then measured to make the image
+    // bigger, which grew the container further — a runaway feedback loop,
+    // which is exactly why the image ballooned out of control on mobile.
     const measure = () => setHeroBoxHeight(el.clientHeight)
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
   }, [isHeroLanding])
-  // Image gets a fixed share of the ACTUAL measured space, with the rest
-  // reserved for greeting/subtitle/history so nothing gets pushed below the
-  // fold — 100px is a floor so it never collapses to nothing before the
-  // first real measurement comes in.
-  const heroImageHeight = heroBoxHeight ? Math.max(100, Math.round(heroBoxHeight * 0.56)) : 240
+  // Image gets a fixed share of the measured space, with the rest reserved
+  // for greeting/subtitle/history. Capped on both ends: floor so it never
+  // collapses before the first measurement, ceiling so it can't dominate an
+  // enormous desktop monitor either.
+  const heroImageHeight = heroBoxHeight ? Math.min(480, Math.max(140, Math.round(heroBoxHeight * 0.5))) : 220
 
   // ── DOCUMENT FUNCTIONS ────────────────────────────────────────────────────
   const extractDocText = async (file) => {
@@ -2833,7 +2841,7 @@ export default function Brain({ session }) {
                       ))}
                     </div>
                   ) : (
-                  <div ref={heroRef} style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'8px 20px 12px',background:'#000000',gap:6 }}>
+                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'8px 20px 12px',background:'#000000',gap:6 }}>
                     <WaniHeroCard heightPx={heroImageHeight}/>
                     {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#F5F5F7' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
                     <p style={{ fontSize:15,color:'#94A3B8',maxWidth:340,lineHeight:1.5,margin:0 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
