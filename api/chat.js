@@ -11,7 +11,12 @@
 //   OpenAI search  → SAP Notes + broader official docs
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, VISUAL_ROUTING_PROMPT, extractVisualBlock, ANSWER_CONTAINER_PROMPT, parseAnswerContainer, VISUAL_MARKER_START } from './_shared.js'
+import {
+  BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, callClaude,
+  ANSWER_CONTAINER_PROMPT, parseAnswerContainer, extractQuickAnswer,
+  QUICK_MARKER_START, QUICK_MARKER_END, META_MARKER_START,
+  ON_DEMAND_VISUAL_PROMPT, validateVisualData,
+} from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
 import { createClient } from '@supabase/supabase-js'
 
@@ -987,6 +992,30 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
   return opts.enableWebSearch ? { text: fullText, webSearchCount, webSearchQueries, usage } : { text: fullText, usage }
 }
 
+// ── ON-DEMAND VISUAL — cheap (Haiku) restructuring of an already-written
+// answer, only called when the reader clicks "View as visual". Never part
+// of the main answer pipeline — see ON_DEMAND_VISUAL_PROMPT in _shared.js.
+async function generateVisualOnDemand(question, answerText) {
+  const raw = await callClaude(ON_DEMAND_VISUAL_PROMPT, [{
+    role: 'user',
+    content: `Question: ${(question || '').slice(0, 500)}\n\nAnswer to restructure:\n${(answerText || '').slice(0, 6000)}`,
+  }])
+  const cleaned = raw.replace(/```json|```/g, '').trim()
+  let parsed
+  try {
+    parsed = JSON.parse(cleaned)
+  } catch (e) {
+    console.error('[ON-DEMAND VISUAL] JSON parse failed:', e.message)
+    throw new Error('Could not generate a visual for this answer — try again.')
+  }
+  const format = parsed.format
+  if (!format || !validateVisualData(format, parsed.data)) {
+    console.error('[ON-DEMAND VISUAL] Invalid/unrecognised format or data:', format)
+    throw new Error('Could not generate a visual for this answer — try again.')
+  }
+  return { format, data: parsed.data }
+}
+
 // ── 12. MISC HELPERS ──────────────────────────────────────────────────────────
 async function embed(text) {
   const res = await fetch('https://api.openai.com/v1/embeddings', {
@@ -1228,6 +1257,20 @@ export default async function handler(req, res) {
   // ── ADMIN EMAIL CHECK ─────────────────────────────────────────────────────
   const ADMIN_EMAILS = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2].filter(Boolean)
   const isAdmin = ADMIN_EMAILS.includes(userEmail)
+
+  // ── ACTIONS: generate_visual — on-demand only, triggered by the "View as
+  // visual" button on an already-completed answer. Cheap non-streaming call,
+  // never part of the main pipeline. ─────────────────────────────────────────
+  if (body.action === 'generate_visual') {
+    try {
+      const { question = '', answerText = '' } = body
+      if (!answerText.trim()) return res.status(400).json({ error: 'Missing answerText' })
+      const result = await generateVisualOnDemand(question, answerText)
+      return res.status(200).json(result)
+    } catch (err) {
+      return res.status(500).json({ error: err.message })
+    }
+  }
 
   // ── ACTIONS: store_chunks ─────────────────────────────────────────────────
   if (body.action === 'store_chunks') {
@@ -2023,33 +2066,67 @@ export default async function handler(req, res) {
       const useContainer = VISUAL_ELIGIBLE_INTENTS.has(intent)
       usedContainerFormat = useContainer
 
-      // Live streaming is back — the v1 whole-JSON-response approach caused
-      // real ~2-minute blank waits in production and was reverted. The
-      // trailing WANI_VISUAL_START/END block still streams in like any other
-      // text, so we buffer it server-side rather than trust the client to
-      // catch it in time: everything is forwarded to the client immediately
-      // EXCEPT the last (marker-length) characters, held back just long
-      // enough to detect the marker starting before it's already on screen.
-      // Once the marker is found, forwarding stops entirely — nothing after
-      // it (the raw JSON) ever reaches the client as visible chunk text.
+      // Two-phase server-side buffering so the client never sees raw marker
+      // text, in either direction:
+      //   Phase 'quick'  — buffer from the very start until the quick-answer
+      //                    closing marker arrives, then emit it as its own
+      //                    'quick_answer' event (never as visible chunk
+      //                    text) BEFORE anything else is forwarded — this is
+      //                    what lets the client show the quick answer first,
+      //                    with the full answer streaming in under it,
+      //                    instead of everything popping in at the end.
+      //                    A safety cap flushes whatever's buffered as
+      //                    normal answer text if Sonnet ever deviates from
+      //                    the instruction and doesn't open/close the block
+      //                    — the stream must never stall waiting for a
+      //                    marker that isn't coming.
+      //   Phase 'answer' — forward everything live except the last
+      //                    (marker-length) characters, held back just long
+      //                    enough to detect the trailing meta marker
+      //                    starting before it's already on screen.
+      //   Phase 'meta'   — stop forwarding entirely; nothing after the meta
+      //                    marker (the raw references/follow-ups JSON) ever
+      //                    reaches the client as visible chunk text.
       let streamAccum = ''
       let sentPos = 0
-      let markerFound = false
-      const HOLDBACK = VISUAL_MARKER_START.length
+      let phase = useContainer ? 'quick' : 'answer'
+      const QUICK_SAFETY_CAP = 800 // chars — give up waiting past this if no marker shows up
+      const HOLDBACK = META_MARKER_START.length
       const onChunk = (chunk) => {
-        if (markerFound) return
+        if (phase === 'meta') return
         streamAccum += chunk
-        const idx = streamAccum.indexOf(VISUAL_MARKER_START)
+
+        if (phase === 'quick') {
+          const endIdx = streamAccum.indexOf(QUICK_MARKER_END)
+          if (endIdx !== -1) {
+            const { quickAnswer } = extractQuickAnswer(streamAccum.slice(0, endIdx + QUICK_MARKER_END.length))
+            if (quickAnswer) send({ type: 'quick_answer', text: quickAnswer })
+            sentPos = endIdx + QUICK_MARKER_END.length
+            phase = 'answer'
+            return
+          }
+          const openedBlock = streamAccum.includes(QUICK_MARKER_START)
+          if (!openedBlock && streamAccum.length > QUICK_SAFETY_CAP) {
+            phase = 'answer' // never opened — stop waiting, treat as normal answer text
+          } else if (openedBlock && streamAccum.length > QUICK_SAFETY_CAP * 3) {
+            phase = 'answer' // opened but never closed within a sane length — stop waiting
+          } else {
+            return
+          }
+        }
+
+        // phase === 'answer' (including a same-tick fallthrough from 'quick' above)
+        const idx = streamAccum.indexOf(META_MARKER_START, sentPos)
         if (idx !== -1) {
           const toSend = streamAccum.slice(sentPos, idx)
           if (toSend) send({ type: 'chunk', text: toSend })
           sentPos = idx
-          markerFound = true
+          phase = 'meta'
           // The visible answer just finished but generation hasn't — Sonnet
-          // is still writing the trailing JSON (visual/references/follow-ups).
-          // Without this, the cursor just sits there for several more
-          // seconds looking stalled/broken. One-shot signal, not a heartbeat.
-          send({ type: 'generating_visual' })
+          // is still writing the trailing references/follow-ups JSON.
+          // Without this, the cursor just sits there for a moment looking
+          // stalled/broken. One-shot signal, not a heartbeat.
+          send({ type: 'finalizing' })
           return
         }
         const safeUpTo = Math.max(sentPos, streamAccum.length - HOLDBACK)
@@ -2064,9 +2141,9 @@ export default async function handler(req, res) {
       // verification: before stating a specific technical identifier not
       // already grounded above, Sonnet can check itself rather than rely
       // solely on the prompt instruction to hedge.
-      // Container-eligible intents get a higher token budget — the trailing
-      // JSON block (technical details with verbatim quoted context, plus
-      // references/follow-ups) adds real length on top of the answer itself.
+      // Container-eligible intents get a higher token budget — the quick-
+      // answer block plus the trailing references/follow-ups JSON add real
+      // length on top of the answer itself.
       const sonnetResult = await streamClaude(
         'claude-sonnet-4-5',
         enrichedSystemPrompt,
@@ -2079,13 +2156,21 @@ export default async function handler(req, res) {
       debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
       debugLog.tokenUsage = sonnetResult.usage
 
-      // Final flush: send whatever text (up to, but not including, any
-      // marker) was held back by HOLDBACK and never got flushed mid-stream —
-      // covers both "no marker at all, last few chars were never sent" and
-      // "marker arrived in the very last delta before the buffer could react".
-      {
-        const markerIdx = fullAnswer.indexOf(VISUAL_MARKER_START)
-        const cleanForStream = markerIdx !== -1 ? fullAnswer.slice(0, markerIdx) : fullAnswer
+      // Final flush: send whatever text was held back mid-stream and never
+      // flushed — covers "no marker at all" and "a marker arrived in the
+      // very last delta before the buffer could react". If the stream never
+      // made it out of the quick-answer phase (a very short or non-
+      // conforming answer), extract+emit the quick answer now so it still
+      // reaches the client, then flush the remaining text from scratch.
+      if (phase === 'quick' && useContainer) {
+        const { quickAnswer: finalQuick, rest } = extractQuickAnswer(fullAnswer)
+        if (finalQuick) send({ type: 'quick_answer', text: finalQuick })
+        const metaIdx = rest.indexOf(META_MARKER_START)
+        const cleanForStream = metaIdx !== -1 ? rest.slice(0, metaIdx) : rest
+        if (cleanForStream) send({ type: 'chunk', text: cleanForStream })
+      } else {
+        const metaIdx = fullAnswer.indexOf(META_MARKER_START)
+        const cleanForStream = metaIdx !== -1 ? fullAnswer.slice(0, metaIdx) : fullAnswer
         if (cleanForStream.length > sentPos) {
           send({ type: 'chunk', text: cleanForStream.slice(sentPos) })
         }
@@ -2099,12 +2184,12 @@ export default async function handler(req, res) {
       debugLog.modelsMs    = t4 - t3
       debugLog.synthesisMs = 0
       debugLog.enrichedPromptSnippet = enrichedSystemPrompt.slice(0, 4000)
-      debugLog.visualPromptIncluded = enrichedSystemPrompt.includes('VISUAL FORMAT AND ANSWER SECTIONS')
+      debugLog.visualPromptIncluded = enrichedSystemPrompt.includes(QUICK_MARKER_START)
 
       // Parse the container now, this early, so downstream code (STEP 10
       // onward) can treat fullAnswer as already-clean text either way —
       // container mode's "text" for cost logging / debug doc purposes is the
-      // detailed_explanation, same role cleanAnswer played before.
+      // full written answer, same role cleanAnswer played before.
       if (useContainer) {
         containerResult = parseAnswerContainer(fullAnswer)
         debugLog.containerParseOk = containerResult.parseOk
@@ -2171,21 +2256,12 @@ export default async function handler(req, res) {
     const pptComplete = !usedContainerFormat && (fullAnswer.includes('WANI_PPT_COMPLETE') || (intent === 'WORKSHOP_PPT' && slideBlockCount >= 5))
     const cleanPPTAnswer = usedContainerFormat ? '' : fullAnswer.replace(/WANI_PPT_COMPLETE[\s\S]*$/, '').trim()
 
-    // Visual routing: container mode reads from the already-parsed
-    // containerResult; everything else falls back to the legacy trailing-
-    // marker extraction. Fails closed to plain text on any parse issue either way.
-    let visualCleanText, visualFormat, visualData, visualConfidence, visualReason, downgradedFrom
-    if (usedContainerFormat) {
-      visualCleanText  = containerResult.cleanText
-      visualFormat     = containerResult.visual.mode !== 'none' ? containerResult.visual.mode : null
-      visualData       = containerResult.visual.data
-      visualConfidence = containerResult.visual.confidence
-      visualReason     = containerResult.visual.reason
-      downgradedFrom   = containerResult.visualDowngradedFrom
-    } else {
-      ({ cleanText: visualCleanText, visualFormat, visualData, visualConfidence, visualReason, downgradedFrom } = extractVisualBlock(cleanAnswer))
-    }
-    debugLog.visualFormat = visualFormat || 'plain_text'
+    // Answer text: container mode reads the already-parsed containerResult
+    // (quick answer + references/follow-ups already stripped off the end);
+    // non-container answers are just the raw text as-is. Visuals are no
+    // longer part of this extraction at all — see generateVisualOnDemand /
+    // the 'generate_visual' action for the on-demand path.
+    const cleanText = usedContainerFormat ? containerResult.cleanText : fullAnswer
 
     let chatAnswer
     if (fsComplete) {
@@ -2197,7 +2273,7 @@ export default async function handler(req, res) {
       const slideCount = (cleanPPTAnswer.match(/---SLIDE \d+---/g) || []).length
       chatAnswer = `✅ **Workshop Presentation generated — ${slideCount} slides**\n\n📊 Your PowerPoint file has been downloaded automatically.\n\n_If the download didn't start, use the button below to download again._`
     } else {
-      chatAnswer = visualCleanText
+      chatAnswer = cleanText
     }
 
     if (!chatAnswer?.trim()) {
@@ -2392,19 +2468,18 @@ export default async function handler(req, res) {
       '← FINAL ANSWER RECEIVED:',
       debugLog.rawMergedAnswer || fullAnswer || '',
       '',
-      '6b. VISUAL ROUTING',
+      '6b. ANSWER STRUCTURE (quick answer + references/follow-ups)',
       '─────────────────────────────────────────────────────────',
-      `Eligible for routing prompt (VISUAL_ELIGIBLE_INTENTS): ${VISUAL_ELIGIBLE_INTENTS.has(intent)}`,
-      `Routing prompt actually in text sent to Sonnet: ${debugLog.visualPromptIncluded ?? 'n/a for this routing path'}`,
-      `Marker present in raw answer: ${fullAnswer.includes('WANI_VISUAL_START')}`,
-      `Format selected: ${visualFormat || 'plain_text'}`,
-      `Sonnet's confidence: ${visualConfidence ?? 'n/a'}`,
-      `Sonnet's reason: ${visualReason || 'n/a'}`,
-      downgradedFrom ? `⚠ Sonnet picked "${downgradedFrom}" but it was downgraded to plain_text (low confidence or failed schema validation — see logs)` : null,
-      visualData ? `Data: ${JSON.stringify(visualData).slice(0, 500)}` : '(no visual data)',
-      usedContainerFormat ? `Container format used: true (parseOk: ${containerResult.parseOk})` : 'Container format used: false (legacy trailing-marker path)',
-      usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as the answer, quick_answer/references/visual all empty for this answer' : null,
+      `Eligible for container format (VISUAL_ELIGIBLE_INTENTS): ${VISUAL_ELIGIBLE_INTENTS.has(intent)}`,
+      `Quick-answer prompt actually in text sent to Sonnet: ${debugLog.visualPromptIncluded ?? 'n/a for this routing path'}`,
+      `Quick-answer marker present in raw answer: ${fullAnswer.includes(QUICK_MARKER_START)}`,
+      `Meta (references/follow-ups) marker present in raw answer: ${fullAnswer.includes(META_MARKER_START)}`,
+      usedContainerFormat ? `Container format used: true (parseOk: ${containerResult.parseOk})` : 'Container format used: false (short-answer/greeting path)',
+      usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as the answer, quick_answer/references/follow_ups all empty for this answer' : null,
+      usedContainerFormat ? `Quick answer: ${containerResult.quickAnswer ? containerResult.quickAnswer.slice(0, 200) : '(none)'}` : null,
       usedContainerFormat ? `References: ${containerResult.references.length}` : null,
+      usedContainerFormat ? `Follow-ups: ${containerResult.followUps.length}` : null,
+      'Visual: no longer generated automatically — only on request via the "View as visual" button (see api "generate_visual" action).',
       '',
       '6c. COST (anthropic_cost_usd for THIS Sonnet call only — Wani also spends on Groq/Tavily/OpenAI, not included here)',
       '─────────────────────────────────────────────────────────',
@@ -2414,8 +2489,6 @@ export default async function handler(req, res) {
       debugLog.tokenUsage ? `cache_creation_input_tokens: ${debugLog.tokenUsage.cacheCreationTokens || 0} | cache_read_input_tokens: ${debugLog.tokenUsage.cacheReadTokens || 0}` : null,
       debugLog.tokenUsage ? `anthropic_cost_usd: $${debugLog.tokenUsage.estimatedCostUsd.toFixed(6)}` : null,
       usedContainerFormat ? `hidden_json_chars: ${containerResult.hiddenJsonChars || 0} (~${Math.round((containerResult.hiddenJsonChars || 0) / 4)} est. tokens)` : null,
-      usedContainerFormat ? `visual_data_chars: ${containerResult.visualDataChars || 0} (~${Math.round((containerResult.visualDataChars || 0) / 4)} est. tokens)` : null,
-      `visual_mode (for aggregation): ${visualFormat || 'plain_text'}`,
     ].filter(Boolean).concat([
       '',
       '7. FINAL OUTPUT TO USER',
@@ -2430,10 +2503,10 @@ export default async function handler(req, res) {
     if (debugLog.tokenUsage) {
       try {
         await logCostMetric({
-          requestId, intent, visualMode: visualFormat, model: 'claude-sonnet-4-5',
+          requestId, intent, visualMode: 'on_demand', model: 'claude-sonnet-4-5',
           usage: debugLog.tokenUsage,
           hiddenJsonChars: usedContainerFormat ? (containerResult.hiddenJsonChars || 0) : 0,
-          visualDataChars: usedContainerFormat ? (containerResult.visualDataChars || 0) : 0,
+          visualDataChars: 0,
         })
       } catch (e) {
         // Belt-and-suspenders: logCostMetric already catches internally and
@@ -2454,10 +2527,6 @@ export default async function handler(req, res) {
       isUnlimited: UNLIMITED_EMAILS.includes(userEmail || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
-      visualFormat:     (!fsComplete && !pptComplete) ? (visualFormat || null)     : null,
-      visualData:       (!fsComplete && !pptComplete) ? (visualData   || null)     : null,
-      visualConfidence: (!fsComplete && !pptComplete) ? (visualConfidence ?? null) : null,
-      visualReason:     (!fsComplete && !pptComplete) ? (visualReason || null)     : null,
       ...(usedContainerFormat ? {
         containerMode: true,
         quickAnswer: containerResult.quickAnswer || null,
