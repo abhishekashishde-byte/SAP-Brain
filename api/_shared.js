@@ -265,287 +265,141 @@ export async function callOpenAISearch(question) {
   }
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
-// VISUAL ROUTING — single-call structured-visual decision for Wani answers.
-// Sonnet decides format + fills data as part of the SAME streamed answer — no
-// separate classifier call, no hardcoded gate. Uses the same trailing-marker
-// convention as WANI_FS_COMPLETE / WANI_PPT_COMPLETE elsewhere in chat.js.
+// ANSWER STRUCTURE — quick-answer-first streaming + on-demand visuals.
 //
-// The decision block is now MANDATORY on every eligible answer (format may be
-// 'plain_text' — that's a normal, expected value, not an omission). This is
-// deliberate: an optional "only append if you're using a visual" ask turned
-// out to almost never get taken (Sonnet defaulted to silently skipping it),
-// and a mandatory field also gives us a `reason` + `confidence` on EVERY
-// answer for real telemetry, not just the rare hit. This still streams live —
-// the block comes after the full markdown answer, not wrapped around it, so
-// there is no JSON-mode / no-streaming-until-done tradeoff.
+// v3 rework. The previous version (v2, see git history) streamed the full
+// answer first and appended quick_answer/visual/references/follow_ups as one
+// trailing JSON block once generation finished. In production that caused a
+// visible hiccup: the reader would be mid-way through the streamed answer
+// when the quick-answer banner and a visual both popped in above/around text
+// they'd already read, shifting the layout under them.
+//
+// v3 fixes this by changing the ORDER Sonnet writes in, not just how the
+// client renders it:
+//   1. Quick answer FIRST — wrapped in QUICK_MARKER_START/END, written
+//      before a single word of the full answer. The server detects the
+//      closing marker as it streams in and emits it to the client as its
+//      own event immediately, so the reader sees the quick answer before
+//      the full answer even starts appearing — nothing pops in later.
+//   2. Full answer — normal streamed markdown, unchanged in spirit.
+//   3. References + follow-ups — trailing JSON block (META_MARKER_START/
+//      END), same convention as before, still streams in after the answer
+//      text since it genuinely can't be known any earlier.
+//
+// The visual is no longer part of this flow at all. Generating a visual
+// alongside every answer meant the model made that call blind to whether
+// the reader even wanted one, and produced the second pop-in the reader
+// actually complained about. Visuals are now purely on-demand: the reader
+// gets a "View as visual" button after the answer is done, and only on
+// click does a separate, cheap (Haiku) call restructure the ALREADY-WRITTEN
+// answer into a template — see ON_DEMAND_VISUAL_PROMPT below. This is
+// cheaper in the common case (most answers are never turned into a visual)
+// and never blocks or reshapes the main answer stream.
 // ─────────────────────────────────────────────────────────────────────────────
-export const VISUAL_MARKER_START = 'WANI_VISUAL_START'
-export const VISUAL_MARKER_END   = 'WANI_VISUAL_END'
+export const QUICK_MARKER_START = 'WANI_QUICK_START'
+export const QUICK_MARKER_END   = 'WANI_QUICK_END'
+export const META_MARKER_START  = 'WANI_META_START'
+export const META_MARKER_END    = 'WANI_META_END'
 
 export const VISUAL_FORMATS = [
-  'plain_text',
   'process_flow',
   'options_comparison',
   'troubleshooting',
   'concept_explainer',
 ]
 
-// Confidence below this: server forces plain_text regardless of what Sonnet
-// picked. This is a presentation safety net, not a hardcoded routing rule —
-// Sonnet still made the call; we're just not trusting a low-confidence one.
-export const VISUAL_CONFIDENCE_THRESHOLD = 0.75
-
-export const VISUAL_ROUTING_PROMPT = `
-
-VISUAL FORMAT DECISION:
-After writing your COMPLETE answer above, look back at what you actually
-wrote and decide how it should be presented. Do this in order:
-1. You've already generated and verified the substantive answer — don't
-   change it now.
-2. Examine the answer's actual structure (not the question's phrasing) — a
-   question that sounds like a process question can turn into an options
-   answer if that's what the reasoning actually produced, and vice versa.
-3. Decide whether a visual structure would materially improve a consultant's
-   understanding of THIS specific answer, or whether plain text already
-   serves it well.
-4. Pick exactly one: plain_text, process_flow, options_comparison,
-   troubleshooting, or concept_explainer.
-5. Only if you picked something other than plain_text: populate the data
-   fields for that format.
-
-plain_text should be the common outcome — most answers, including simple
-lookups, conversational replies, and nuanced explanations that don't reduce
-cleanly into steps/options/causes, stay plain text. Never pick a visual
-template because one exists — an unhelpful visual is worse than none.
-
-This decision block is MANDATORY on every answer — always append it, even
-when the format is plain_text. Append it AFTER your complete answer, on new
-lines, with nothing after it:
-
-${VISUAL_MARKER_START}
-{"format":"<plain_text | process_flow | options_comparison | troubleshooting | concept_explainer>","confidence":<0.0-1.0>,"reason":"<one sentence: why this format fits, or why plain_text does>","data":{...}}
-${VISUAL_MARKER_END}
-
-For plain_text, omit "data" entirely (or leave it as {}) — only confidence
-and reason are needed. confidence reflects how sure you are the FORMAT
-you picked (including plain_text) is the right call for this specific
-answer — a routine plain_text answer can and should still get high
-confidence (e.g. 0.9+); confidence is not exclusively about visual formats.
-
-Format guide — pick at most one:
-- process_flow: the answer explains how something works end-to-end (a
-  sequence of steps/stages). Use for "how does X work" / "walk me through X".
-- options_comparison: the answer weighs 2-4 valid approaches with a
-  recommendation. Use for "which approach should I use" / trade-off questions.
-- troubleshooting: the answer gives an ordered diagnostic or verification
-  checklist for something not working — whether the cause is still genuinely
-  open among several candidates, OR already narrowed down to one likely/
-  confirmed cause with a sequence of checks to verify and fix it. The
-  "multiple candidates" framing and the "one high-confidence cause, verify
-  in this order" framing are BOTH this template — don't withhold it just
-  because the answer already states which cause is most likely. Use for
-  "why isn't X happening/showing" and equally for "here's what to check,
-  in order" follow-ups within an ongoing diagnosis.
-- concept_explainer: the answer explains what something IS conceptually,
-  without a flow or diagnosis. Use sparingly — only for genuinely broad
-  conceptual questions, never as a catch-all for "answer doesn't fit elsewhere".
-
-Data shapes (fields you don't have content for: omit the whole key, don't
-send empty placeholders):
-
-process_flow.data = {
-  "title": "short title",
-  "steps": [ { "title": "...", "description": "..." } ]  // 3-6 steps required
-}
-
-options_comparison.data = {
-  "title": "short title",
-  "recommendation": { "preferredOption": "A|B|C label", "reason": "one sentence" },
-  "options": [
-    { "id": "A", "name": "...", "bestWhen": "...", "pros": ["..."], "cons": ["..."], "recommended": false }
-  ],  // 2-4 options required; exactly one may have "recommended": true
-  "decisionMatrix": {  // OPTIONAL — only if you have real comparable criteria
-    "criteria": ["Implementation speed", "..."],
-    "rows": { "A": ["High", "..."], "B": ["Medium", "..."] }
-  }
-}
-
-troubleshooting.data = {
-  "title": "short title",
-  "issueSummary": "one-sentence framing of the symptom",
-  "checkFirst": "the single cheapest/most-likely check to do before anything else",
-  "causes": [
-    { "id": "1", "title": "short cause name", "description": "...", "check": "how to verify this cause" }
-  ]  // 2-5 causes required, ordered cheapest-to-verify first
-}
-
-concept_explainer.data = {
-  "title": "short title",
-  "coreConcept": "one-paragraph plain-language answer to 'what is this'",
-  "concepts": [ { "title": "...", "description": "..." } ]  // 2-3 max — this
-    // format must stay lightweight; it is explicitly NOT a poster layout.
-}
-
-Rules for the JSON:
-- Must be valid JSON, single line or pretty-printed, no trailing commas.
-- Never restate technical objects (T-codes, tables, BAdIs) in the visual data
-  that weren't already grounded/verified in your written answer above — the
-  same accuracy rules apply here, the visual is a rendering of the same
-  verified content, not a second, less careful pass.
-- Be honest about confidence — a low number here is not a failure, it's
-  useful signal. It's fine and expected to be uncertain sometimes.`
-
-// Minimum structural bar per format — independent of Sonnet's own confidence
-// score. If the returned data doesn't actually meet this, we don't trust the
-// format even at high confidence. Schema-validity, not SAP business logic.
-function isDataStructurallyValid(format, data) {
-  if (!data) return false
-  switch (format) {
-    case 'process_flow':
-      return Array.isArray(data.steps) && data.steps.length >= 3
-    case 'options_comparison':
-      return Array.isArray(data.options) && data.options.length >= 2
-    case 'troubleshooting':
-      return Array.isArray(data.causes) && data.causes.length >= 1
-    case 'concept_explainer':
-      return typeof data.coreConcept === 'string' && data.coreConcept.length > 0
-    default:
-      return false
-  }
-}
-
-// Call this on fullAnswer in chat.js STEP 10, before building chatAnswer.
-// Fails closed at every stage: any parse error, unknown format, low
-// confidence, or structurally invalid data results in visualFormat: null
-// (renders as plain text) — a broken or under-confident visual block must
-// never surface as broken text, crash the answer, or force a bad layout.
-export function extractVisualBlock(fullAnswer) {
-  if (!fullAnswer || !fullAnswer.includes(VISUAL_MARKER_START)) {
-    return { cleanText: fullAnswer, visualFormat: null, visualData: null, visualConfidence: null, visualReason: null }
-  }
-
-  const startIdx = fullAnswer.indexOf(VISUAL_MARKER_START)
-  const endIdx   = fullAnswer.indexOf(VISUAL_MARKER_END)
-
-  if (endIdx === -1 || endIdx < startIdx) {
-    return { cleanText: fullAnswer.slice(0, startIdx).trim(), visualFormat: null, visualData: null, visualConfidence: null, visualReason: null }
-  }
-
-  const cleanText = fullAnswer.slice(0, startIdx).trim()
-  const jsonBlock = fullAnswer.slice(startIdx + VISUAL_MARKER_START.length, endIdx).trim()
-
-  let parsed
-  try {
-    parsed = JSON.parse(jsonBlock)
-  } catch (e) {
-    console.error('[VISUAL BLOCK] JSON parse failed:', e.message)
-    return { cleanText, visualFormat: null, visualData: null, visualConfidence: null, visualReason: null }
-  }
-
-  const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : null
-  const reason = typeof parsed.reason === 'string' ? parsed.reason : null
-
-  if (!parsed.format || !VISUAL_FORMATS.includes(parsed.format) || parsed.format === 'plain_text') {
-    // Explicit plain_text, or malformed format — either way, no visual.
-    // confidence/reason are still returned for telemetry even on plain_text.
-    return { cleanText, visualFormat: null, visualData: null, visualConfidence: confidence, visualReason: reason }
-  }
-
-  if (confidence !== null && confidence < VISUAL_CONFIDENCE_THRESHOLD) {
-    return { cleanText, visualFormat: null, visualData: null, visualConfidence: confidence, visualReason: reason, downgradedFrom: parsed.format }
-  }
-
-  if (!isDataStructurallyValid(parsed.format, parsed.data)) {
-    console.error('[VISUAL BLOCK] Schema validation failed for format:', parsed.format)
-    return { cleanText, visualFormat: null, visualData: null, visualConfidence: confidence, visualReason: reason, downgradedFrom: parsed.format }
-  }
-
-  return { cleanText, visualFormat: parsed.format, visualData: parsed.data, visualConfidence: confidence, visualReason: reason }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ANSWER CONTAINER — fixed five-section response structure.
-//
-// v2: trailing-marker based, NOT whole-response JSON. The v1 approach (whole
-// answer as one JSON object) caused real, measured problems in production:
-// users waited up to ~2 minutes with nothing on screen, since there was
-// nothing coherent to show until the entire JSON object was valid. This
-// version restores live token streaming — Sonnet writes the normal markdown
-// answer exactly as always, streamed live, then appends a JSON block after
-// it (same WANI_VISUAL_START/END convention used throughout this file)
-// containing everything else: quick_answer, visual,
-// references, follow_ups. detailed_explanation is no longer a JSON field —
-// it's just the streamed markdown text itself (the "cleanText" returned by
-// the parser below).
-//
-// The remaining known issue this does NOT fix on its own: the marker JSON
-// still streams to the client like any other text before the server has a
-// chance to strip it. That must be handled frontend-side by buffering/hiding
-// anything from WANI_VISUAL_START onward as it arrives, rather than trusting
-// speed — see the Brain.jsx integration notes.
-// ─────────────────────────────────────────────────────────────────────────────
 export const ANSWER_CONTAINER_PROMPT = `
 
-VISUAL FORMAT AND ANSWER SECTIONS:
+ANSWER STRUCTURE — READ THIS BEFORE WRITING ANYTHING:
+Wani's UI shows a short quick-answer banner to the reader BEFORE the full
+answer streams in, so there's never a blank screen while you're still
+writing. That only works if you write the quick answer FIRST, before a
+single word of the full answer. Follow this exact order:
+
+STEP 1 — QUICK ANSWER (the very first thing you write, nothing before it):
+${QUICK_MARKER_START}
+<2-3 sentences, plain text, no markdown formatting, summarizing the core
+takeaway of the answer you're about to write>
+${QUICK_MARKER_END}
+
+This must be strictly accurate on its own — never a claim that needs the
+full answer's caveats to be correct. If the real answer is conditional
+("it depends on X"), say so here too rather than picking one branch and
+stating it as unconditional fact. You already know what you're about to
+write — summarize it, don't stall or hedge with filler.
+
+STEP 2 — FULL ANSWER (immediately after the closing marker above):
 Write your complete answer as normal markdown, exactly as you always do —
-headers, bold, code ticks, bullet lists, everything. This is streamed live to
-the user as you write it. Do NOT wrap your answer in JSON — write it as plain
-text, same quality and depth as any other Wani answer.
+headers, bold, code ticks, bullet lists, everything. This streams live to
+the user as you write it, same quality and depth as any other Wani answer.
+Do not mention or offer a visual/diagram anywhere in this text — visuals are
+handled separately, only if the reader explicitly asks for one afterward.
 
-After your complete written answer, on new lines, with nothing after it,
-append this block:
-
-${VISUAL_MARKER_START}
-{"quick_answer":"...","visual":{...},"references":[...],"follow_ups":["...","...","..."]}
-${VISUAL_MARKER_END}
+STEP 3 — REFERENCES AND FOLLOW-UPS (after the complete full answer, on new
+lines, with nothing after it):
+${META_MARKER_START}
+{"references":[...],"follow_ups":["...","...","..."]}
+${META_MARKER_END}
 
 Build that JSON like this:
-1. quick_answer: 2-3 sentences summarizing the core takeaway of what you just
-   wrote. This is shown to the reader BEFORE the full written answer, so it
-   must be strictly accurate on its own — never a claim that needs the full
-   answer's caveats to be correct. Compress faithfully; do not simplify away
-   a condition, exception, or version-dependency that changes the answer.
-   If your written answer is genuinely conditional ("it depends on X"), the
-   quick_answer must say so rather than picking one branch and stating it
-   as unconditional fact. Introduce nothing here that isn't already stated
-   in the written answer above — this is a compression of it, not a second
-   independent take.
-2. visual: decide whether a visual would materially help THIS answer.
-   {"mode":"none | process_flow | options_comparison | troubleshooting | concept_explainer","confidence":0.0,"reason":"one sentence","data":{...}}
-   "none" should be the common outcome — a routine "none" can and should
-   carry high confidence. Never pick a mode because one exists. Format guide:
-   - process_flow: the answer explains how something works end-to-end. Use
-     for "how does X work" / "walk me through X".
-   - options_comparison: the answer weighs 2-4 approaches with a
-     recommendation. Use for "which approach should I use" / trade-offs.
-   - troubleshooting: an ordered diagnostic/verification checklist — open
-     multi-cause OR already narrowed to one likely cause with checks, both
-     count. Use for "why isn't X happening/showing" and follow-up checklists.
-   - concept_explainer: explains what something IS conceptually. Use
-     sparingly, only for genuinely broad conceptual questions.
-   When mode is not "none", data follows:
-     process_flow:       {"title":"...","steps":[{"title":"...","description":"..."}]}  // 3-6 steps
-     options_comparison:  {"title":"...","recommendation":{"preferredOption":"A","reason":"..."},"options":[{"id":"A","name":"...","bestWhen":"...","pros":[],"cons":[],"recommended":true}]}  // 2-4 options
-     troubleshooting:     {"title":"...","issueSummary":"...","checkFirst":"...","causes":[{"id":"1","title":"...","description":"...","check":"..."}]}  // 1+ causes
-     concept_explainer:   {"title":"...","coreConcept":"...","concepts":[{"title":"...","description":"..."}]}  // 2-3 max
-3. references: SAP Notes/Help/Community/blog sources you actually
-   used/verified — {"type":"sap_note | sap_help | community | blog","title":"...","url":"..."}.
-   May be an empty array — never invent URLs or note numbers to fill it.
-4. follow_ups: 2-3 natural follow-up questions, same spirit as Wani's
+1. references: SAP Notes/Help/Community/blog sources you actually
+   used/verified —
+   {"type":"sap_note | sap_help | community | blog","title":"...","url":"...","note":"..."}.
+   "note" is a short, SPECIFIC sentence on why this exact link is worth
+   opening — what it confirms, adds, or covers beyond what's already in the
+   answer above (e.g. "Walks through the CKMLCP variance breakdown screen
+   step by step" or "Confirms this note applies from S/4HANA 2021 FPS02
+   onward"). Never a generic filler like "for more information" or "see
+   this link for details" — if you can't say something specific, leave the
+   reference out entirely. May be an empty array — never invent URLs, note
+   numbers, or notes to fill it.
+2. follow_ups: 2-3 natural follow-up questions, same spirit as Wani's
    existing "You may also ask" suggestions — plain question strings, no
    numbering. Do not also write a "💡 You may also ask" section inside your
    written answer above — follow-ups belong only in this field now.
 
 Rules for the JSON block:
-- Must be valid JSON, no trailing commas.
-- Be honest about visual confidence — a low number is useful signal, not a failure.`
+- Must be valid JSON, no trailing commas, nothing after the closing marker.`
 
-// Minimum structural bar per visual mode.
-function isContainerVisualValid(mode, data) {
-  if (mode === 'none') return true
+// ─────────────────────────────────────────────────────────────────────────────
+// ON-DEMAND VISUAL — separate, cheap (Haiku) restructuring call. Only fires
+// when the reader clicks "View as visual" on an already-completed answer.
+// Takes the answer text verbatim as input; the model's job is purely to
+// re-express existing content in one of the four shapes below, never to add,
+// remove, or re-verify a technical claim. See generateVisualOnDemand in
+// chat.js for the call site.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ON_DEMAND_VISUAL_PROMPT = `You restructure an already-written SAP consulting answer into a single visual template for a UI component. You are NOT answering the question — the answer already exists and is given to you verbatim below. Do not add, remove, or correct any technical claim in it; you are re-expressing the SAME content in a structured shape, nothing more.
+
+Pick exactly ONE of these four formats — whichever the answer's actual content fits best:
+- process_flow: the answer explains how something works end-to-end (a sequence of steps/stages).
+- options_comparison: the answer weighs 2-4 valid approaches with a recommendation.
+- troubleshooting: the answer gives an ordered diagnostic or verification checklist for something not working.
+- concept_explainer: the answer explains what something IS conceptually, without a flow or diagnosis.
+
+The reader explicitly asked to see this as a visual, so you must pick the best-fitting one — there is no "none" option here. If the answer doesn't cleanly fit process_flow/options_comparison/troubleshooting, fall back to concept_explainer and break its content into 2-3 short concepts.
+
+Respond with ONLY this JSON, nothing else, no markdown fences, no text before or after it:
+{"format":"process_flow | options_comparison | troubleshooting | concept_explainer","data":{...}}
+
+Data shapes:
+process_flow.data       = {"title":"...","steps":[{"title":"...","description":"..."}]}  // 3-6 steps
+options_comparison.data = {"title":"...","recommendation":{"preferredOption":"A","reason":"..."},"options":[{"id":"A","name":"...","bestWhen":"...","pros":[],"cons":[],"recommended":true}]}  // 2-4 options
+troubleshooting.data    = {"title":"...","issueSummary":"...","checkFirst":"...","causes":[{"id":"1","title":"...","description":"...","check":"..."}]}  // 1+ causes
+concept_explainer.data  = {"title":"...","coreConcept":"...","concepts":[{"title":"...","description":"..."}]}  // 2-3 max
+
+Rules:
+- Only use content that is actually present in the answer below — never introduce a new T-code, table, BAdI, or claim that wasn't already there.
+- Must be valid JSON, no trailing commas, no text before or after the JSON.`
+
+// Minimum structural bar per visual format — schema-validity, not SAP
+// business logic. Shared by the (now removed) automatic path's old checks
+// and the new on-demand endpoint.
+export function validateVisualData(format, data) {
   if (!data) return false
-  switch (mode) {
+  switch (format) {
     case 'process_flow':       return Array.isArray(data.steps) && data.steps.length >= 3
     case 'options_comparison': return Array.isArray(data.options) && data.options.length >= 2
     case 'troubleshooting':    return Array.isArray(data.causes) && data.causes.length >= 1
@@ -554,18 +408,10 @@ function isContainerVisualValid(mode, data) {
   }
 }
 
-// Parses the trailing WANI_VISUAL_START/END block off the end of a normally-
-// streamed answer. FAILS SAFE: no marker, malformed JSON, or any parse
-// problem just means "no extra sections" — cleanText (the actual streamed
-// answer) is always returned intact either way, exactly like the original
-// extractVisualBlock. Nothing about a broken trailing block can ever lose or
-// corrupt the visible answer, because the answer was already fully streamed
-// to the user before this function even runs.
 // Corrects a reference's "type" from its actual URL rather than trusting
 // whatever label Sonnet guessed — the URL is ground truth, the model's
 // classification of its own citation isn't. Pure domain/path pattern
-// matching, not SAP business logic, same category as the schema-validity
-// checks elsewhere in this file.
+// matching, not SAP business logic.
 function inferReferenceType(url) {
   if (!url) return null
   const u = url.toLowerCase()
@@ -578,65 +424,79 @@ function inferReferenceType(url) {
 
 function correctReferences(refs) {
   if (!Array.isArray(refs)) return []
-  return refs.map(r => ({ ...r, type: inferReferenceType(r.url) || r.type }))
+  return refs.map(r => ({
+    ...r,
+    type: inferReferenceType(r.url) || r.type,
+    note: typeof r.note === 'string' ? r.note.trim() : '',
+  }))
 }
 
-export function parseAnswerContainer(rawText) {
+// Pulls the STEP 1 quick-answer block off the front of the text, wherever it
+// currently sits (normally the very start). Fails safe: no marker, or a
+// malformed/missing end marker, just means no quick answer was found —
+// `rest` is always the full original text either way so nothing is lost.
+export function extractQuickAnswer(fullText) {
+  if (!fullText || !fullText.includes(QUICK_MARKER_START)) {
+    return { quickAnswer: '', rest: fullText || '' }
+  }
+  const startIdx = fullText.indexOf(QUICK_MARKER_START)
+  const endIdx   = fullText.indexOf(QUICK_MARKER_END)
+  if (endIdx === -1 || endIdx < startIdx) {
+    return { quickAnswer: '', rest: fullText }
+  }
+  const quickAnswer = fullText.slice(startIdx + QUICK_MARKER_START.length, endIdx).trim()
+  const rest = (fullText.slice(0, startIdx) + fullText.slice(endIdx + QUICK_MARKER_END.length)).trim()
+  return { quickAnswer, rest }
+}
+
+// Parses the trailing META_MARKER_START/END block off the end of an answer
+// that's already had its quick-answer block removed (see extractQuickAnswer
+// above — call that first, then this on the `rest`). FAILS SAFE: no marker,
+// malformed JSON, or any parse problem just means "no references/follow-
+// ups" — cleanText (the actual answer) is always returned intact either way.
+export function parseAnswerMeta(rawText) {
   const fallback = (text) => ({
     cleanText: (text || '').trim(),
-    quickAnswer: '',
-    visual: { mode: 'none', confidence: null, reason: null, data: null },
     references: [],
     followUps: [],
     parseOk: false,
     hiddenJsonChars: 0,
-    visualDataChars: 0,
   })
 
-  if (!rawText || !rawText.includes(VISUAL_MARKER_START)) return fallback(rawText)
+  if (!rawText || !rawText.includes(META_MARKER_START)) return fallback(rawText)
 
-  const startIdx = rawText.indexOf(VISUAL_MARKER_START)
-  const endIdx   = rawText.indexOf(VISUAL_MARKER_END)
+  const startIdx = rawText.indexOf(META_MARKER_START)
+  const endIdx   = rawText.indexOf(META_MARKER_END)
   const cleanText = rawText.slice(0, startIdx).trim()
 
   if (endIdx === -1 || endIdx < startIdx) return { ...fallback(rawText), cleanText }
 
-  const jsonBlock = rawText.slice(startIdx + VISUAL_MARKER_START.length, endIdx).trim()
+  const jsonBlock = rawText.slice(startIdx + META_MARKER_START.length, endIdx).trim()
 
   let parsed
   try {
     parsed = JSON.parse(jsonBlock)
   } catch (e) {
-    console.error('[ANSWER CONTAINER] Trailing block JSON parse failed:', e.message)
+    console.error('[ANSWER META] Trailing block JSON parse failed:', e.message)
     return { ...fallback(rawText), cleanText, hiddenJsonChars: jsonBlock.length }
   }
 
-  const visualModeRaw = parsed.visual?.mode
-  const visualMode = ['none', 'process_flow', 'options_comparison', 'troubleshooting', 'concept_explainer'].includes(visualModeRaw)
-    ? visualModeRaw
-    : 'none'
-  const visualValid = isContainerVisualValid(visualMode, parsed.visual?.data)
-  const visualConfidence = typeof parsed.visual?.confidence === 'number' ? parsed.visual.confidence : null
-  const visualDowngraded = visualMode !== 'none' && (!visualValid || (visualConfidence !== null && visualConfidence < VISUAL_CONFIDENCE_THRESHOLD))
-
   return {
     cleanText,
-    quickAnswer: typeof parsed.quick_answer === 'string' ? parsed.quick_answer.trim() : '',
-    visual: {
-      mode: visualDowngraded ? 'none' : visualMode,
-      confidence: visualConfidence,
-      reason: typeof parsed.visual?.reason === 'string' ? parsed.visual.reason : null,
-      data: visualDowngraded ? null : (parsed.visual?.data || null),
-    },
     references: correctReferences(Array.isArray(parsed.references) ? parsed.references : []),
     followUps: Array.isArray(parsed.follow_ups) ? parsed.follow_ups.slice(0, 3) : [],
     parseOk: true,
-    visualDowngradedFrom: visualDowngraded ? visualModeRaw : null,
-    // Char counts, not token counts — a real tokenizer would need a new
-    // dependency (e.g. @anthropic-ai/tokenizer) this codebase doesn't have
-    // yet. chars/4 is the standard rough English/JSON approximation; good
-    // enough to see the shape of the cost breakdown, not exact billing math.
+    // Char counts, not token counts — see chars/4 note in the cost-log
+    // comment elsewhere in this file; good enough to see the shape of the
+    // cost breakdown, not exact billing math.
     hiddenJsonChars: jsonBlock.length,
-    visualDataChars: parsed.visual?.data ? JSON.stringify(parsed.visual.data).length : 0,
   }
+}
+
+// Convenience wrapper combining both parses — this is what chat.js calls on
+// the full raw answer once streaming finishes.
+export function parseAnswerContainer(fullAnswer) {
+  const { quickAnswer, rest } = extractQuickAnswer(fullAnswer)
+  const meta = parseAnswerMeta(rest)
+  return { ...meta, quickAnswer }
 }
