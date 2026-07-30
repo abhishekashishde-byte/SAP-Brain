@@ -1,24 +1,31 @@
 // src/components/WaniHeroCard.jsx
 //
 // Real photo of the Wani card (public/wani-hero-card.png), correct 4:3
-// aspect ratio (1448x1086 — never force-cropped to square), with a subtle,
-// slow diagonal shine sweeping across it on a loop. Tuned through several
-// rounds of live preview: shine is intentionally narrow, dim, and slow
-// (7s sweep) — an early version was too fast/bright and looked like a
-// glitch rather than a glint. `screen` blend mode is used because the
-// photo's background is mostly black; `overlay` washed out and barely
-// showed against it.
-export default function WaniHeroCard({ size = 'desktop' }) {
-  const isMobile = size === 'mobile'
-  const width = isMobile ? 240 : 340
-
+// aspect ratio (1448x1086 — never force-cropped to square). Background is
+// solid #000000 — sampled directly from the photo's own corner pixels — so
+// it sits seamlessly on a matching black hero screen with no visible edge.
+//
+// Sized against the PARENT's height (%), not raw vh — this container lives
+// inside `.chat-messages` (flex:1, overflowY:auto), which is only whatever
+// space remains after the header/input bar, not the full viewport. Raw vh
+// units are relative to the whole browser window and would ignore that
+// chrome, risking exactly the overflow/scroll this was built to avoid.
+// Percentage height respects the actual available space since flex:1
+// establishes a definite height for percentage children to resolve against.
+//
+// The shine is a soft, slow ambient sweep that extends well beyond the
+// image's own rectangle (inset goes negative) so its motion doesn't reveal
+// the card's actual pixel boundary — tuned down from an earlier version
+// that was too fast/bright and looked like a glitch.
+export default function WaniHeroCard() {
   return (
     <div style={{
       position: 'relative',
-      width,
-      aspectRatio: '1448 / 1086', // matches the source photo exactly — no cropping
-      borderRadius: isMobile ? 18 : 22,
-      overflow: 'hidden',
+      height: 'min(58%, 60vh)', // % of parent as primary; vh only as an absolute ceiling
+      width: 'auto',
+      aspectRatio: '1448 / 1086',
+      flexShrink: 0,
+      marginBottom: '0.5%',
     }}>
       <img
         src="/wani-hero-card.png"
@@ -26,9 +33,10 @@ export default function WaniHeroCard({ size = 'desktop' }) {
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
       />
       <div style={{
-        position: 'absolute', inset: 0,
-        background: 'linear-gradient(115deg, transparent 46%, rgba(255,255,255,0.18) 49%, rgba(255,255,255,0.30) 50%, rgba(255,255,255,0.18) 51%, transparent 54%)',
+        position: 'absolute', inset: '-60% -80%',
+        background: 'linear-gradient(115deg, transparent 44%, rgba(255,255,255,0.10) 48%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.10) 52%, transparent 56%)',
         backgroundSize: '300% 300%',
+        filter: 'blur(18px)',
         animation: 'waniCardShimmer 7s ease-in-out infinite',
         mixBlendMode: 'screen',
         pointerEvents: 'none',
