@@ -1772,6 +1772,23 @@ export default function Brain({ session }) {
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
   const isHeroLanding = view==='chat' && messages.length===0 && quickLaunchMessages.length===0
+  const heroRef = useRef(null)
+  const [heroBoxHeight, setHeroBoxHeight] = useState(0)
+  useEffect(() => {
+    if (!isHeroLanding) return
+    const el = heroRef.current
+    if (!el) return
+    const measure = () => setHeroBoxHeight(el.clientHeight)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [isHeroLanding])
+  // Image gets a fixed share of the ACTUAL measured space, with the rest
+  // reserved for greeting/subtitle/history so nothing gets pushed below the
+  // fold — 100px is a floor so it never collapses to nothing before the
+  // first real measurement comes in.
+  const heroImageHeight = heroBoxHeight ? Math.max(100, Math.round(heroBoxHeight * 0.56)) : 240
 
   // ── DOCUMENT FUNCTIONS ────────────────────────────────────────────────────
   const extractDocText = async (file) => {
@@ -2816,11 +2833,10 @@ export default function Brain({ session }) {
                       ))}
                     </div>
                   ) : (
-                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'0 20px 16px',background:'#000000',gap:8 }}>
-                    <div style={{ height:24 }}/>
-                    <WaniHeroCard/>
+                  <div ref={heroRef} style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'8px 20px 12px',background:'#000000',gap:6 }}>
+                    <WaniHeroCard heightPx={heroImageHeight}/>
                     {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#F5F5F7' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
-                    <p style={{ fontSize:15,color:'#94A3B8',maxWidth:340,lineHeight:1.7,margin:0 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
+                    <p style={{ fontSize:15,color:'#94A3B8',maxWidth:340,lineHeight:1.5,margin:0 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
                         {STARTERS[browseTopic].map((s,i)=>(<div key={i} onClick={()=>setInput(s)} style={{ padding:'7px 14px',background:t.surface,border:`1.5px solid ${t.border}`,borderRadius:20,fontSize:12,color:t.text3,cursor:'pointer',transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3;e.currentTarget.style.background=t.surface}}>{s}</div>))}
