@@ -2813,17 +2813,17 @@ export default function Brain({ session }) {
                       ))}
                     </div>
                   ) : (
-                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'40px 20px' }}>
-                    <WaniHeroCard size={window.innerWidth<768?'mobile':'desktop'}/>
-                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:bgTheme.text,marginTop:20,marginBottom:4 }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
-                    <p style={{ fontSize:15,color:bgTheme.text2,maxWidth:300,lineHeight:1.7,marginBottom:22,marginTop:8 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
+                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'24px 20px 16px',background:'#000000',borderRadius:16,gap:8 }}>
+                    <WaniHeroCard/>
+                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#F5F5F7' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
+                    <p style={{ fontSize:15,color:'#94A3B8',maxWidth:340,lineHeight:1.7,margin:0 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
                         {STARTERS[browseTopic].map((s,i)=>(<div key={i} onClick={()=>setInput(s)} style={{ padding:'7px 14px',background:t.surface,border:`1.5px solid ${t.border}`,borderRadius:20,fontSize:12,color:t.text3,cursor:'pointer',transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3;e.currentTarget.style.background=t.surface}}>{s}</div>))}
                       </div>
                     )}
                     {!browseTopic && !input.trim() && conversations.length>0 && (
-                      <div style={{ width:'100%',maxWidth:440,marginTop:8,textAlign:'left',animation:'fadeIn 0.4s ease' }}>
+                      <div style={{ width:'100%',maxWidth:440,marginTop:8,textAlign:'left',animation:'fadeIn 0.4s ease',background:'linear-gradient(180deg, transparent 0%, rgba(30,20,50,0.55) 25%, rgba(30,20,50,0.55) 100%)',borderRadius:18,padding:'16px 14px' }}>
                         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10 }}>
                           <span style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:1,textTransform:'uppercase' }}>Recently Updated</span>
                           <span onClick={()=>setView('history')} style={{ fontSize:12,color:'#4F46E5',cursor:'pointer',fontWeight:600 }}>View all</span>
