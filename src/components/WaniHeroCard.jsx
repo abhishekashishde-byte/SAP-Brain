@@ -24,6 +24,7 @@ export default function WaniHeroCard({ heightPx }) {
       position: 'relative',
       height: heightPx ? `${heightPx}px` : 'min(58%, 60vh)',
       width: 'auto',
+      maxWidth: '100%', // guards against aspect-ratio math (derived from height) pushing wider than the screen on a narrow phone
       aspectRatio: '1448 / 1086',
       flexShrink: 0,
       marginBottom: '0.5%',
