@@ -3,29 +3,29 @@
 // Real photo of the Wani card (public/wani-hero-card.png), correct 4:3
 // aspect ratio (1448x1086 — never force-cropped to square).
 //
-// heightPx is passed in from Brain.jsx as an ACTUAL MEASURED pixel value
-// (via ResizeObserver on the real container), not a CSS %/vh guess. Two
-// earlier CSS-only attempts (raw vh, then percentage-of-parent) both broke
-// on real devices — vh ignores the header/input chrome, and percentage
-// height didn't reliably resolve through the flex ancestor chain on real
-// mobile Chrome. Measuring the actual rendered space in JS and sizing off
-// that number directly is what finally makes this deterministic instead of
-// hoping a CSS unit behaves the way it's supposed to.
+// widthPx/heightPx are passed in from Brain.jsx as ACTUAL MEASURED, ALREADY
+// PROPORTIONED pixel values — both dimensions computed together in JS, not
+// one set explicitly while the other is derived from CSS aspect-ratio and
+// then separately clamped by max-width. That combination was a real bug:
+// when the derived width got clamped, the container's explicit height
+// stayed fixed, so the box was no longer correctly proportioned — the
+// <img> (object-fit:contain) then shrank to fit correctly within that
+// mismatched box and centered itself, leaving empty space that wasn't
+// visible anywhere in the CSS, only in the actual render. Computing both
+// pixel values together upstream removes that ambiguity entirely.
 //
 // The photo's background is NOT uniform pure black — it has a real vignette
 // (verified: bottom-left corner samples ~(36,23,14), a warm dark brown, not
 // (0,0,0)). So instead of matching a flat background color, the image's own
 // edges are radially masked to transparent — that dissolves the photo into
 // whatever's behind it regardless of the photo's non-uniform corner colors.
-export default function WaniHeroCard({ heightPx }) {
+export default function WaniHeroCard({ widthPx, heightPx }) {
   const fadeMask = 'radial-gradient(ellipse 62% 62% at center, black 50%, transparent 86%)'
   return (
     <div style={{
       position: 'relative',
-      height: heightPx ? `${heightPx}px` : 'min(58%, 60vh)',
-      width: 'auto',
-      maxWidth: '100%', // guards against aspect-ratio math (derived from height) pushing wider than the screen on a narrow phone
-      aspectRatio: '1448 / 1086',
+      width: widthPx ? `${widthPx}px` : 240,
+      height: heightPx ? `${heightPx}px` : 180,
       flexShrink: 0,
       marginBottom: '0.5%',
     }}>
