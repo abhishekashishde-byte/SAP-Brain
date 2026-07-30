@@ -2813,7 +2813,8 @@ export default function Brain({ session }) {
                       ))}
                     </div>
                   ) : (
-                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'24px 20px 16px',background:'#000000',borderRadius:16,gap:8 }}>
+                  <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'0 20px 16px',background:'linear-gradient(180deg, transparent 0%, #000000 14%, #000000 100%)',gap:8 }}>
+                    <div style={{ height:24 }}/>
                     <WaniHeroCard/>
                     {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#F5F5F7' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
                     <p style={{ fontSize:15,color:'#94A3B8',maxWidth:340,lineHeight:1.7,margin:0 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
