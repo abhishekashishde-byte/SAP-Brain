@@ -1796,7 +1796,22 @@ export default function Brain({ session }) {
   // for greeting/subtitle/history. Capped on both ends: floor so it never
   // collapses before the first measurement, ceiling so it can't dominate an
   // enormous desktop monitor either.
-  const heroImageHeight = heroBoxHeight ? Math.min(480, Math.max(140, Math.round(heroBoxHeight * 0.5))) : 220
+  const heroWillShowHistory = !browseTopic && conversations.length > 0
+  const heroWillShowStarters = !!(browseTopic && STARTERS[browseTopic])
+  // Fixed pixel budget for everything that ISN'T the image — these don't
+  // shrink with screen height (a greeting is a greeting at any screen size),
+  // so a flat percentage split was never going to reliably leave them room.
+  // Reserve them first, image gets whatever's actually left over.
+  const heroReservedForText =
+    8 /* container top padding */ +
+    36 /* greeting */ + 6 /* gap */ +
+    40 /* subtitle */ + 6 /* gap */ +
+    (heroWillShowHistory ? (18 /* "Recently Updated" label */ + 8 + Math.min(4, conversations.length) * 47 + 20 /* panel padding */) : 0) +
+    (heroWillShowStarters ? 40 : 0) +
+    12 /* bottom padding */
+  const heroImageHeight = heroBoxHeight
+    ? Math.min(440, Math.max(120, heroBoxHeight - heroReservedForText))
+    : 200
 
   // ── DOCUMENT FUNCTIONS ────────────────────────────────────────────────────
   const extractDocText = async (file) => {
