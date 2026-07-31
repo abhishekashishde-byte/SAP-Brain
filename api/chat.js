@@ -2066,73 +2066,98 @@ export default async function handler(req, res) {
       const useContainer = VISUAL_ELIGIBLE_INTENTS.has(intent)
       usedContainerFormat = useContainer
 
-      // Two-phase server-side buffering so the client never sees raw marker
-      // text, in either direction:
-      //   Phase 'quick'  — buffer from the very start until the quick-answer
-      //                    closing marker arrives, then emit it as its own
-      //                    'quick_answer' event (never as visible chunk
-      //                    text) BEFORE anything else is forwarded — this is
-      //                    what lets the client show the quick answer first,
-      //                    with the full answer streaming in under it,
-      //                    instead of everything popping in at the end.
-      //                    A safety cap flushes whatever's buffered as
-      //                    normal answer text if Sonnet ever deviates from
-      //                    the instruction and doesn't open/close the block
-      //                    — the stream must never stall waiting for a
-      //                    marker that isn't coming.
-      //   Phase 'answer' — forward everything live except the last
-      //                    (marker-length) characters, held back just long
-      //                    enough to detect the trailing meta marker
-      //                    starting before it's already on screen.
-      //   Phase 'meta'   — stop forwarding entirely; nothing after the meta
-      //                    marker (the raw references/follow-ups JSON) ever
-      //                    reaches the client as visible chunk text.
+      // Four-phase server-side buffering so the client never sees raw marker
+      // text, in either direction, while still getting BOTH the quick answer
+      // and the full answer as a live, word-by-word stream (not a single
+      // lump dropped in once a marker closes):
+      //   'quick_waiting'   — buffering from the very start until the quick-
+      //                       answer OPENING marker arrives. Normally this
+      //                       is the first few tokens, so effectively no
+      //                       visible delay. A safety cap gives up and
+      //                       treats everything as normal answer text if
+      //                       Sonnet never opens the block at all.
+      //   'quick_streaming' — the quick answer's own content is now
+      //                       streaming live, forwarded as incremental
+      //                       'quick_answer' events exactly the way 'chunk'
+      //                       events already work for the full answer — the
+      //                       reader watches it get typed, not pasted in.
+      //                       Holds back only the last few characters to
+      //                       detect the closing marker before it leaks
+      //                       into visible text. A second safety cap covers
+      //                       "opened but never closed".
+      //   'answer'          — forward everything live except the last
+      //                       (marker-length) characters, held back just
+      //                       long enough to detect the trailing meta
+      //                       marker starting before it's already on screen.
+      //   'meta'            — stop forwarding entirely; nothing after the
+      //                       meta marker (the raw references/follow-ups
+      //                       JSON) ever reaches the client as visible text.
       let streamAccum = ''
       let sentPos = 0
-      let phase = useContainer ? 'quick' : 'answer'
+      let phase = useContainer ? 'quick_waiting' : 'answer'
       const QUICK_SAFETY_CAP = 800 // chars — give up waiting past this if no marker shows up
+      const QUICK_HOLDBACK = QUICK_MARKER_END.length
       const HOLDBACK = META_MARKER_START.length
       const onChunk = (chunk) => {
         if (phase === 'meta') return
         streamAccum += chunk
 
-        if (phase === 'quick') {
-          const endIdx = streamAccum.indexOf(QUICK_MARKER_END)
-          if (endIdx !== -1) {
-            const { quickAnswer } = extractQuickAnswer(streamAccum.slice(0, endIdx + QUICK_MARKER_END.length))
-            if (quickAnswer) send({ type: 'quick_answer', text: quickAnswer })
-            sentPos = endIdx + QUICK_MARKER_END.length
+        if (phase === 'quick_waiting') {
+          const startIdx = streamAccum.indexOf(QUICK_MARKER_START)
+          if (startIdx !== -1) {
+            phase = 'quick_streaming'
+            sentPos = startIdx + QUICK_MARKER_START.length
+          } else if (streamAccum.length > QUICK_SAFETY_CAP) {
+            // Never opened — stop waiting, treat everything buffered so far
+            // as normal answer text.
             phase = 'answer'
-            return
-          }
-          const openedBlock = streamAccum.includes(QUICK_MARKER_START)
-          if (!openedBlock && streamAccum.length > QUICK_SAFETY_CAP) {
-            phase = 'answer' // never opened — stop waiting, treat as normal answer text
-          } else if (openedBlock && streamAccum.length > QUICK_SAFETY_CAP * 3) {
-            phase = 'answer' // opened but never closed within a sane length — stop waiting
+            sentPos = 0
           } else {
             return
           }
         }
 
-        // phase === 'answer' (including a same-tick fallthrough from 'quick' above)
-        const idx = streamAccum.indexOf(META_MARKER_START, sentPos)
-        if (idx !== -1) {
-          const toSend = streamAccum.slice(sentPos, idx)
-          if (toSend) send({ type: 'chunk', text: toSend })
-          sentPos = idx
-          phase = 'meta'
-          // The visible answer just finished but generation hasn't — Sonnet
-          // is still writing the trailing references/follow-ups JSON.
-          // Without this, the cursor just sits there for a moment looking
-          // stalled/broken. One-shot signal, not a heartbeat.
-          send({ type: 'finalizing' })
-          return
+        if (phase === 'quick_streaming') {
+          const endIdx = streamAccum.indexOf(QUICK_MARKER_END, sentPos)
+          if (endIdx !== -1) {
+            const finalPiece = streamAccum.slice(sentPos, endIdx)
+            if (finalPiece) send({ type: 'quick_answer', text: finalPiece })
+            sentPos = endIdx + QUICK_MARKER_END.length
+            phase = 'answer'
+          } else {
+            const safeUpTo = Math.max(sentPos, streamAccum.length - QUICK_HOLDBACK)
+            if (safeUpTo > sentPos) {
+              send({ type: 'quick_answer', text: streamAccum.slice(sentPos, safeUpTo) })
+              sentPos = safeUpTo
+            }
+            if (streamAccum.length > QUICK_SAFETY_CAP * 3) {
+              // Opened but never closed within a sane length — stop waiting.
+              phase = 'answer'
+            } else {
+              return
+            }
+          }
         }
-        const safeUpTo = Math.max(sentPos, streamAccum.length - HOLDBACK)
-        if (safeUpTo > sentPos) {
-          send({ type: 'chunk', text: streamAccum.slice(sentPos, safeUpTo) })
-          sentPos = safeUpTo
+
+        if (phase === 'answer') {
+          const idx = streamAccum.indexOf(META_MARKER_START, sentPos)
+          if (idx !== -1) {
+            const toSend = streamAccum.slice(sentPos, idx)
+            if (toSend) send({ type: 'chunk', text: toSend })
+            sentPos = idx
+            phase = 'meta'
+            // The visible answer just finished but generation hasn't —
+            // Sonnet is still writing the trailing references/follow-ups
+            // JSON. Without this, the cursor just sits there for a moment
+            // looking stalled/broken. One-shot signal, not a heartbeat.
+            send({ type: 'finalizing' })
+            return
+          }
+          const safeUpTo = Math.max(sentPos, streamAccum.length - HOLDBACK)
+          if (safeUpTo > sentPos) {
+            send({ type: 'chunk', text: streamAccum.slice(sentPos, safeUpTo) })
+            sentPos = safeUpTo
+          }
         }
       }
 
@@ -2158,16 +2183,33 @@ export default async function handler(req, res) {
 
       // Final flush: send whatever text was held back mid-stream and never
       // flushed — covers "no marker at all" and "a marker arrived in the
-      // very last delta before the buffer could react". If the stream never
-      // made it out of the quick-answer phase (a very short or non-
-      // conforming answer), extract+emit the quick answer now so it still
-      // reaches the client, then flush the remaining text from scratch.
-      if (phase === 'quick' && useContainer) {
+      // very last delta before the buffer could react". Two edge cases,
+      // handled separately so a partially-streamed quick answer is never
+      // re-sent in full (which would duplicate it client-side, since
+      // 'quick_answer' events are increments, not overwrites):
+      //   - 'quick_waiting' at the end: NOTHING was ever streamed for the
+      //     quick answer — extract it fresh from the complete text.
+      //   - 'quick_streaming' at the end: SOME of it already streamed, but
+      //     the closing marker never arrived before generation ended —
+      //     flush only what's left, using sentPos as the cursor.
+      if (phase === 'quick_waiting' && useContainer) {
         const { quickAnswer: finalQuick, rest } = extractQuickAnswer(fullAnswer)
         if (finalQuick) send({ type: 'quick_answer', text: finalQuick })
         const metaIdx = rest.indexOf(META_MARKER_START)
         const cleanForStream = metaIdx !== -1 ? rest.slice(0, metaIdx) : rest
         if (cleanForStream) send({ type: 'chunk', text: cleanForStream })
+      } else if (phase === 'quick_streaming') {
+        const endIdx = fullAnswer.indexOf(QUICK_MARKER_END)
+        if (endIdx !== -1 && endIdx >= sentPos) {
+          const remainder = fullAnswer.slice(sentPos, endIdx)
+          if (remainder) send({ type: 'quick_answer', text: remainder })
+          sentPos = endIdx + QUICK_MARKER_END.length
+        }
+        const metaIdx = fullAnswer.indexOf(META_MARKER_START, sentPos)
+        const cleanForStream = metaIdx !== -1 ? fullAnswer.slice(0, metaIdx) : fullAnswer
+        if (cleanForStream.length > sentPos) {
+          send({ type: 'chunk', text: cleanForStream.slice(sentPos) })
+        }
       } else {
         const metaIdx = fullAnswer.indexOf(META_MARKER_START)
         const cleanForStream = metaIdx !== -1 ? fullAnswer.slice(0, metaIdx) : fullAnswer
