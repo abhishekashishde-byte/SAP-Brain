@@ -4,6 +4,7 @@ import { WaniLogo, WaniWordmark } from './Login.jsx'
 import { useTheme } from '../App.jsx'
 import AnswerVisual from '../components/visuals/AnswerVisual.jsx'
 import AnswerContainer from '../components/visuals/AnswerContainer.jsx'
+import QuickAnswer from '../components/visuals/QuickAnswer.jsx'
 import WaniHeroCard from '../components/WaniHeroCard.jsx'
 import {
   supabase, signOut,
@@ -890,17 +891,14 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
             />
           ) : (
             <>
-              {/* Quick answer streams in FIRST, well before the full answer
-                  is done — it never pops in later. Same banner markup as
-                  AnswerContainer's finished-state version, so nothing shifts
-                  when the message flips from streaming to done. */}
+              {/* Quick answer streams in FIRST, word by word, well before
+                  the full answer is done — it never pops in later, and its
+                  cursor hands off to the full answer's cursor the moment
+                  the first chunk of that arrives. Same component as the
+                  finished-state version below, so nothing shifts when the
+                  message flips from streaming to done. */}
               {isStreaming && streamingQuickAnswer && (
-                <div style={{
-                  borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13.5, lineHeight: 1.5,
-                  background: 'linear-gradient(135deg, #0A6ED1, #0F828F)', color: '#fff',
-                }}>
-                  {streamingQuickAnswer}
-                </div>
+                <QuickAnswer text={streamingQuickAnswer} showCursor={!content} />
               )}
               {renderMarkdown(content)}
               {isStreaming && !isFinalizing && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
@@ -2388,9 +2386,10 @@ export default function Brain({ session }) {
               accumulated += evt.text
               if (isMine(convId)) setStreamingText(accumulated)
             } else if (evt.type === 'quick_answer') {
-              // Arrives well before the full answer is done — shown above
-              // the streaming text immediately, so it never pops in later.
-              localQuickAnswer = evt.text || ''
+              // Increments, same pattern as 'chunk' — the quick answer now
+              // streams in live, word by word, not as one lump dropped in
+              // once the closing marker is found server-side.
+              localQuickAnswer = (localQuickAnswer || '') + (evt.text || '')
               if (isMine(convId)) setStreamingQuickAnswer(localQuickAnswer)
             } else if (evt.type === 'finalizing') {
               // Visible answer text just finished streaming, but Sonnet is
