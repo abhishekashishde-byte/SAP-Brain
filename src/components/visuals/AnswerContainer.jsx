@@ -18,6 +18,7 @@
 // The visual is intentionally NOT part of this component — it's rendered
 // on demand elsewhere, only after the reader clicks "View as visual".
 import { useTheme } from '../../App.jsx'
+import QuickAnswer from './QuickAnswer.jsx'
 
 function ReferencesList({ refs, dark }) {
   return (
@@ -55,14 +56,7 @@ export default function AnswerContainer({
 
   return (
     <div>
-      {quickAnswer && (
-        <div style={{
-          borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13.5, lineHeight: 1.5,
-          background: 'linear-gradient(135deg, #0A6ED1, #0F828F)', color: '#fff',
-        }}>
-          {quickAnswer}
-        </div>
-      )}
+      <QuickAnswer text={quickAnswer} />
 
       {renderMarkdown(detailedExplanation || '')}
 
