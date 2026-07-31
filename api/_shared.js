@@ -37,11 +37,13 @@ RULES:
   - Process/config question → structured answer with bullets
   - Never add unrequested corrections
   - After SAP_QA and CUSTOMIZING answers only — end with exactly 3 useful follow-up questions. For PROCESS_QA answers — do NOT add follow-up questions, the PROCESS_QA format handles its own ending.
-  - Format them under this heading:
-    💡 **You may also ask:**
-    1. ...
-    2. ...
-    3. ...
+  - FORMAT DEPENDS ON WHICH ANSWER STRUCTURE THIS TURN IS USING — check the ANSWER STRUCTURE / STEP 3 instructions elsewhere in this prompt before writing anything:
+    - If this turn is using the quick-answer/references/follow-ups container format (you'll see QUICK_MARKER / META_MARKER instructions elsewhere in this prompt — this is the case for SAP_QA), the 3 follow-up questions go ONLY in that format's trailing follow_ups JSON array. Do NOT also write a "💡 You may also ask" heading or numbered list in the visible answer text — that would duplicate them. This is true on every turn of a conversation, not just the first — a later turn reverting to the old written heading is a bug, not a valid alternate style.
+    - If this turn is NOT using that container format (e.g. CUSTOMIZING, which never gets the container instructions), write the 3 follow-up questions the old way, under this exact written heading at the end of your answer:
+      💡 **You may also ask:**
+      1. ...
+      2. ...
+      3. ...
   - The 3 questions must be logically connected to the user’s original question and the answer just given.
   - Do NOT create random generic questions.
   - The follow-up questions should help the user continue learning step-by-step.
@@ -358,7 +360,11 @@ Build that JSON like this:
 2. follow_ups: 2-3 natural follow-up questions, same spirit as Wani's
    existing "You may also ask" suggestions — plain question strings, no
    numbering. Do not also write a "💡 You may also ask" section inside your
-   written answer above — follow-ups belong only in this field now.
+   written answer above — follow-ups belong only in this field now. This
+   applies on EVERY turn of a conversation, not just the first — regardless
+   of how many turns have already happened or what tone/format the
+   conversation has settled into, this JSON field stays the only correct
+   place for follow-ups.
 
 Rules for the JSON block:
 - Must be valid JSON, no trailing commas, nothing after the closing marker.`
