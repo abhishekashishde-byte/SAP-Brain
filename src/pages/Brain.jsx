@@ -22,6 +22,13 @@ const IconMic = ({ size=16, color='currentColor' }) => (
     <line x1="8" y1="22" x2="16" y2="22"/>
   </svg>
 )
+const IconChart = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="6" y1="20" x2="6" y2="14"/>
+    <line x1="12" y1="20" x2="12" y2="9"/>
+    <line x1="18" y1="20" x2="18" y2="4"/>
+  </svg>
+)
 const IconChat = ({ size=16, color='currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
@@ -592,25 +599,34 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
     }
   }
 
+  const accent = '#0A6ED1'
   return (
     <div style={{ marginTop: 14 }}>
       <button onClick={handleClick} disabled={requesting} style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        background: 'transparent', border: `1px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`,
-        borderRadius: 8, padding: '6px 14px', fontSize: 12.5, fontWeight: 600,
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: 'transparent', border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.18)'}`,
+        borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 400,
         color: dark ? '#C8C4DC' : '#374151', cursor: requesting ? 'default' : 'pointer',
-        fontFamily: "'Inter','DM Sans',sans-serif",
-      }}>
+        fontFamily: "'Inter','DM Sans',sans-serif", transition: 'all 0.15s', whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={e => { if (!requesting) { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent } }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.18)'; e.currentTarget.style.color = dark ? '#C8C4DC' : '#374151' }}
+      >
         {requesting ? (
           <>
             <span style={{
-              width: 12, height: 12, borderRadius: '50%',
+              width: 11, height: 11, borderRadius: '50%',
               border: `2px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}`,
-              borderTopColor: '#0A6ED1', animation: 'spin 0.8s linear infinite',
+              borderTopColor: accent, animation: 'spin 0.8s linear infinite',
             }} />
             Building visual…
           </>
-        ) : hasVisual ? (visible ? '▲ Hide visual' : '🖼️ View as visual') : '🖼️ View as visual'}
+        ) : (
+          <>
+            <IconChart size={13} color="currentColor" />
+            {hasVisual ? (visible ? 'Hide visual' : 'View as visual') : 'View as visual'}
+          </>
+        )}
       </button>
       {error && <div style={{ marginTop: 6, fontSize: 12, color: '#DC2626' }}>{error}</div>}
       {hasVisual && visible && (
