@@ -1964,12 +1964,36 @@ export default async function handler(req, res) {
     // timeGreeting is retained only in case other logic references it.
 
     // ── Build valid messages ───────────────────────────────────────────────
-    const validMessages = recentMsgs
+    // mergeConsecutiveRoles: defense-in-depth against a broken history where
+    // two turns of the same role end up back to back with no reply between
+    // them (e.g. a client-side bug that lets a follow-up be sent before the
+    // previous answer finished saving — see the ordering fix in Brain.jsx's
+    // handleSend for the actual root cause this was written to guard
+    // against — or an already-broken conversation saved before that fix).
+    // The Anthropic API doesn't reject non-alternating roles, but Sonnet
+    // given two raw consecutive user turns with nothing in between tends to
+    // answer both at once or get confused about which one to prioritize —
+    // exactly the "took both questions together" symptom this prevents.
+    // Merging (not dropping) keeps both questions' content intact.
+    const mergeConsecutiveRoles = (msgs) => {
+      const out = []
+      for (const m of msgs) {
+        const prev = out[out.length - 1]
+        if (prev && prev.role === m.role) {
+          prev.content = `${prev.content}\n\n${m.content}`
+        } else {
+          out.push({ ...m })
+        }
+      }
+      return out
+    }
+
+    const validMessages = mergeConsecutiveRoles(recentMsgs
       .filter(m => m.role && m.role !== 'system' && m.content?.trim())
       .map(m => ({
         role: m.role,
         content: String(m.content).trim().slice(0, hasCodeInHistory ? 6000 : 3000)
-      }))
+      })))
 
     send({ type: 'start', intent })
     let fullAnswer = ''
