@@ -2596,6 +2596,31 @@ export default function Brain({ session }) {
 
       const convUpdate = { messages: persistMsgs }
       if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
+
+      // Update the VISIBLE conversation state — and therefore `messages`,
+      // which the next send() reads to build its own history — IMMEDIATELY,
+      // before awaiting the DB save. This ordering matters specifically for
+      // backgrounded mobile tabs: browsers can suspend/throttle a
+      // backgrounded tab's fetch calls for a long time (sometimes
+      // indefinitely until the user returns). If the save were awaited
+      // FIRST, the streaming bubble would already be gone (isStreaming was
+      // already set false right after the SSE stream finished) with nothing
+      // visibly replacing it until the save call finally resolves — reading
+      // as "the answer vanished, only the question is left". Worse, if the
+      // user asked a follow-up during that gap, `messages` locally would
+      // still be missing this assistant reply, so the next send would carry
+      // two consecutive user turns with no assistant reply between them —
+      // which is exactly what api/chat.js's validMessages would forward to
+      // Sonnet as-is (see the mergeConsecutiveRoles guard added there as a
+      // second line of defense). Local state always keeps full-fidelity
+      // messages (incl. debug doc) regardless of what gets trimmed for the
+      // save below.
+      setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,messages:finalMsgs,updated_at:new Date().toISOString()}:c))
+      markBusy(convId, false)
+      delete abortControllersRef.current[convId]
+      // Clear live dual bubble now that saved message has _dualText — prevents duplicate
+      if (isMine(convId)) { setDualText(''); setDualLabel('') }
+
       try {
         await updateConversation(convId, convUpdate)
       } catch (e) {
@@ -2605,12 +2630,6 @@ export default function Brain({ session }) {
         const lean = finalMsgs.map(m => { const { _debugDoc, ...rest } = m; return rest })
         try { await updateConversation(convId, { ...convUpdate, messages: lean }) } catch (e2) { console.error('Lean retry also failed:', e2) }
       }
-      // Local state always keeps full-fidelity messages (incl. debug doc) for this session
-      setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,messages:finalMsgs,updated_at:new Date().toISOString()}:c))
-      markBusy(convId, false)
-      delete abortControllersRef.current[convId]
-      // Clear live dual bubble now that saved message has _dualText — prevents duplicate
-      if (isMine(convId)) { setDualText(''); setDualLabel('') }
 
       if (currentMsgs.length===1) {
         fetch('/api/categorise',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:msgText, answer:(finalReply||'').slice(0,800) }) })
