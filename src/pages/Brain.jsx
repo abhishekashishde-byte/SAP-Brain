@@ -2998,7 +2998,27 @@ export default function Brain({ session }) {
           <>
             <div ref={chatScrollRef} onScroll={handleChatScroll} className="chat-messages" style={{ flex:1,overflowY:'auto',padding:'20px 16px',position:'relative',zIndex:1 }}>
               <div style={{ maxWidth:720,margin:'0 auto' }}>
-                {messages.length===0?(
+                {messages.length===0 && dbLoading ? (
+                  // True initial load only — dbLoading flips false exactly once, right after
+                  // conversations/profile/projects all resolve together, so by the time this
+                  // clears, the home screen below renders fully-formed in one paint (hero +
+                  // greeting + Recently Updated all at once) instead of the Recently Updated
+                  // block popping in on its own a moment later.
+                  // The video is NOT gated on its own timer — this block simply disappears the
+                  // instant dbLoading flips false, however far into the clip that happens to be
+                  // (normally 1-2s in, well before it reaches the end). `loop` is a safety net
+                  // for the rare case where the data genuinely takes longer than the clip.
+                  // object-fit: contain (not cover) is deliberate — the source is a 16:9
+                  // landscape clip; cover would blow it up and crop most of the frame away to
+                  // fill a portrait container instead of showing the whole scene letterboxed.
+                  <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100%',minHeight:'60vh',width:'100%',animation:'fadeIn 0.25s ease',background:'#000000' }}>
+                    <video autoPlay muted playsInline loop
+                      style={{ width:'100%', height:'100%', maxHeight:320, objectFit:'contain' }}
+                    >
+                      <source src="/wani-intro.mp4" type="video/mp4"/>
+                    </video>
+                  </div>
+                ) : messages.length===0?(
                   quickLaunchMessages.length > 0 ? (
                     <div style={{ animation:'fadeIn 0.4s ease', padding:'20px 0' }}>
                       {quickLaunchMessages.map((msg, i) => (
