@@ -3005,19 +3005,30 @@ export default function Brain({ session }) {
                   // greeting + Recently Updated all at once) instead of the Recently Updated
                   // block popping in on its own a moment later.
                   // The video is NOT gated on its own timer — this block simply disappears the
-                  // instant dbLoading flips false, however far into the clip that happens to be
-                  // (normally 1-2s in, well before it reaches the end). Deliberately no `loop` —
-                  // if data ever takes longer than the 3.4s clip, it holds on the last frame
-                  // instead of jumping back to frame one, which read as a jarring reset.
-                  // object-fit: contain (not cover) is deliberate — the source is a 16:9
-                  // landscape clip; cover would blow it up and crop most of the frame away to
-                  // fill a portrait container instead of showing the whole scene letterboxed.
-                  <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100%',minHeight:'60vh',width:'100%',animation:'fadeIn 0.25s ease',background:'#000000' }}>
+                  // instant dbLoading flips false, however far into the 10s clip that happens to
+                  // be. Deliberately no `loop` — if data ever takes longer than the clip, it
+                  // holds on the last frame instead of jumping back to frame one, which read as
+                  // a jarring reset.
+                  // Two stacked <video> elements playing the SAME small (~2MB, browser-cached
+                  // after the first fetch) clip: a blurred, scaled-up backdrop filling the whole
+                  // area, with the sharp clip centered on top of it. Without the backdrop layer,
+                  // a 16:9 clip inside object-fit:contain leaves hard flat-black bars around it —
+                  // on a wide desktop viewport that read as "a small video player floating in a
+                  // big empty box" rather than one immersive scene. The blur fills that space
+                  // with the clip's own color/light instead of flat black.
+                  <div style={{ position:'relative',width:'100%',height:'70vh',minHeight:420,maxHeight:640,overflow:'hidden',borderRadius:16,background:'#000000',animation:'fadeIn 0.25s ease' }}>
                     <video autoPlay muted playsInline
-                      style={{ width:'100%', height:'100%', maxHeight:320, objectFit:'contain' }}
+                      style={{ position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',filter:'blur(50px) saturate(1.3) brightness(0.55)',transform:'scale(1.25)' }}
                     >
                       <source src="/wani-intro.mp4" type="video/mp4"/>
                     </video>
+                    <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center' }}>
+                      <video autoPlay muted playsInline
+                        style={{ maxWidth:'94%',maxHeight:'94%',objectFit:'contain',borderRadius:10,boxShadow:'0 20px 70px rgba(0,0,0,0.55)' }}
+                      >
+                        <source src="/wani-intro.mp4" type="video/mp4"/>
+                      </video>
+                    </div>
                   </div>
                 ) : messages.length===0?(
                   quickLaunchMessages.length > 0 ? (
