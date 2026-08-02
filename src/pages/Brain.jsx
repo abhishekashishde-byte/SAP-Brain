@@ -1745,6 +1745,7 @@ export default function Brain({ session }) {
   const { toggle } = useTheme()
 
   const [view, setView]                   = useState('chat')
+  const [introVideoFailed, setIntroVideoFailed] = useState(false) // graceful fallback if /wani-intro.mp4 fails to load — shows the spinner instead of a blank/black screen
   const [browseModule, setBrowseModule]   = useState(null)
   const [browseTopic, setBrowseTopic]     = useState(null)
   const [conversations, setConversations] = useState([])
@@ -3016,20 +3017,34 @@ export default function Brain({ session }) {
                   // on a wide desktop viewport that read as "a small video player floating in a
                   // big empty box" rather than one immersive scene. The blur fills that space
                   // with the clip's own color/light instead of flat black.
+                  // If /wani-intro.mp4 ever 404s or fails to decode, onError flips
+                  // introVideoFailed so this falls back to the spinner instead of silently
+                  // showing nothing — a black video area on a black background looks
+                  // identical to "completely blank", which is much harder to debug than a
+                  // visible fallback.
+                  introVideoFailed ? (
+                    <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',minHeight:'60vh',animation:'fadeIn 0.25s ease',background:'#000000' }}>
+                      <div style={{ position:'relative',width:60,height:60,display:'flex',alignItems:'center',justifyContent:'center' }}>
+                        <span style={{ position:'absolute',inset:0,borderRadius:'50%',border:'2.5px solid rgba(255,255,255,0.1)',borderTopColor:'#4F46E5',animation:'spin 0.9s linear infinite' }}/>
+                        <WaniLogo size={30} dark/>
+                      </div>
+                    </div>
+                  ) : (
                   <div style={{ position:'relative',width:'100%',height:'70vh',minHeight:420,maxHeight:640,overflow:'hidden',borderRadius:16,background:'#000000',animation:'fadeIn 0.25s ease' }}>
-                    <video autoPlay muted playsInline
+                    <video autoPlay muted playsInline onError={()=>setIntroVideoFailed(true)}
                       style={{ position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',filter:'blur(50px) saturate(1.3) brightness(0.55)',transform:'scale(1.25)' }}
                     >
                       <source src="/wani-intro.mp4" type="video/mp4"/>
                     </video>
                     <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center' }}>
-                      <video autoPlay muted playsInline
+                      <video autoPlay muted playsInline onError={()=>setIntroVideoFailed(true)}
                         style={{ maxWidth:'94%',maxHeight:'94%',objectFit:'contain',borderRadius:10,boxShadow:'0 20px 70px rgba(0,0,0,0.55)' }}
                       >
                         <source src="/wani-intro.mp4" type="video/mp4"/>
                       </video>
                     </div>
                   </div>
+                  )
                 ) : messages.length===0?(
                   quickLaunchMessages.length > 0 ? (
                     <div style={{ animation:'fadeIn 0.4s ease', padding:'20px 0' }}>
