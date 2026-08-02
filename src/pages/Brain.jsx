@@ -3006,13 +3006,14 @@ export default function Brain({ session }) {
                   // block popping in on its own a moment later.
                   // The video is NOT gated on its own timer — this block simply disappears the
                   // instant dbLoading flips false, however far into the clip that happens to be
-                  // (normally 1-2s in, well before it reaches the end). `loop` is a safety net
-                  // for the rare case where the data genuinely takes longer than the clip.
+                  // (normally 1-2s in, well before it reaches the end). Deliberately no `loop` —
+                  // if data ever takes longer than the 3.4s clip, it holds on the last frame
+                  // instead of jumping back to frame one, which read as a jarring reset.
                   // object-fit: contain (not cover) is deliberate — the source is a 16:9
                   // landscape clip; cover would blow it up and crop most of the frame away to
                   // fill a portrait container instead of showing the whole scene letterboxed.
                   <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100%',minHeight:'60vh',width:'100%',animation:'fadeIn 0.25s ease',background:'#000000' }}>
-                    <video autoPlay muted playsInline loop
+                    <video autoPlay muted playsInline
                       style={{ width:'100%', height:'100%', maxHeight:320, objectFit:'contain' }}
                     >
                       <source src="/wani-intro.mp4" type="video/mp4"/>
