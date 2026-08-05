@@ -1,15 +1,10 @@
 const FILE_INPUT_SELECTOR = 'input[type="file"][accept*=".pdf"]'
-const STYLE_ID = 'wani-native-upload-style'
 const PICKER_MARKER = 'wani-upload-picker-opened-at'
 
 let installed = false
 let observer = null
-let syncFrame = 0
-let syncTimer = null
 let pdfReaderPromise = null
 let toastTimer = null
-let activeInput = null
-let activeButton = null
 
 function showToast(message, tone = 'info') {
   document.getElementById('wani-upload-toast')?.remove()
@@ -45,43 +40,12 @@ function showToast(message, tone = 'info') {
   toastTimer = setTimeout(() => toast.remove(), tone === 'error' ? 7000 : 2800)
 }
 
-function installStyles() {
-  if (document.getElementById(STYLE_ID)) return
-  const style = document.createElement('style')
-  style.id = STYLE_ID
-  style.textContent = `
-    button[data-wani-upload-button="true"] {
-      pointer-events: none !important;
-    }
-    input[data-wani-native-upload="true"] {
-      display: block !important;
-      position: fixed !important;
-      left: var(--wani-upload-left, -100px) !important;
-      top: var(--wani-upload-top, -100px) !important;
-      width: var(--wani-upload-width, 1px) !important;
-      height: var(--wani-upload-height, 1px) !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      border: 0 !important;
-      border-radius: 8px !important;
-      opacity: 0.001 !important;
-      pointer-events: auto !important;
-      cursor: pointer !important;
-      z-index: 2147483646 !important;
-      font-size: 16px !important;
-    }
-  `
-  document.head.appendChild(style)
-}
-
 async function ensurePdfReader() {
   if (window.pdfjsLib?.getDocument) return window.pdfjsLib
   if (pdfReaderPromise) return pdfReaderPromise
 
-  // Load the local PDF library only after the user touches the attachment
-  // control. Keeping the ~1 MB parser out of the initial mobile bundle reduces
-  // the chance that Android discards and reloads the tab while its file picker
-  // temporarily backgrounds Chrome.
+  // Start loading on the user's initial press. The picker opens synchronously,
+  // while the bundled parser continues loading as the user chooses a file.
   pdfReaderPromise = Promise.all([
     import('pdfjs-dist/build/pdf.js'),
     import('pdfjs-dist/build/pdf.worker.min.js?url'),
@@ -101,6 +65,25 @@ async function ensurePdfReader() {
   })
 
   return pdfReaderPromise
+}
+
+function getUploadParts() {
+  const input = document.querySelector(FILE_INPUT_SELECTOR)
+  const button = input?.previousElementSibling
+  if (!(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+    return { input: null, button: null }
+  }
+  return { input, button }
+}
+
+function syncUploadButton() {
+  const { button } = getUploadParts()
+  if (!button) return
+
+  // A button without an explicit type can submit an ancestor form in some
+  // embedded/mobile browser shells. Keep the paperclip as a plain control.
+  button.type = 'button'
+  button.dataset.waniUploadButton = 'true'
 }
 
 function isPdf(file) {
@@ -124,22 +107,69 @@ function normalizePdfMime(input, file) {
   return typedFile
 }
 
-function onNativePointerDown(event) {
-  const input = event.currentTarget
-  try {
-    sessionStorage.setItem(PICKER_MARKER, String(Date.now()))
-  } catch {}
+function markPickerOpened() {
+  try { sessionStorage.setItem(PICKER_MARKER, String(Date.now())) } catch {}
+}
 
-  // Allow selecting the same file twice in succession.
-  input.value = ''
+function clearPickerMarker() {
+  try { sessionStorage.removeItem(PICKER_MARKER) } catch {}
+}
+
+function onPointerDownCapture(event) {
+  if (!(event.target instanceof Element)) return
+  const targetButton = event.target.closest('button[data-wani-upload-button="true"]')
+  if (!targetButton) return
+
+  markPickerOpened()
+  // Do not await this. Awaiting before opening a picker loses the browser's
+  // trusted user activation and Android refuses to show the chooser.
   void ensurePdfReader().catch(() => {})
 }
 
-function onNativeChange(event) {
-  const input = event.currentTarget
+function onClickCapture(event) {
+  if (!(event.target instanceof Element)) return
+  const targetButton = event.target.closest('button[data-wani-upload-button="true"]')
+  if (!targetButton) return
+
+  const { input, button } = getUploadParts()
+  if (!input || !button || targetButton !== button) return
+
+  // Stop React's old input.click() handler so the picker is opened exactly
+  // once. showPicker() is the browser-native API and keeps the user gesture.
+  event.preventDefault()
+  event.stopPropagation()
+  event.stopImmediatePropagation?.()
+
+  if (button.disabled || input.disabled) {
+    clearPickerMarker()
+    return
+  }
+
+  input.value = ''
+  markPickerOpened()
+
+  try {
+    if (typeof input.showPicker === 'function') input.showPicker()
+    else input.click()
+  } catch (error) {
+    console.error('[document-upload] Native picker failed:', error)
+    try {
+      input.click()
+    } catch (fallbackError) {
+      clearPickerMarker()
+      console.error('[document-upload] Picker fallback failed:', fallbackError)
+      showToast('The browser blocked the file picker. Open Wani in Chrome and try the paperclip again.', 'error')
+    }
+  }
+}
+
+function onChangeCapture(event) {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement) || !input.matches(FILE_INPUT_SELECTOR)) return
+
   const selected = input.files?.[0]
   if (!selected) {
-    try { sessionStorage.removeItem(PICKER_MARKER) } catch {}
+    clearPickerMarker()
     return
   }
 
@@ -148,75 +178,13 @@ function onNativeChange(event) {
     file = normalizePdfMime(input, selected)
   } catch (error) {
     console.error('[document-upload] Could not normalize selected PDF:', error)
-    showToast('This browser returned the PDF in an unreadable format. Try selecting it from Files rather than Recent files.', 'error')
+    showToast('This browser returned the PDF in an unreadable format. Select it from Files rather than Recent files.', 'error')
   }
 
-  try { sessionStorage.removeItem(PICKER_MARKER) } catch {}
+  clearPickerMarker()
   void ensurePdfReader().catch(() => {})
   showToast(`Selected ${file?.name || selected.name} · extracting text…`)
-  // Do not prevent, stop, await, or replay this event. It is the browser's
-  // original trusted change event and continues directly to React's handler.
-}
-
-function bindInput(input) {
-  if (input.dataset.waniNativeBound === 'true') return
-  input.dataset.waniNativeBound = 'true'
-  input.addEventListener('pointerdown', onNativePointerDown, { passive: true })
-  input.addEventListener('change', onNativeChange, true)
-}
-
-function unbindInput(input) {
-  if (!input || input.dataset.waniNativeBound !== 'true') return
-  input.removeEventListener('pointerdown', onNativePointerDown)
-  input.removeEventListener('change', onNativeChange, true)
-  delete input.dataset.waniNativeBound
-}
-
-function hidePreviousOverlay() {
-  if (activeInput && !document.contains(activeInput)) {
-    unbindInput(activeInput)
-    activeInput = null
-  }
-  if (activeButton && !document.contains(activeButton)) activeButton = null
-}
-
-function syncNativeOverlay() {
-  syncFrame = 0
-  hidePreviousOverlay()
-
-  const input = document.querySelector(FILE_INPUT_SELECTOR)
-  const button = input?.previousElementSibling
-  if (!(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) return
-
-  if (activeInput && activeInput !== input) unbindInput(activeInput)
-  activeInput = input
-  activeButton = button
-  bindInput(input)
-
-  // Explicitly prevent any implicit form submission. The visible button is now
-  // presentation only; the real browser file input sits directly above it.
-  button.type = 'button'
-  button.dataset.waniUploadButton = 'true'
-
-  input.dataset.waniNativeUpload = 'true'
-  input.disabled = button.disabled
-  input.title = button.title || 'Upload document (PDF, DOCX, TXT)'
-  input.setAttribute('aria-label', input.title)
-
-  const rect = button.getBoundingClientRect()
-  const visible = rect.width > 0 && rect.height > 0 &&
-    rect.bottom > 0 && rect.right > 0 &&
-    rect.top < window.innerHeight && rect.left < window.innerWidth
-
-  input.style.setProperty('--wani-upload-left', visible ? `${rect.left}px` : '-100px')
-  input.style.setProperty('--wani-upload-top', visible ? `${rect.top}px` : '-100px')
-  input.style.setProperty('--wani-upload-width', visible ? `${rect.width}px` : '1px')
-  input.style.setProperty('--wani-upload-height', visible ? `${rect.height}px` : '1px')
-}
-
-function scheduleSync() {
-  if (syncFrame) return
-  syncFrame = requestAnimationFrame(syncNativeOverlay)
+  // Keep the original trusted change event untouched so React receives it.
 }
 
 function reportInterruptedPicker() {
@@ -226,9 +194,9 @@ function reportInterruptedPicker() {
 
   const navigation = performance.getEntriesByType?.('navigation')?.[0]
   if (navigation?.type === 'reload') {
-    try { sessionStorage.removeItem(PICKER_MARKER) } catch {}
+    clearPickerMarker()
     setTimeout(() => {
-      showToast('Chrome reloaded the page while opening files. The attachment control is now using the native picker—tap it once more.', 'error')
+      showToast('Chrome reloaded while opening files. The paperclip is now using the browser picker directly—tap it once more.', 'error')
     }, 500)
   }
 }
@@ -236,25 +204,15 @@ function reportInterruptedPicker() {
 export function installDocumentUploadGuard() {
   if (installed || typeof window === 'undefined') return
   installed = true
-  installStyles()
 
-  observer = new MutationObserver(scheduleSync)
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['disabled', 'title', 'style'],
-  })
+  observer = new MutationObserver(syncUploadButton)
+  observer.observe(document.body, { childList: true, subtree: true })
 
-  window.addEventListener('resize', scheduleSync)
-  window.addEventListener('scroll', scheduleSync, true)
-  window.visualViewport?.addEventListener('resize', scheduleSync)
-  window.visualViewport?.addEventListener('scroll', scheduleSync)
+  document.addEventListener('pointerdown', onPointerDownCapture, true)
+  document.addEventListener('click', onClickCapture, true)
+  document.addEventListener('change', onChangeCapture, true)
 
-  // A small timer handles mobile keyboard and toolbar movements that do not
-  // consistently emit a window resize event in every Android Chrome version.
-  syncTimer = window.setInterval(scheduleSync, 600)
-  scheduleSync()
+  syncUploadButton()
   reportInterruptedPicker()
 }
 
@@ -263,16 +221,7 @@ export function uninstallDocumentUploadGuard() {
   installed = false
   observer?.disconnect()
   observer = null
-  if (syncFrame) cancelAnimationFrame(syncFrame)
-  syncFrame = 0
-  if (syncTimer) clearInterval(syncTimer)
-  syncTimer = null
-  window.removeEventListener('resize', scheduleSync)
-  window.removeEventListener('scroll', scheduleSync, true)
-  window.visualViewport?.removeEventListener('resize', scheduleSync)
-  window.visualViewport?.removeEventListener('scroll', scheduleSync)
-  unbindInput(activeInput)
-  activeInput = null
-  activeButton = null
-  document.getElementById(STYLE_ID)?.remove()
+  document.removeEventListener('pointerdown', onPointerDownCapture, true)
+  document.removeEventListener('click', onClickCapture, true)
+  document.removeEventListener('change', onChangeCapture, true)
 }
