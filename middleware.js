@@ -1,7 +1,8 @@
-import { next } from '@vercel/functions'
+import { next, rewrite } from '@vercel/functions'
 
 const PRIVATE_API_PATHS = new Set([
   '/api/chat',
+  '/api/chat-gateway',
   '/api/categorise',
   '/api/extract',
   '/api/recall',
@@ -13,6 +14,7 @@ const PRIVATE_API_PATHS = new Set([
 
 const MAX_CONTENT_LENGTH = {
   '/api/chat': 2_000_000,
+  '/api/chat-gateway': 2_000_000,
   '/api/categorise': 30_000,
   '/api/extract': 50_000,
   '/api/recall': 30_000,
@@ -26,6 +28,7 @@ export const config = {
   runtime: 'nodejs',
   matcher: [
     '/api/chat',
+    '/api/chat-gateway',
     '/api/categorise',
     '/api/extract',
     '/api/recall',
@@ -57,7 +60,8 @@ function getBearerToken(request) {
 }
 
 export default async function middleware(request) {
-  const pathname = new URL(request.url).pathname
+  const url = new URL(request.url)
+  const pathname = url.pathname
   if (!PRIVATE_API_PATHS.has(pathname)) return next()
 
   const contentLength = Number(request.headers.get('content-length') || 0)
@@ -112,6 +116,13 @@ export default async function middleware(request) {
     const approvals = await approvalResponse.json()
     if (!Array.isArray(approvals) || approvals.length === 0) {
       return jsonError(403, 'Account is not approved')
+    }
+
+    // Keep the public URL stable for existing clients while forcing every chat
+    // request through the gateway that applies administrator-only controls and
+    // strips internal diagnostics from normal-user responses.
+    if (pathname === '/api/chat') {
+      return rewrite(new URL('/api/chat-gateway', request.url))
     }
 
     return next()
