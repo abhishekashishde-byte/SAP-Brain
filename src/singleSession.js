@@ -182,6 +182,7 @@ export async function initializeSingleSession() {
   const cleanupObservers = installObservers()
   const { data: authData } = supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') return
+    if (event === 'SIGNED_IN') forcedSignOut = false
     // Keep Supabase's auth callback synchronous; perform RPC work afterward.
     setTimeout(() => {
       if (session) void establishOrVerify(session)
