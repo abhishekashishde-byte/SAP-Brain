@@ -66,7 +66,7 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_session_id uuid;
-  v_active boolean := false;
+  v_row_count bigint := 0;
 begin
   if v_user_id is null then
     return false;
@@ -87,8 +87,8 @@ begin
    where user_id = v_user_id
      and active_session_id = v_session_id;
 
-  get diagnostics v_active = row_count;
-  return v_active;
+  get diagnostics v_row_count = row_count;
+  return v_row_count > 0;
 end;
 $$;
 
@@ -101,7 +101,7 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_session_id uuid;
-  v_deleted boolean := false;
+  v_row_count bigint := 0;
 begin
   if v_user_id is null then
     return false;
@@ -117,8 +117,8 @@ begin
    where user_id = v_user_id
      and active_session_id = v_session_id;
 
-  get diagnostics v_deleted = row_count;
-  return v_deleted;
+  get diagnostics v_row_count = row_count;
+  return v_row_count > 0;
 end;
 $$;
 
