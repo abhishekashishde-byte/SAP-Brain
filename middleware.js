@@ -2,7 +2,6 @@ import { next, rewrite } from '@vercel/functions'
 
 const PRIVATE_API_PATHS = new Set([
   '/api/chat',
-  '/api/chat-gateway',
   '/api/categorise',
   '/api/extract',
   '/api/recall',
@@ -14,12 +13,11 @@ const PRIVATE_API_PATHS = new Set([
 
 const MAX_CONTENT_LENGTH = {
   '/api/chat': 2_000_000,
-  '/api/chat-gateway': 2_000_000,
   '/api/categorise': 30_000,
   '/api/extract': 50_000,
   '/api/recall': 30_000,
   '/api/summarise': 250_000,
-  '/api/reference-search': 30_000,
+  '/api/reference-search': 2_000_000,
   '/api/generate-fs-doc': 600_000,
   '/api/generate-ppt': 600_000,
 }
@@ -28,7 +26,6 @@ export const config = {
   runtime: 'nodejs',
   matcher: [
     '/api/chat',
-    '/api/chat-gateway',
     '/api/categorise',
     '/api/extract',
     '/api/recall',
@@ -118,11 +115,13 @@ export default async function middleware(request) {
       return jsonError(403, 'Account is not approved')
     }
 
-    // Keep the public URL stable for existing clients while forcing every chat
-    // request through the gateway that applies administrator-only controls and
-    // strips internal diagnostics from normal-user responses.
+    // Reuse the currently disabled reference-search function as the internal
+    // gateway, keeping the deployment within Vercel Hobby's function limit.
     if (pathname === '/api/chat') {
-      return rewrite(new URL('/api/chat-gateway', request.url))
+      const gatewayUrl = new URL(request.url)
+      gatewayUrl.pathname = '/api/reference-search'
+      gatewayUrl.searchParams.set('wani_gateway', '1')
+      return rewrite(gatewayUrl)
     }
 
     return next()
