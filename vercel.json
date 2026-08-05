@@ -10,7 +10,7 @@
     "api/recall.js":           { "maxDuration": 10  },
     "api/categorise.js":       { "maxDuration": 15  },
     "api/summarise.js":        { "maxDuration": 30  },
-    "api/reference-search.js": { "maxDuration": 15  },
+    "api/reference-search.js": { "maxDuration": 300 },
     "api/generate-fs-doc.js":  { "maxDuration": 60  },
     "api/generate-ppt.js":     { "maxDuration": 60  },
     "api/Notify.js":           { "maxDuration": 30  }

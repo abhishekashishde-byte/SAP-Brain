@@ -1,4 +1,4 @@
-import { next } from '@vercel/functions'
+import { next, rewrite } from '@vercel/functions'
 
 const PRIVATE_API_PATHS = new Set([
   '/api/chat',
@@ -17,7 +17,7 @@ const MAX_CONTENT_LENGTH = {
   '/api/extract': 50_000,
   '/api/recall': 30_000,
   '/api/summarise': 250_000,
-  '/api/reference-search': 30_000,
+  '/api/reference-search': 2_000_000,
   '/api/generate-fs-doc': 600_000,
   '/api/generate-ppt': 600_000,
 }
@@ -57,7 +57,8 @@ function getBearerToken(request) {
 }
 
 export default async function middleware(request) {
-  const pathname = new URL(request.url).pathname
+  const url = new URL(request.url)
+  const pathname = url.pathname
   if (!PRIVATE_API_PATHS.has(pathname)) return next()
 
   const contentLength = Number(request.headers.get('content-length') || 0)
@@ -112,6 +113,15 @@ export default async function middleware(request) {
     const approvals = await approvalResponse.json()
     if (!Array.isArray(approvals) || approvals.length === 0) {
       return jsonError(403, 'Account is not approved')
+    }
+
+    // Reuse the currently disabled reference-search function as the internal
+    // gateway, keeping the deployment within Vercel Hobby's function limit.
+    if (pathname === '/api/chat') {
+      const gatewayUrl = new URL(request.url)
+      gatewayUrl.pathname = '/api/reference-search'
+      gatewayUrl.searchParams.set('wani_gateway', '1')
+      return rewrite(gatewayUrl)
     }
 
     return next()
