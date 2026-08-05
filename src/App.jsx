@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react'
-import { supabase } from './supabaseClient'
+import { supabase, signOut } from './supabaseClient'
 import Login from './pages/Login.jsx'
 import { WaniLogo, WaniWordmark } from './pages/Login.jsx'
 import Brain from './pages/Brain.jsx'
@@ -18,7 +18,7 @@ function PendingApproval({ dark, email, onSignOut }) {
           Thanks for applying. We're reviewing your application personally and will send access to <strong>{email}</strong> shortly.
         </p>
         <button onClick={onSignOut} style={{ padding: '10px 24px', borderRadius: 8, border: `1px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`, background: 'transparent', color: dark ? '#94A3B8' : '#666', cursor: 'pointer', fontSize: 13, fontFamily: "'Inter',sans-serif" }}>
-          Sign out
+          Log out
         </button>
       </div>
     </div>
@@ -65,7 +65,7 @@ export default function App() {
   }, [session])
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
+    await signOut()
     setApproved(null)
   }
 
