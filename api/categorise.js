@@ -1,5 +1,7 @@
 // api/categorise.js — AI topic detection with clean title generation
 
+import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+
 const MODULES = {
   "PP – Production Planning": [
     "Production Orders","Production Versions","Bill of Materials",
@@ -57,8 +59,18 @@ const MODULES = {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!requireJsonBody(req, res, 30_000)) return
+
+  const auth = await requireApprovedUser(req)
+  if (!auth.ok) return sendAuthError(res, auth)
+
   const { message, answer } = req.body
-  if (!message) return res.status(400).json({ error: 'No message' })
+  if (typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ error: 'No message' })
+  }
+  if (message.length > 8_000 || (answer != null && (typeof answer !== 'string' || answer.length > 16_000))) {
+    return res.status(400).json({ error: 'Content is too long' })
+  }
 
   const prompt = `You are an SAP expert. Analyse this SAP question${answer ? ' and the answer given' : ''} and return a JSON object.
 
@@ -78,7 +90,6 @@ Respond ONLY with valid JSON, no other text:
 {"module":"PM – Plant Maintenance","topic":"Maintenance Orders","title":"Maintenance Order Creation Process"}`
 
   try {
-    // Use Groq for categorisation — it's fast and free, accuracy is fine for classification
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
@@ -89,26 +100,27 @@ Respond ONLY with valid JSON, no other text:
         messages: [{ role: 'user', content: prompt }]
       }),
     })
+
+    if (!response.ok) {
+      console.error('[categorise] Provider request failed:', response.status)
+      return res.status(503).json({ error: 'Categorisation service unavailable' })
+    }
+
     const data = await response.json()
     const text = data.choices?.[0]?.message?.content?.trim() || ''
-
-    // Clean JSON — sometimes model adds backticks
     const cleaned = text.replace(/```json|```/g, '').trim()
 
     try {
       const parsed = JSON.parse(cleaned)
-      // Validate module exists
       if (!MODULES[parsed.module]) {
         parsed.module = 'S/4HANA General'
         parsed.topic = 'SPRO Configuration'
       }
-      // Validate topic exists in module
       if (!MODULES[parsed.module]?.includes(parsed.topic)) {
         parsed.topic = MODULES[parsed.module][0]
       }
-      // Ensure title has no T-codes (strip 4-char uppercase+digit patterns)
       if (parsed.title) {
-        parsed.title = parsed.title.replace(/\b[A-Z]{2,4}\d{2,3}N?\b/g, '').replace(/\s+/g, ' ').trim()
+        parsed.title = String(parsed.title).replace(/\b[A-Z]{2,4}\d{2,3}N?\b/g, '').replace(/\s+/g, ' ').trim().slice(0, 100)
       }
       return res.status(200).json(parsed)
     } catch {
@@ -118,7 +130,8 @@ Respond ONLY with valid JSON, no other text:
         title: message.slice(0, 40).replace(/\b[A-Z]{2,4}\d{2,3}N?\b/g, '').trim()
       })
     }
-  } catch (err) {
-    return res.status(500).json({ error: err.message })
+  } catch (error) {
+    console.error('[categorise] Error:', error.message)
+    return res.status(503).json({ error: 'Categorisation service unavailable' })
   }
 }
