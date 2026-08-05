@@ -3,6 +3,8 @@
 
 import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!requireJsonBody(req, res, 50_000)) return
@@ -10,7 +12,7 @@ export default async function handler(req, res) {
   const auth = await requireApprovedUser(req)
   if (!auth.ok) return sendAuthError(res, auth)
 
-  const { convId, module: mod, topic, userMsg, assistantMsg } = req.body
+  const { convId, userMsg, assistantMsg } = req.body
   if (typeof userMsg !== 'string' || typeof assistantMsg !== 'string' || !userMsg.trim() || !assistantMsg.trim()) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
@@ -92,13 +94,11 @@ Return ONLY a JSON array of fact strings (max 5). If no specific facts are worth
 
     if (newFacts.length === 0) return res.status(200).json({ stored: 0, note: 'all duplicates' })
 
+    const sourceConvId = typeof convId === 'string' && UUID_PATTERN.test(convId) ? convId : null
     const rows = newFacts.map(content => ({
       user_id: userId,
       content,
-      source: 'passive_extraction',
-      conversation_id: typeof convId === 'string' ? convId.slice(0, 200) : null,
-      module: typeof mod === 'string' ? mod.slice(0, 100) : null,
-      topic: typeof topic === 'string' ? topic.slice(0, 200) : null,
+      source_conv_id: sourceConvId,
       created_at: new Date().toISOString(),
     }))
 
