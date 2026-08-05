@@ -6,11 +6,19 @@ import { installAuthenticatedFetch } from './apiFetchAuth.js'
 import { installCreditFab } from './creditFab.js'
 import { installQuotaVisualGuard } from './quotaVisualGuard.js'
 import { installDocumentUploadGuard } from './documentUploadGuard.js'
+import { initializeSingleSession } from './singleSession.js'
 
-installAuthenticatedFetch()
-installDocumentUploadGuard()
+async function startWani() {
+  installAuthenticatedFetch()
+  installDocumentUploadGuard()
+  await initializeSingleSession()
 
-ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>)
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode><App /></React.StrictMode>
+  )
 
-installCreditFab()
-installQuotaVisualGuard()
+  installCreditFab()
+  installQuotaVisualGuard()
+}
+
+void startWani()

@@ -5,7 +5,17 @@ export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
-export const signOut = () => supabase.auth.signOut()
+export const signOut = async () => {
+  // Delete only this session's active-session record. If this browser has
+  // already been replaced by a newer login, the RPC safely deletes nothing.
+  try { await supabase.rpc('clear_wani_session') } catch {}
+
+  const result = await supabase.auth.signOut({ scope: 'local' })
+  if (!result?.error) {
+    try { localStorage.removeItem('wani-last-auth-session-v1') } catch {}
+  }
+  return result
+}
 
 export const loadConversations = async (userId) => {
   try {
