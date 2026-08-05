@@ -11,6 +11,17 @@ const PRIVATE_API_PATHS = new Set([
   '/api/generate-ppt',
 ])
 
+const MAX_CONTENT_LENGTH = {
+  '/api/chat': 2_000_000,
+  '/api/categorise': 30_000,
+  '/api/extract': 50_000,
+  '/api/recall': 30_000,
+  '/api/summarise': 250_000,
+  '/api/reference-search': 30_000,
+  '/api/generate-fs-doc': 600_000,
+  '/api/generate-ppt': 600_000,
+}
+
 export const config = {
   runtime: 'nodejs',
   matcher: [
@@ -48,6 +59,12 @@ function getBearerToken(request) {
 export default async function middleware(request) {
   const pathname = new URL(request.url).pathname
   if (!PRIVATE_API_PATHS.has(pathname)) return next()
+
+  const contentLength = Number(request.headers.get('content-length') || 0)
+  const maxLength = MAX_CONTENT_LENGTH[pathname]
+  if (maxLength && contentLength > maxLength) {
+    return jsonError(413, 'Request body too large')
+  }
 
   const token = getBearerToken(request)
   if (!token) return jsonError(401, 'Authentication required')
@@ -97,12 +114,7 @@ export default async function middleware(request) {
       return jsonError(403, 'Account is not approved')
     }
 
-    return next({
-      headers: {
-        'x-wani-user-id': user.id,
-        'x-wani-user-email': email,
-      },
-    })
+    return next()
   } catch (error) {
     console.error('[api-auth-middleware] Authentication check failed:', error.message)
     return jsonError(503, 'Authentication service unavailable')
