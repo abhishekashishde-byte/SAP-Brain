@@ -1,10 +1,14 @@
 const FILE_INPUT_SELECTOR = 'input[type="file"][accept*=".pdf"]'
 const PICKER_MARKER = 'wani-upload-picker-opened-at'
+const INTRO_SEEN_KEY = 'wani-intro-seen-v1'
+const INTRO_STYLE_ID = 'wani-intro-replay-guard-style'
+const INTRO_SUPPRESSED_CLASS = 'wani-intro-suppressed'
 
 let installed = false
 let observer = null
 let pdfReaderPromise = null
 let toastTimer = null
+let suppressIntroOnThisLoad = false
 
 function showToast(message, tone = 'info') {
   document.getElementById('wani-upload-toast')?.remove()
@@ -40,12 +44,87 @@ function showToast(message, tone = 'info') {
   toastTimer = setTimeout(() => toast.remove(), tone === 'error' ? 7000 : 2800)
 }
 
+function hasSeenIntro() {
+  try { return localStorage.getItem(INTRO_SEEN_KEY) === '1' } catch { return false }
+}
+
+function markIntroSeen() {
+  try { localStorage.setItem(INTRO_SEEN_KEY, '1') } catch {}
+}
+
+function installIntroReplayStyles() {
+  if (document.getElementById(INTRO_STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = INTRO_STYLE_ID
+  style.textContent = `
+    .${INTRO_SUPPRESSED_CLASS} {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      min-height: 60vh !important;
+      background: #000 !important;
+    }
+    .${INTRO_SUPPRESSED_CLASS} > * {
+      display: none !important;
+    }
+    .${INTRO_SUPPRESSED_CLASS}::after {
+      content: 'Loading Wani…';
+      display: block;
+      color: #a5b4fc;
+      font: 600 13px/1.4 'Inter','DM Sans',sans-serif;
+      letter-spacing: .2px;
+    }
+  `
+  document.head.appendChild(style)
+}
+
+function isIntroVideo(video) {
+  if (!(video instanceof HTMLVideoElement)) return false
+  if ((video.currentSrc || '').includes('/wani-intro.mp4')) return true
+  return [...video.querySelectorAll('source')]
+    .some(source => (source.getAttribute('src') || '').includes('/wani-intro.mp4'))
+}
+
+function findCommonAncestor(elements) {
+  if (!elements.length) return null
+  let candidate = elements[0]
+  while (candidate && !elements.every(element => candidate.contains(element))) {
+    candidate = candidate.parentElement
+  }
+  return candidate
+}
+
+function manageIntroReplay() {
+  const videos = [...document.querySelectorAll('video')].filter(isIntroVideo)
+  if (!videos.length) return
+
+  // The intro may play once on a browser where it has never appeared before.
+  // Every later React remount or full browser reload uses a tiny loader instead.
+  if (!suppressIntroOnThisLoad) {
+    markIntroSeen()
+    return
+  }
+
+  const shell = findCommonAncestor(videos)
+  if (shell instanceof HTMLElement) shell.classList.add(INTRO_SUPPRESSED_CLASS)
+
+  // Stop download/decoding as well as playback. This reduces memory pressure
+  // precisely when Android is returning from its external file chooser.
+  videos.forEach(video => {
+    try {
+      video.pause()
+      video.removeAttribute('autoplay')
+      video.removeAttribute('src')
+      video.querySelectorAll('source').forEach(source => source.removeAttribute('src'))
+      video.load()
+    } catch {}
+  })
+}
+
 async function ensurePdfReader() {
   if (window.pdfjsLib?.getDocument) return window.pdfjsLib
   if (pdfReaderPromise) return pdfReaderPromise
 
-  // Start loading on the user's initial press. The picker opens synchronously,
-  // while the bundled parser continues loading as the user chooses a file.
   pdfReaderPromise = Promise.all([
     import('pdfjs-dist/build/pdf.js'),
     import('pdfjs-dist/build/pdf.worker.min.js?url'),
@@ -108,22 +187,13 @@ function normalizePdfMime(input, file) {
 }
 
 function markPickerOpened() {
+  // A picker-triggered browser remount must never replay the intro.
+  markIntroSeen()
   try { sessionStorage.setItem(PICKER_MARKER, String(Date.now())) } catch {}
 }
 
 function clearPickerMarker() {
   try { sessionStorage.removeItem(PICKER_MARKER) } catch {}
-}
-
-function onPointerDownCapture(event) {
-  if (!(event.target instanceof Element)) return
-  const targetButton = event.target.closest('button[data-wani-upload-button="true"]')
-  if (!targetButton) return
-
-  markPickerOpened()
-  // Do not await this. Awaiting before opening a picker loses the browser's
-  // trusted user activation and Android refuses to show the chooser.
-  void ensurePdfReader().catch(() => {})
 }
 
 function onClickCapture(event) {
@@ -135,7 +205,7 @@ function onClickCapture(event) {
   if (!input || !button || targetButton !== button) return
 
   // Stop React's old input.click() handler so the picker is opened exactly
-  // once. showPicker() is the browser-native API and keeps the user gesture.
+  // once. No PDF code is loaded while Android is opening the chooser.
   event.preventDefault()
   event.stopPropagation()
   event.stopImmediatePropagation?.()
@@ -182,6 +252,7 @@ function onChangeCapture(event) {
   }
 
   clearPickerMarker()
+  // Load the parser only after Android has returned with a selected file.
   void ensurePdfReader().catch(() => {})
   showToast(`Selected ${file?.name || selected.name} · extracting text…`)
   // Keep the original trusted change event untouched so React receives it.
@@ -195,9 +266,7 @@ function reportInterruptedPicker() {
   const navigation = performance.getEntriesByType?.('navigation')?.[0]
   if (navigation?.type === 'reload') {
     clearPickerMarker()
-    setTimeout(() => {
-      showToast('Chrome reloaded while opening files. The paperclip is now using the browser picker directly—tap it once more.', 'error')
-    }, 500)
+    console.warn('[document-upload] Browser reloaded while the file chooser was open; intro replay was suppressed.')
   }
 }
 
@@ -205,14 +274,20 @@ export function installDocumentUploadGuard() {
   if (installed || typeof window === 'undefined') return
   installed = true
 
-  observer = new MutationObserver(syncUploadButton)
+  suppressIntroOnThisLoad = hasSeenIntro()
+  installIntroReplayStyles()
+
+  observer = new MutationObserver(() => {
+    syncUploadButton()
+    manageIntroReplay()
+  })
   observer.observe(document.body, { childList: true, subtree: true })
 
-  document.addEventListener('pointerdown', onPointerDownCapture, true)
   document.addEventListener('click', onClickCapture, true)
   document.addEventListener('change', onChangeCapture, true)
 
   syncUploadButton()
+  manageIntroReplay()
   reportInterruptedPicker()
 }
 
@@ -221,7 +296,7 @@ export function uninstallDocumentUploadGuard() {
   installed = false
   observer?.disconnect()
   observer = null
-  document.removeEventListener('pointerdown', onPointerDownCapture, true)
   document.removeEventListener('click', onClickCapture, true)
   document.removeEventListener('change', onChangeCapture, true)
+  document.getElementById(INTRO_STYLE_ID)?.remove()
 }
