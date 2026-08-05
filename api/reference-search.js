@@ -23,6 +23,13 @@ function isAdminEmail(email) {
   return getAdminEmails().includes(String(email || '').trim().toLowerCase())
 }
 
+function isQuotaAnswerText(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  return /^You have used all \d+ free questions for today\./i.test(text)
+    || /^You have used all \d+ free questions for this month\./i.test(text)
+    || /^Wani is temporarily unable to verify your free credits\./i.test(text)
+}
+
 const ADMIN_ONLY_EVENT_TYPES = new Set([
   'debug_info',
   'search_results',
@@ -227,6 +234,16 @@ export default async function handler(req, res) {
 
   if (req.body?.action === 'save_correction' && !isAdmin) {
     return res.status(403).json({ error: 'Administrator access required' })
+  }
+
+  // A quota notice is not an answer and must never be sent to the visual model.
+  // Without this guard, the model can use the original question to invent a new
+  // visual even though the main question was correctly blocked by the credit gate.
+  if (!isAdmin && req.body?.action === 'generate_visual' && isQuotaAnswerText(req.body?.answerText)) {
+    return res.status(429).json({
+      code: 'WANI_QUOTA_VISUAL_BLOCKED',
+      error: 'Visuals are unavailable for a free-credit limit message.',
+    })
   }
 
   let quota = null
