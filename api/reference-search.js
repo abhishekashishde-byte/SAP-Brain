@@ -33,22 +33,7 @@ export function sanitizeChatEvent(eventText) {
     payload.isCorrection = false
 
     if (payload.sourceInfo && typeof payload.sourceInfo === 'object') {
-      const {
-        pipeline,
-        routing,
-        intent,
-        bookChunks,
-        tavilyRaw,
-        tavilyFiltered,
-        tavilyNotes,
-        openAISources,
-        sonnetVerificationSearches,
-        needsSearch,
-        detectedModule,
-        totalMs,
-        ...publicSourceInfo
-      } = payload.sourceInfo
-
+      const { pipeline, ...publicSourceInfo } = payload.sourceInfo
       payload.sourceInfo = publicSourceInfo
     }
   }
