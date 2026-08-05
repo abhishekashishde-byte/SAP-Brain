@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
+    "@vercel/functions": "^3.7.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "mammoth": "^1.6.0",
