@@ -2,6 +2,16 @@ import { supabase } from './supabaseClient'
 
 let installed = false
 
+async function notifyIfSessionWasReplaced(response) {
+  if (response?.status !== 401) return
+  try {
+    const payload = await response.clone().json()
+    if (/session.*replaced|newer login|another device/i.test(payload?.error || '')) {
+      window.dispatchEvent(new CustomEvent('wani:session-replaced'))
+    }
+  } catch {}
+}
+
 /**
  * Adds the current Supabase access token to same-origin /api requests that do
  * not already provide an Authorization header. This keeps authentication
@@ -29,11 +39,12 @@ export function installAuthenticatedFetch() {
           if (token) headers.set('Authorization', `Bearer ${token}`)
         }
 
-        if (input instanceof Request) {
-          return nativeFetch(new Request(input, { ...init, headers }))
-        }
+        const response = input instanceof Request
+          ? await nativeFetch(new Request(input, { ...init, headers }))
+          : await nativeFetch(input, { ...init, headers })
 
-        return nativeFetch(input, { ...init, headers })
+        await notifyIfSessionWasReplaced(response)
+        return response
       }
     } catch (error) {
       console.error('[api-fetch-auth] Could not attach session token:', error.message)
