@@ -5,8 +5,10 @@ import App from './App.jsx'
 import { installAuthenticatedFetch } from './apiFetchAuth.js'
 import { installCreditFab } from './creditFab.js'
 import { installQuotaVisualGuard } from './quotaVisualGuard.js'
+import { installDocumentUploadGuard } from './documentUploadGuard.js'
 
 installAuthenticatedFetch()
+installDocumentUploadGuard()
 
 ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>)
 
