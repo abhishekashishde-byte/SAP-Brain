@@ -15,6 +15,12 @@ function isAdminEmail(email) {
   return getAdminEmails().includes(String(email || '').trim().toLowerCase())
 }
 
+const ADMIN_ONLY_EVENT_TYPES = new Set([
+  'debug_info',
+  'search_results',
+  'further_reading',
+])
+
 export function sanitizeChatEvent(eventText) {
   const match = eventText.match(/^data:\s*([\s\S]*?)\n\n$/)
   if (!match) return eventText
@@ -26,16 +32,15 @@ export function sanitizeChatEvent(eventText) {
     return eventText
   }
 
-  if (payload?.type === 'debug_info') return ''
+  // Raw diagnostics and all source/result panels are administrator-only.
+  // The normal answer stream is left unchanged.
+  if (ADMIN_ONLY_EVENT_TYPES.has(payload?.type)) return ''
 
   if (payload?.type === 'done') {
     delete payload.debugDoc
+    delete payload.sourceInfo
+    delete payload.references
     payload.isCorrection = false
-
-    if (payload.sourceInfo && typeof payload.sourceInfo === 'object') {
-      const { pipeline, ...publicSourceInfo } = payload.sourceInfo
-      payload.sourceInfo = publicSourceInfo
-    }
   }
 
   return `data: ${JSON.stringify(payload)}\n\n`
