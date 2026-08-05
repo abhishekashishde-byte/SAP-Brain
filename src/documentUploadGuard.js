@@ -1,21 +1,16 @@
-const PDF_INPUT_SELECTOR = 'input[type="file"][accept*=".pdf"]'
-const PDF_VERSION = '3.11.174'
-const LOAD_TIMEOUT_MS = 12000
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.js'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url'
 
-const PDF_SOURCES = [
-  {
-    script: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDF_VERSION}/pdf.min.js`,
-    worker: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDF_VERSION}/pdf.worker.min.js`,
-  },
-  {
-    script: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDF_VERSION}/build/pdf.min.js`,
-    worker: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDF_VERSION}/build/pdf.worker.min.js`,
-  },
-]
+const PDF_INPUT_SELECTOR = 'input[type="file"][accept*=".pdf"]'
 
 let installed = false
-let loadingPdfJs = null
 let toastTimer = null
+
+// Brain.jsx already consumes window.pdfjsLib. Publish the package that is
+// already installed in this app before React renders, so PDF extraction never
+// depends on a runtime CDN request or a delayed file-event replay.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+if (typeof window !== 'undefined') window.pdfjsLib = pdfjsLib
 
 function isPdf(file) {
   return file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name || '')
@@ -52,135 +47,51 @@ function showToast(message, tone = 'info') {
     pointerEvents: 'none',
   })
   document.body.appendChild(toast)
-  toastTimer = setTimeout(() => toast.remove(), tone === 'error' ? 6500 : 3200)
+  toastTimer = setTimeout(() => toast.remove(), tone === 'error' ? 6500 : 2600)
 }
 
-function configureWorker(workerUrl) {
-  if (!window.pdfjsLib?.GlobalWorkerOptions) return false
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
-  return true
-}
-
-function loadScript(url) {
-  return new Promise((resolve, reject) => {
-    const existing = [...document.scripts].find(script => script.src === url)
-    if (existing && window.pdfjsLib) return resolve()
-
-    const script = existing || document.createElement('script')
-    let settled = false
-    const finish = callback => value => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      script.onload = null
-      script.onerror = null
-      callback(value)
-    }
-    const succeed = finish(resolve)
-    const fail = finish(reject)
-    const timeout = setTimeout(() => fail(new Error('PDF reader timed out')), LOAD_TIMEOUT_MS)
-
-    script.onload = succeed
-    script.onerror = () => fail(new Error('PDF reader could not be loaded'))
-    if (!existing) {
-      script.src = url
-      script.crossOrigin = 'anonymous'
-      script.dataset.waniPdfLoader = 'true'
-      document.head.appendChild(script)
-    }
-  })
-}
-
-async function ensurePdfJs() {
-  if (window.pdfjsLib) {
-    const knownWorker = window.pdfjsLib.GlobalWorkerOptions?.workerSrc
-    if (knownWorker) return
-    configureWorker(PDF_SOURCES[0].worker)
-    return
-  }
-
-  if (loadingPdfJs) return loadingPdfJs
-  loadingPdfJs = (async () => {
-    let lastError = null
-    for (const source of PDF_SOURCES) {
-      try {
-        await loadScript(source.script)
-        if (!window.pdfjsLib) throw new Error('PDF reader loaded without its API')
-        configureWorker(source.worker)
-        return
-      } catch (error) {
-        lastError = error
-        document.querySelector(`script[src="${source.script}"]`)?.remove()
-      }
-    }
-    throw lastError || new Error('PDF reader unavailable')
-  })().finally(() => { loadingPdfJs = null })
-
-  return loadingPdfJs
-}
-
-function normalizePdfMime(input, file) {
-  if (file.type === 'application/pdf') return file
-  if (typeof DataTransfer === 'undefined' || typeof File === 'undefined') {
-    throw new Error('This browser did not identify the selected file as a PDF')
-  }
-
-  const typedFile = new File([file], file.name || 'document.pdf', {
-    type: 'application/pdf',
-    lastModified: file.lastModified || Date.now(),
-  })
-  const transfer = new DataTransfer()
-  transfer.items.add(typedFile)
-  input.files = transfer.files
-  return typedFile
-}
-
-async function preparePdfSelection(event) {
+function normalizePdfSelection(event) {
   const input = event.target
   if (!(input instanceof HTMLInputElement) || !input.matches(PDF_INPUT_SELECTOR)) return
-
-  if (input.dataset.waniPdfPrepared === 'true') {
-    delete input.dataset.waniPdfPrepared
-    return
-  }
 
   const file = input.files?.[0]
   if (!isPdf(file)) return
 
-  const needsMimeFix = file.type !== 'application/pdf'
-  const needsReader = !window.pdfjsLib
-  if (!needsMimeFix && !needsReader) {
-    configureWorker(window.pdfjsLib.GlobalWorkerOptions?.workerSrc || PDF_SOURCES[0].worker)
-    return
+  // Android file pickers sometimes return a real .pdf with an empty or generic
+  // MIME type. Brain.jsx checks application/pdf, so replace only the File
+  // metadata synchronously and let the ORIGINAL change event continue to React.
+  // Do not stop, await, or replay the event: some Android Chrome builds discard
+  // synthetic file-input change events for security reasons.
+  if (file.type !== 'application/pdf') {
+    try {
+      if (typeof DataTransfer === 'undefined' || typeof File === 'undefined') {
+        throw new Error('File metadata APIs unavailable')
+      }
+      const typedFile = new File([file], file.name || 'document.pdf', {
+        type: 'application/pdf',
+        lastModified: file.lastModified || Date.now(),
+      })
+      const transfer = new DataTransfer()
+      transfer.items.add(typedFile)
+      input.files = transfer.files
+    } catch (error) {
+      console.error('[document-upload] Could not normalize PDF type:', error.message)
+      showToast('This browser could not read the selected PDF. Try a TXT file for this test.', 'error')
+      return
+    }
   }
 
-  // Stop React's upload handler until the Android file metadata and PDF parser
-  // are ready. Then replay the same change event so Brain.jsx continues normally.
-  event.preventDefault()
-  event.stopPropagation()
-  event.stopImmediatePropagation?.()
-
-  showToast('Preparing the selected PDF…')
-  try {
-    normalizePdfMime(input, file)
-    await ensurePdfJs()
-    input.dataset.waniPdfPrepared = 'true'
-    input.dispatchEvent(new Event('change', { bubbles: true }))
-  } catch (error) {
-    console.error('[document-upload] PDF preparation failed:', error.message)
-    input.value = ''
-    showToast('The PDF reader could not start. Check your connection, then select the file again.', 'error')
-  }
+  showToast(`Selected ${input.files?.[0]?.name || 'PDF'} · extracting text…`)
 }
 
 export function installDocumentUploadGuard() {
   if (installed || typeof window === 'undefined') return
   installed = true
-  document.addEventListener('change', preparePdfSelection, true)
+  document.addEventListener('change', normalizePdfSelection, true)
 }
 
 export function uninstallDocumentUploadGuard() {
   if (!installed || typeof document === 'undefined') return
-  document.removeEventListener('change', preparePdfSelection, true)
+  document.removeEventListener('change', normalizePdfSelection, true)
   installed = false
 }
