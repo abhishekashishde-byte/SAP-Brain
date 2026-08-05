@@ -9,6 +9,7 @@ import {
   FREE_MONTHLY_CREDITS,
   consumeWaniCredit,
   getQuotaRequestId,
+  getWaniCreditUsage,
   shouldConsumeCredit,
 } from './_quota.js'
 
@@ -204,6 +205,26 @@ export default async function handler(req, res) {
   if (!auth.ok) return sendAuthError(res, auth)
 
   const isAdmin = isAdminEmail(auth.user.email)
+
+  // Lightweight, non-consuming status call used by the floating credit indicator.
+  // Admin status is returned explicitly so the frontend never guesses from public env vars.
+  if (req.body?.action === 'get_credit_usage') {
+    if (isAdmin) {
+      return res.status(200).json({ isUnlimited: true, creditUsage: null })
+    }
+
+    try {
+      const quota = await getWaniCreditUsage(auth.serviceClient, auth.user.id)
+      return res.status(200).json({
+        isUnlimited: false,
+        creditUsage: publicCreditUsage(quota),
+      })
+    } catch (error) {
+      console.error('[quota] status lookup failed:', error.code || error.message)
+      return res.status(503).json({ error: 'Unable to read free-credit usage' })
+    }
+  }
+
   if (req.body?.action === 'save_correction' && !isAdmin) {
     return res.status(403).json({ error: 'Administrator access required' })
   }
