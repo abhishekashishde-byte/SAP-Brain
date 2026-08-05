@@ -4,6 +4,13 @@
 
 import chatHandler from './chat.js'
 import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import {
+  FREE_DAILY_CREDITS,
+  FREE_MONTHLY_CREDITS,
+  consumeWaniCredit,
+  getQuotaRequestId,
+  shouldConsumeCredit,
+} from './_quota.js'
 
 function getAdminEmails() {
   return [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2]
@@ -21,7 +28,30 @@ const ADMIN_ONLY_EVENT_TYPES = new Set([
   'further_reading',
 ])
 
-export function sanitizeChatEvent(eventText) {
+function toNumber(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function publicCreditUsage(quota) {
+  if (!quota) return null
+  return {
+    dailyUsed: toNumber(quota.daily_used),
+    dailyRemaining: toNumber(quota.daily_remaining),
+    dailyLimit: toNumber(quota.daily_limit) || FREE_DAILY_CREDITS,
+    monthlyUsed: toNumber(quota.monthly_used),
+    monthlyRemaining: toNumber(quota.monthly_remaining),
+    monthlyLimit: toNumber(quota.monthly_limit) || FREE_MONTHLY_CREDITS,
+    dailyResetAt: quota.daily_reset_at || null,
+    monthlyResetAt: quota.monthly_reset_at || null,
+  }
+}
+
+function currentUiMessageCount(quota) {
+  return toNumber(quota?.daily_used) >= FREE_DAILY_CREDITS ? 50 : 0
+}
+
+export function sanitizeChatEvent(eventText, quota = null) {
   const match = eventText.match(/^data:\s*([\s\S]*?)\n\n$/)
   if (!match) return eventText
 
@@ -41,12 +71,22 @@ export function sanitizeChatEvent(eventText) {
     delete payload.sourceInfo
     delete payload.references
     payload.isCorrection = false
+    payload.isUnlimited = false
+
+    if (quota) {
+      // Brain.jsx currently has a legacy hard-coded 50-message usage bar. Keep it
+      // hidden until the real five-credit daily limit is reached, then show its
+      // existing "Daily limit reached" state. Actual counts are supplied below.
+      payload.messageCount = currentUiMessageCount(quota)
+      payload.dailyLimit = FREE_DAILY_CREDITS
+      payload.creditUsage = publicCreditUsage(quota)
+    }
   }
 
   return `data: ${JSON.stringify(payload)}\n\n`
 }
 
-function createSanitizingResponse(res) {
+function createSanitizingResponse(res, quota = null) {
   let buffer = ''
 
   const write = (chunk, encoding, callback) => {
@@ -66,7 +106,7 @@ function createSanitizingResponse(res) {
     while (boundary !== -1) {
       const event = buffer.slice(0, boundary + 2)
       buffer = buffer.slice(boundary + 2)
-      const sanitized = sanitizeChatEvent(event)
+      const sanitized = sanitizeChatEvent(event, quota)
       if (sanitized) wrote = res.write(sanitized) && wrote
       boundary = buffer.indexOf('\n\n')
     }
@@ -79,7 +119,7 @@ function createSanitizingResponse(res) {
   const end = (chunk, encoding, callback) => {
     if (chunk != null && chunk !== '') write(chunk, encoding)
     if (buffer) {
-      const sanitized = sanitizeChatEvent(buffer.endsWith('\n\n') ? buffer : `${buffer}\n\n`)
+      const sanitized = sanitizeChatEvent(buffer.endsWith('\n\n') ? buffer : `${buffer}\n\n`, quota)
       if (sanitized) res.write(sanitized)
       buffer = ''
     }
@@ -105,6 +145,49 @@ function isChatGatewayRequest(req) {
   }
 }
 
+function quotaMessage(quota, serviceError = false) {
+  if (serviceError) {
+    return 'Wani is temporarily unable to verify your free credits. Please try again in a moment.'
+  }
+
+  if (quota?.reason === 'monthly') {
+    return `You have used all ${FREE_MONTHLY_CREDITS} free questions for this month. Your monthly allowance resets at the beginning of the next month.`
+  }
+
+  const monthlyRemaining = toNumber(quota?.monthly_remaining)
+  const monthlyText = monthlyRemaining === 1
+    ? '1 monthly credit remains.'
+    : `${monthlyRemaining} monthly credits remain.`
+  return `You have used all ${FREE_DAILY_CREDITS} free questions for today. ${monthlyText} Your daily allowance resets at midnight Berlin time.`
+}
+
+function sendQuotaStream(res, quota, serviceError = false) {
+  const text = quotaMessage(quota, serviceError)
+  const usage = publicCreditUsage(quota)
+
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+
+  const send = payload => res.write(`data: ${JSON.stringify(payload)}\n\n`)
+  send({ type: 'start', intent: serviceError ? 'ERROR' : 'LIMIT' })
+  send({ type: 'chunk', text })
+  send({
+    type: 'done',
+    full: text,
+    model: serviceError ? 'quota-error' : 'limit',
+    deliverableType: 'NONE',
+    isCorrection: false,
+    isUnlimited: false,
+    messageCount: serviceError ? 0 : currentUiMessageCount(quota),
+    dailyLimit: FREE_DAILY_CREDITS,
+    creditUsage: usage,
+  })
+  return res.end()
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -125,5 +208,21 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Administrator access required' })
   }
 
-  return chatHandler(req, isAdmin ? res : createSanitizingResponse(res))
+  let quota = null
+  if (!isAdmin && shouldConsumeCredit(req.body)) {
+    try {
+      quota = await consumeWaniCredit(
+        auth.serviceClient,
+        auth.user.id,
+        getQuotaRequestId(req),
+      )
+    } catch (error) {
+      console.error('[quota] credit check failed:', error.code || error.message)
+      return sendQuotaStream(res, null, true)
+    }
+
+    if (!quota.allowed) return sendQuotaStream(res, quota)
+  }
+
+  return chatHandler(req, isAdmin ? res : createSanitizingResponse(res, quota))
 }
