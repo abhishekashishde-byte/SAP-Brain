@@ -41,18 +41,24 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  const sessionUserId = session?.user?.id || null
+  const sessionEmail = session?.user?.email?.trim().toLowerCase() || ''
+
   useEffect(() => {
-    if (!session?.user?.email) {
+    if (!sessionEmail) {
       setApproved(null)
       return
     }
 
-    const email = session.user.email.trim().toLowerCase()
+    // Supabase emits TOKEN_REFRESHED when a hidden tab or backgrounded app
+    // becomes active again. The session object changes, but the user does not.
+    // Keying this check to user identity keeps Brain mounted during token
+    // refreshes, so an in-progress chat draft is not lost.
     setApproved(null)
     supabase
       .from('approved_emails')
       .select('email')
-      .eq('email', email)
+      .eq('email', sessionEmail)
       .maybeSingle()
       .then(({ data, error }) => {
         if (error) {
@@ -62,7 +68,7 @@ export default function App() {
         }
         setApproved(Boolean(data))
       })
-  }, [session])
+  }, [sessionUserId, sessionEmail])
 
   const handleSignOut = async () => {
     await signOut()
