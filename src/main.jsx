@@ -7,6 +7,7 @@ import { installCreditFab } from './creditFab.js'
 import { installQuotaVisualGuard } from './quotaVisualGuard.js'
 import { installDocumentUploadGuard } from './documentUploadGuard.js'
 import { initializeSingleSession } from './singleSession.js'
+import { installKnowledgeCenter } from './knowledgeCenter.js'
 
 async function startWani() {
   installAuthenticatedFetch()
@@ -17,6 +18,7 @@ async function startWani() {
     <React.StrictMode><App /></React.StrictMode>
   )
 
+  installKnowledgeCenter()
   installCreditFab()
   installQuotaVisualGuard()
 }
