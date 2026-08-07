@@ -3,6 +3,7 @@
 // and administrator status always come from the verified Supabase session.
 
 import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import { handleAdminDashboard } from '../lib/adminDashboard.js'
 
 const MAX_TEXT = 12_000
 
@@ -20,6 +21,11 @@ export default async function handler(req, res) {
   const isAdmin = adminEmails.includes((auth.user.email || '').trim().toLowerCase())
 
   try {
+    if (action === 'admin_dashboard') {
+      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      return await handleAdminDashboard(res, auth)
+    }
+
     if (action === 'knowledge_snapshot') {
       return await handleKnowledgeSnapshot(res, auth)
     }
@@ -182,7 +188,7 @@ async function handleUpdateGlobal(req, res, auth) {
 
 async function handleArchiveGlobal(req, res, auth) {
   const id = parseUuid(req.body.id)
-  if (!id) return res.status(400).json({ error: 'Invalid global knowledge entry' })
+  if (!id) return res.status(400).json({ error: 'Invalid knowledge entry' })
 
   const { data, error } = await auth.serviceClient
     .from('wani_global_knowledge')
@@ -254,20 +260,13 @@ async function handleRecall(req, res, auth) {
     const terms = extractSAPTerms(query)
     if (terms.length === 0) return res.status(200).json({ memories: [] })
 
-    const filters = terms
-      .map(term => `content.ilike.*${encodeURIComponent(term)}*`)
-      .join(',')
-    const moduleFilter = mod?.trim()
-      ? `&module=eq.${encodeURIComponent(mod.trim())}`
-      : ''
+    const filters = terms.map(term => `content.ilike.*${encodeURIComponent(term)}*`).join(',')
+    const moduleFilter = mod?.trim() ? `&module=eq.${encodeURIComponent(mod.trim())}` : ''
     const userId = encodeURIComponent(auth.user.id)
     const url = `${SUPABASE_URL}/rest/v1/memories?user_id=eq.${userId}&or=(${filters})${moduleFilter}&order=created_at.desc&limit=${limit}`
 
     const memRes = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_SERVICE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-      },
+      headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
     })
 
     if (!memRes.ok) {
@@ -276,10 +275,7 @@ async function handleRecall(req, res, auth) {
     }
 
     const rows = await memRes.json()
-    const memories = Array.isArray(rows)
-      ? rows.map(row => row.content).filter(content => typeof content === 'string' && content.trim())
-      : []
-
+    const memories = Array.isArray(rows) ? rows.map(row => row.content).filter(content => typeof content === 'string' && content.trim()) : []
     return res.status(200).json({ memories })
   } catch (error) {
     console.error('[recall] error:', error.message)
@@ -291,14 +287,8 @@ async function embed(text) {
   if (!process.env.OPENAI_API_KEY || !text) return null
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'text-embedding-3-small',
-      input: text.slice(0, 8_000),
-    }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({ model: 'text-embedding-3-small', input: text.slice(0, 8_000) }),
   })
 
   if (!response.ok) {
@@ -315,10 +305,7 @@ async function extractCorrectionCandidate(userMsg, assistantMsg) {
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       max_tokens: 240,
@@ -349,26 +336,19 @@ async function extractCorrectionCandidate(userMsg, assistantMsg) {
 
 function extractSAPTerms(text) {
   const terms = []
-
   const tcodes = text.match(/\b([A-Z]{1,4}\d{2,3}N?)\b/g) || []
   terms.push(...tcodes)
-
   const tables = text.match(/\b([A-Z]{3,6})\b/g) || []
   terms.push(...tables.filter(term => term.length >= 3 && term.length <= 6))
-
   const badis = text.match(/\b(BADI|BADIIMPL|[A-Z_]{5,30})\b/gi) || []
   terms.push(...badis.slice(0, 3))
-
   const sapNouns = [
     'settlement', 'valuation', 'refurbish', 'routing', 'bom', 'mrp', 'capacity',
     'person responsible', 'functional location', 'equipment', 'notification',
     'production version', 'batch', 'split valuation', 'costing', 'variance',
   ]
   const lower = text.toLowerCase()
-  sapNouns.forEach(noun => {
-    if (lower.includes(noun)) terms.push(noun)
-  })
-
+  sapNouns.forEach(noun => { if (lower.includes(noun)) terms.push(noun) })
   return [...new Set(terms)].slice(0, 6)
 }
 
@@ -386,9 +366,7 @@ function cleanOptional(value, maxLength) {
 
 function parseUuid(value) {
   if (typeof value !== 'string') return null
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-    ? value
-    : null
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : null
 }
 
 function safeError(error) {
