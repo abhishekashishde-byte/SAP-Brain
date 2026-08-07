@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import Brain from './Brain.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
+import AdminKnowledge from './AdminKnowledge.jsx'
+import AdminAnalytics from './AdminAnalytics.jsx'
+import AdminCosts from './AdminCosts.jsx'
 import { signOut } from '../supabaseClient'
 
 const NAV = [
@@ -14,19 +17,16 @@ const NAV = [
 ]
 
 const comingSoon = {
-  knowledge: ['Pending knowledge approvals','Global knowledge library','RAG source health','Book and document indexing'],
-  analytics: ['Daily active users','Questions by SAP module','Response-time trends','Feedback and acceptance rate'],
-  costs: ['Cost per user','Cost per answer','Model/provider split','Daily and monthly budget'],
   system: ['Model/API health','Recent failures','Supabase health','Deployment and version status'],
 }
 
 function Overview({ onOpen }) {
   const cards = [
     ['wani','Open Wani','Use your private Wani workspace and test new features before release.'],
-    ['users','Users','Review users, activity, credits and last-online information.'],
-    ['knowledge','Knowledge','Review consultant corrections and manage Wani knowledge.'],
-    ['analytics','Analytics','Understand adoption, usage patterns and answer quality.'],
-    ['costs','Costs','Track model spend and cost per answer as telemetry is added.'],
+    ['users','Users','Approve, suspend or reactivate users and review activity, credits and last-online information.'],
+    ['knowledge','Knowledge','Review consultant corrections and manage Wani global knowledge.'],
+    ['analytics','Analytics','See adoption, active users, question volume and top users.'],
+    ['costs','Costs','Track actual persisted Claude Sonnet tokens and cost.'],
     ['system','System','Monitor model providers, database health and deployments.'],
   ]
   return (
@@ -56,7 +56,7 @@ function Placeholder({ title, items }) {
     <div style={{padding:'34px',maxWidth:1100,margin:'0 auto'}}>
       <div style={{fontSize:12,fontWeight:800,letterSpacing:1.3,color:'#8B7CF6',textTransform:'uppercase'}}>Admin Module</div>
       <h1 style={{fontSize:30,margin:'7px 0 8px',color:'#F7F5FF'}}>{title}</h1>
-      <p style={{color:'#7F798E',fontSize:14,margin:'0 0 24px'}}>The shell is ready. These are the next capabilities being connected to this module.</p>
+      <p style={{color:'#7F798E',fontSize:14,margin:'0 0 24px'}}>This module is planned for the next phase.</p>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:12}}>
         {items.map(item => <div key={item} style={{padding:18,borderRadius:14,border:'1px solid #282536',background:'#121019',color:'#B9B4C9',fontSize:13}}>{item}</div>)}
       </div>
@@ -77,6 +77,9 @@ export default function AdminPortal({ session }) {
   )
 
   if (view === 'users') return <AdminDashboard onClose={()=>setView('home')} />
+  if (view === 'knowledge') return <AdminKnowledge onClose={()=>setView('home')} />
+  if (view === 'analytics') return <AdminAnalytics onClose={()=>setView('home')} />
+  if (view === 'costs') return <AdminCosts onClose={()=>setView('home')} />
 
   return (
     <div style={{minHeight:'100dvh',background:'#0A0910',color:'#F7F5FF',fontFamily:"'Inter',sans-serif",display:'flex'}}>
@@ -101,9 +104,6 @@ export default function AdminPortal({ session }) {
       </aside>
       <main style={{flex:1,minWidth:0}}>
         {view==='home' && <Overview onOpen={setView}/>} 
-        {view==='knowledge' && <Placeholder title="Knowledge" items={comingSoon.knowledge}/>} 
-        {view==='analytics' && <Placeholder title="Analytics" items={comingSoon.analytics}/>} 
-        {view==='costs' && <Placeholder title="Costs" items={comingSoon.costs}/>} 
         {view==='system' && <Placeholder title="System" items={comingSoon.system}/>} 
       </main>
     </div>
