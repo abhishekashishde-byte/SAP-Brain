@@ -38,7 +38,11 @@ export default function AdminDashboard({ onClose }) {
   const load = async () => {
     setLoading(true); setError('')
     try {
-      const res = await fetch('/api/admin-dashboard')
+      const res = await fetch('/api/recall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'admin_dashboard' }),
+      })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'Could not load dashboard')
       setData(body)
