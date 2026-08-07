@@ -26,6 +26,11 @@ export default async function handler(req, res) {
       return await handleAdminDashboard(res, auth)
     }
 
+    if (action === 'admin_user_access') {
+      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      return await handleAdminUserAccess(req, res, auth, adminEmails)
+    }
+
     if (action === 'knowledge_snapshot') {
       return await handleKnowledgeSnapshot(res, auth)
     }
@@ -63,6 +68,51 @@ export default async function handler(req, res) {
     console.error(`[recall] ${action} error:`, error.message)
     return res.status(500).json({ error: safeError(error) })
   }
+}
+
+async function handleAdminUserAccess(req, res, auth, adminEmails) {
+  const userId = parseUuid(req.body.userId)
+  const access = ['approve', 'suspend', 'reactivate'].includes(req.body.access) ? req.body.access : null
+  if (!userId || !access) return res.status(400).json({ error: 'Invalid user access action' })
+
+  const client = auth.serviceClient
+  const { data: userResult, error: userError } = await client.auth.admin.getUserById(userId)
+  if (userError) throw userError
+  const target = userResult?.user
+  const targetEmail = (target?.email || '').trim().toLowerCase()
+  if (!target || !targetEmail) return res.status(404).json({ error: 'User not found' })
+  if (adminEmails.includes(targetEmail)) return res.status(400).json({ error: 'Administrator access cannot be changed here' })
+
+  const { data: profile, error: profileReadError } = await client
+    .from('profiles')
+    .select('id,full_name,name,display_name')
+    .eq('id', userId)
+    .maybeSingle()
+  if (profileReadError) throw profileReadError
+
+  const name = profile?.full_name || profile?.name || profile?.display_name || target.user_metadata?.full_name || target.user_metadata?.name || targetEmail.split('@')[0]
+
+  if (access === 'suspend') {
+    const { error: approvalError } = await client.from('approved_emails').delete().eq('email', targetEmail)
+    if (approvalError) throw approvalError
+    const { error: statusError } = await client.from('profiles').update({ access_status: 'suspended' }).eq('id', userId)
+    if (statusError) throw statusError
+    const { error: sessionError } = await client.from('wani_active_sessions').delete().eq('user_id', userId)
+    if (sessionError) throw sessionError
+    return res.status(200).json({ updated: true, accessStatus: 'suspended' })
+  }
+
+  const { error: approvalError } = await client.from('approved_emails').upsert({
+    email: targetEmail,
+    full_name: name,
+    approved_at: new Date().toISOString(),
+  }, { onConflict: 'email' })
+  if (approvalError) throw approvalError
+
+  const { error: statusError } = await client.from('profiles').update({ access_status: 'active' }).eq('id', userId)
+  if (statusError) throw statusError
+
+  return res.status(200).json({ updated: true, accessStatus: 'active' })
 }
 
 async function handleKnowledgeSnapshot(res, auth) {
@@ -371,6 +421,6 @@ function parseUuid(value) {
 
 function safeError(error) {
   const message = String(error?.message || '')
-  if (/already reviewed|not found|missing/i.test(message)) return message
+  if (/already reviewed|not found|missing|access cannot be changed/i.test(message)) return message
   return 'Knowledge operation failed'
 }
