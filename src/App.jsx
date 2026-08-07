@@ -83,7 +83,11 @@ export default function App() {
       return
     }
     let cancelled = false
-    fetch('/api/admin-dashboard')
+    fetch('/api/recall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'admin_dashboard' }),
+    })
       .then(res => {
         if (!cancelled) setAdminAvailable(res.ok)
       })
