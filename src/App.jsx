@@ -3,6 +3,7 @@ import { supabase, signOut } from './supabaseClient'
 import Login from './pages/Login.jsx'
 import { WaniLogo, WaniWordmark } from './pages/Login.jsx'
 import Brain from './pages/Brain.jsx'
+import AdminDashboard from './pages/AdminDashboard.jsx'
 
 export const ThemeContext = createContext({ dark: false, toggle: () => {} })
 export const useTheme = () => useContext(ThemeContext)
@@ -29,6 +30,8 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [approved, setApproved] = useState(null)
+  const [adminAvailable, setAdminAvailable] = useState(false)
+  const [adminView, setAdminView] = useState(false)
   const dark = true
   const toggle = () => {}
 
@@ -47,6 +50,8 @@ export default function App() {
   useEffect(() => {
     if (!sessionEmail) {
       setApproved(null)
+      setAdminAvailable(false)
+      setAdminView(false)
       return
     }
 
@@ -70,9 +75,29 @@ export default function App() {
       })
   }, [sessionUserId, sessionEmail])
 
+  // Ask the server whether this verified user is an administrator. The server
+  // remains authoritative; normal users get 403 and never see the Admin control.
+  useEffect(() => {
+    if (!session || approved !== true) {
+      setAdminAvailable(false)
+      return
+    }
+    let cancelled = false
+    fetch('/api/admin-dashboard')
+      .then(res => {
+        if (!cancelled) setAdminAvailable(res.ok)
+      })
+      .catch(() => {
+        if (!cancelled) setAdminAvailable(false)
+      })
+    return () => { cancelled = true }
+  }, [sessionUserId, approved])
+
   const handleSignOut = async () => {
     await signOut()
     setApproved(null)
+    setAdminAvailable(false)
+    setAdminView(false)
   }
 
   if (loading || (session && approved === null)) return (
@@ -91,7 +116,26 @@ export default function App() {
       {!session
         ? <Login/>
         : approved
-          ? <Brain session={session}/>
+          ? adminView
+            ? <AdminDashboard onClose={() => setAdminView(false)} />
+            : <>
+                <Brain session={session}/>
+                {adminAvailable && (
+                  <button
+                    onClick={() => setAdminView(true)}
+                    title="Open Wani admin dashboard"
+                    style={{
+                      position: 'fixed', right: 18, bottom: 18, zIndex: 2147483000,
+                      border: '1px solid rgba(167,139,250,.55)', borderRadius: 999,
+                      padding: '9px 14px', background: 'rgba(17,17,27,.94)', color: '#C4B5FD',
+                      boxShadow: '0 10px 30px rgba(0,0,0,.35)', cursor: 'pointer',
+                      font: "650 12px/1 'Inter',sans-serif", backdropFilter: 'blur(12px)',
+                    }}
+                  >
+                    Admin
+                  </button>
+                )}
+              </>
           : <PendingApproval dark={dark} email={session.user.email} onSignOut={handleSignOut}/>
       }
     </ThemeContext.Provider>
