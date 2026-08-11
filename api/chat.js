@@ -683,10 +683,10 @@ function removeExactBookDuplicates(chunks) {
   return { unique, removed }
 }
 
-async function rerankBookChunksWithGroq(question, chunks) {
-  if (!Array.isArray(chunks) || chunks.length <= 1 || !process.env.GROQ_API_KEY) return chunks || []
+async function rerankBookChunksWithMini(question, chunks) {
+  if (!Array.isArray(chunks) || chunks.length <= 1 || !process.env.OPENAI_API_KEY) return chunks || []
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 2500)
+  const timeout = setTimeout(() => controller.abort(), 3500)
   try {
     const compact = chunks.map((c, i) => {
       const title = c.title || c.book_title || c.doc_name || c.source || 'Unknown book'
@@ -695,25 +695,27 @@ async function rerankBookChunksWithGroq(question, chunks) {
       return `CHUNK ${i}\nBOOK: ${title}\nPAGE: ${page}\nTEXT: ${body}`
     }).join('\n\n')
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 500,
+        model: 'gpt-4o-mini', temperature: 0, max_tokens: 500,
         response_format: { type: 'json_object' },
-        messages: [{ role: 'user', content: `You are a conservative reranker for SAP book excerpts. The user's exact question is:\n\n${question}\n\nFor each chunk, score ONLY how directly useful the excerpt is for answering that exact question. Do not judge whether SAP facts are true and do not add outside knowledge.\n\n5 = directly answers the exact question or contains a decisive fact\n4 = clearly same SAP object/process and materially useful\n3 = related context but not enough to answer\n2 = same broad module but mostly tangential\n1 = unrelated to the actual question\n\nSet duplicate_of to another chunk index ONLY when this chunk repeats essentially the same useful factual content and contributes no meaningful extra condition, exception, scope, app/t-code, or outcome. Similar topic is NOT a duplicate.\n\nReturn ONLY valid JSON: {"ratings":[{"index":0,"score":5,"duplicate_of":null}]}\n\n${compact}` }]
+        messages: [{ role: 'user', content: `You are a conservative reranker for SAP book excerpts. The user's exact question is:\n\n${question}\n\nFor each chunk, score ONLY how directly useful the excerpt is for answering that exact question. Do not judge whether SAP facts are true and do not add outside knowledge.\n\n5 = directly answers the exact question or contains a decisive fact\n4 = clearly same SAP object/process and materially useful\n3 = related context but not enough to answer\n2 = same broad module but mostly tangential\n1 = unrelated to the actual question\n\nSet duplicate_of to another chunk index ONLY when this chunk repeats essentially the same useful factual content and contributes no meaningful extra condition, exception, scope, app/t-code, or outcome. Similar topic is NOT a duplicate.\n\nReturn ONLY valid JSON in exactly this shape: {"ratings":[{"index":0,"score":5,"duplicate_of":null}]}\nReturn one ratings item for EVERY chunk index from 0 through ${chunks.length - 1}.\n\n${compact}` }]
       })
     })
     if (!response.ok) {
       const errBody = await response.text().catch(() => '')
-      console.log('[BOOK RERANK] Groq HTTP', response.status, errBody.slice(0, 500), '— keeping pgvector candidates')
-      return Object.assign(chunks, { _rerankDetails: { status: 'fallback', reason: `Groq HTTP ${response.status}: ${errBody.slice(0, 180)}`, ratings: [], keptIndices: chunks.map((_, i) => i) } })
+      console.log('[BOOK RERANK MINI] OpenAI HTTP', response.status, errBody.slice(0, 500), '— keeping pgvector candidates')
+      return Object.assign(chunks, { _rerankDetails: { status: 'fallback', reason: `OpenAI mini HTTP ${response.status}: ${errBody.slice(0, 180)}`, ratings: [], keptIndices: chunks.map((_, i) => i) } })
     }
     const data = await response.json()
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
     const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim())
     const ratings = Array.isArray(parsed.ratings) ? parsed.ratings : []
-    if (!ratings.length) return chunks
+    if (!ratings.length) {
+      return Object.assign(chunks, { _rerankDetails: { status: 'fallback', reason: 'OpenAI mini returned no ratings', ratings: [], keptIndices: chunks.map((_, i) => i) } })
+    }
 
     const valid = new Map()
     for (const r of ratings) {
@@ -723,7 +725,9 @@ async function rerankBookChunksWithGroq(question, chunks) {
         valid.set(index, { score, duplicateOf: Number.isInteger(duplicateOf) ? duplicateOf : null })
       }
     }
-    if (!valid.size) return chunks
+    if (!valid.size) {
+      return Object.assign(chunks, { _rerankDetails: { status: 'fallback', reason: 'OpenAI mini ratings failed validation', ratings: [], keptIndices: chunks.map((_, i) => i) } })
+    }
 
     const ranked = chunks.map((chunk, index) => ({ chunk, index, ...(valid.get(index) || { score: 1, duplicateOf: null }) }))
       .filter(item => !(item.duplicateOf != null && item.duplicateOf >= 0 && item.duplicateOf < chunks.length))
@@ -732,21 +736,24 @@ async function rerankBookChunksWithGroq(question, chunks) {
     let kept = ranked.filter(item => item.score >= 4).slice(0, 4)
     if (!kept.length && ranked[0]?.score === 3) kept = [ranked[0]]
     const selected = kept.map(item => item.chunk)
-    const ratingsForDebug = ranked.map(r => ({
-      index: r.index,
-      score: r.score,
-      duplicateOf: r.duplicateOf,
-      kept: kept.some(k => k.index === r.index),
-      book: r.chunk?.source_book || r.chunk?.book_title || r.chunk?.source || 'Unknown book',
-      page: r.chunk?.page_number || r.chunk?.page || r.chunk?.page_num || '',
-      title: r.chunk?.lesson_title || r.chunk?.title || '',
-      preview: getBookChunkText(r.chunk).slice(0, 180),
-    }))
-    console.log('[BOOK RERANK]', JSON.stringify({ candidates: chunks.length, ratings: ratingsForDebug, kept: kept.map(r => r.index) }))
-    return Object.assign(selected, { _rerankDetails: { status: 'applied', ratings: ratingsForDebug, keptIndices: kept.map(r => r.index) } })
+    const ratingsForDebug = chunks.map((chunk, index) => {
+      const r = valid.get(index) || { score: 1, duplicateOf: null }
+      return {
+        index,
+        score: r.score,
+        duplicateOf: r.duplicateOf,
+        kept: kept.some(k => k.index === index),
+        book: chunk?.source_book || chunk?.book_title || chunk?.source || 'Unknown book',
+        page: chunk?.page_number || chunk?.page || chunk?.page_num || '',
+        title: chunk?.lesson_title || chunk?.title || '',
+        preview: getBookChunkText(chunk).slice(0, 180),
+      }
+    })
+    console.log('[BOOK RERANK MINI]', JSON.stringify({ candidates: chunks.length, ratings: ratingsForDebug, kept: kept.map(r => r.index) }))
+    return Object.assign(selected, { _rerankDetails: { status: 'applied', model: 'gpt-4o-mini', ratings: ratingsForDebug, keptIndices: kept.map(r => r.index) } })
   } catch (err) {
     const reason = err.name === 'AbortError' ? 'timeout' : err.message
-    console.log('[BOOK RERANK] Groq skipped:', reason, '— keeping pgvector candidates')
+    console.log('[BOOK RERANK MINI] skipped:', reason, '— keeping pgvector candidates')
     return Object.assign(chunks, { _rerankDetails: { status: 'fallback', reason, ratings: [], keptIndices: chunks.map((_, i) => i) } })
   } finally { clearTimeout(timeout) }
 }
@@ -784,7 +791,7 @@ async function fetchBookChunks(question, detectedModule, userToken) {
 
     const candidates = data || []
     const { unique: exactUnique, removed: exactRemoved } = removeExactBookDuplicates(candidates)
-    const reranked = await rerankBookChunksWithGroq(question, exactUnique)
+    const reranked = await rerankBookChunksWithMini(question, exactUnique)
     const rerankDetails = reranked._rerankDetails || { status: 'not-run', ratings: [], keptIndices: exactUnique.map((_, i) => i) }
     console.log('[BOOK RAG] Candidates:', candidates.length, '| exact duplicates removed:', exactRemoved, '| chunks kept:', reranked.length, '| module filter:', detectedModule || 'none')
     return Object.assign(reranked, { _bookRerankMeta: {
@@ -1631,11 +1638,11 @@ export default async function handler(req, res) {
     '3. BOOK RAG',
     '─────────────────────────────────────────────────────────',
     `Pgvector candidates retrieved: ${dl.bookRerank?.candidates ?? dl.bookChunks ?? 0}`,
-    `Exact duplicates removed before Groq: ${dl.bookRerank?.exactRemoved ?? 0}`,
-    `Candidates sent to Groq reranker: ${dl.bookRerank?.afterExactDedupe ?? dl.bookChunks ?? 0}`,
-    `Groq reranker status: ${dl.bookRerank?.status || 'not available'}${dl.bookRerank?.reason ? ` (${dl.bookRerank.reason})` : ''}`,
+    `Exact duplicates removed before mini: ${dl.bookRerank?.exactRemoved ?? 0}`,
+    `Candidates sent to GPT-4o mini reranker: ${dl.bookRerank?.afterExactDedupe ?? dl.bookChunks ?? 0}`,
+    `GPT-4o mini reranker status: ${dl.bookRerank?.status || 'not available'}${dl.bookRerank?.reason ? ` (${dl.bookRerank.reason})` : ''}`,
     ...((dl.bookRerank?.ratings || []).length
-      ? ['Groq ratings (5=direct, 4=useful, 3=context, 2=tangential, 1=unrelated):',
+      ? ['GPT-4o mini ratings (5=direct, 4=useful, 3=context, 2=tangential, 1=unrelated):',
          ...dl.bookRerank.ratings.map(r => `    [R${r.index+1}] score ${r.score} — ${r.kept ? 'KEPT → SONNET' : (r.duplicateOf != null ? `DROPPED duplicate of R${r.duplicateOf+1}` : 'DROPPED')} — ${r.book}, p.${r.page}${r.title ? ` — ${r.title}` : ''}        ${r.preview || ''}`)]
       : ['Groq ratings: (not available — reranker did not run or used fallback)']),
     `Chunks transferred to Sonnet: ${dl.bookChunks || 0}`,
@@ -2586,13 +2593,13 @@ export default async function handler(req, res) {
       '3. BOOK RAG',
       '─────────────────────────────────────────────────────────',
       `Pgvector candidates retrieved: ${debugLog.bookRerank?.candidates ?? debugLog.bookChunks ?? 0}`,
-      `Exact duplicates removed before Groq: ${debugLog.bookRerank?.exactRemoved ?? 0}`,
-      `Candidates sent to Groq reranker: ${debugLog.bookRerank?.afterExactDedupe ?? debugLog.bookChunks ?? 0}`,
-      `Groq reranker status: ${debugLog.bookRerank?.status || 'not-run'}${debugLog.bookRerank?.reason ? ` (${debugLog.bookRerank.reason})` : ''}`,
+      `Exact duplicates removed before mini: ${debugLog.bookRerank?.exactRemoved ?? 0}`,
+      `Candidates sent to GPT-4o mini reranker: ${debugLog.bookRerank?.afterExactDedupe ?? debugLog.bookChunks ?? 0}`,
+      `GPT-4o mini reranker status: ${debugLog.bookRerank?.status || 'not-run'}${debugLog.bookRerank?.reason ? ` (${debugLog.bookRerank.reason})` : ''}`,
       ...((debugLog.bookRerank?.ratings || []).length
-        ? ['Groq ratings (5=direct, 4=useful, 3=context, 2=tangential, 1=unrelated):',
+        ? ['GPT-4o mini ratings (5=direct, 4=useful, 3=context, 2=tangential, 1=unrelated):',
            ...debugLog.bookRerank.ratings.map(r => `    [R${r.index+1}] score ${r.score} — ${r.kept ? 'KEPT → SONNET' : (r.duplicateOf != null ? `DROPPED duplicate of R${r.duplicateOf+1}` : 'DROPPED')} — ${r.book}, p.${r.page}${r.title ? ` — ${r.title}` : ''}\n        ${r.preview || ''}`)]
-        : ['Groq ratings: (none — reranker did not run or used fallback)']),
+        : ['GPT-4o mini ratings: (none — reranker did not run or used fallback)']),
       `Chunks transferred to Sonnet: ${debugLog.bookChunks || 0}`,
       ...(bookChunks || []).map((c, i) =>
         `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`
