@@ -729,11 +729,23 @@ async function rerankBookChunksWithGroq(question, chunks) {
 
     let kept = ranked.filter(item => item.score >= 4).slice(0, 4)
     if (!kept.length && ranked[0]?.score === 3) kept = [ranked[0]]
-    console.log('[BOOK RERANK]', JSON.stringify({ candidates: chunks.length, ratings: ranked.map(r => ({ index: r.index, score: r.score, duplicateOf: r.duplicateOf })), kept: kept.map(r => r.index) }))
-    return kept.map(item => item.chunk)
+    const selected = kept.map(item => item.chunk)
+    const ratingsForDebug = ranked.map(r => ({
+      index: r.index,
+      score: r.score,
+      duplicateOf: r.duplicateOf,
+      kept: kept.some(k => k.index === r.index),
+      book: r.chunk?.source_book || r.chunk?.book_title || r.chunk?.source || 'Unknown book',
+      page: r.chunk?.page_number || r.chunk?.page || r.chunk?.page_num || '',
+      title: r.chunk?.lesson_title || r.chunk?.title || '',
+      preview: getBookChunkText(r.chunk).slice(0, 180),
+    }))
+    console.log('[BOOK RERANK]', JSON.stringify({ candidates: chunks.length, ratings: ratingsForDebug, kept: kept.map(r => r.index) }))
+    return Object.assign(selected, { _rerankDetails: { status: 'applied', ratings: ratingsForDebug, keptIndices: kept.map(r => r.index) } })
   } catch (err) {
-    console.log('[BOOK RERANK] Groq skipped:', err.name === 'AbortError' ? 'timeout' : err.message, '— keeping pgvector candidates')
-    return chunks
+    const reason = err.name === 'AbortError' ? 'timeout' : err.message
+    console.log('[BOOK RERANK] Groq skipped:', reason, '— keeping pgvector candidates')
+    return Object.assign(chunks, { _rerankDetails: { status: 'fallback', reason, ratings: [], keptIndices: chunks.map((_, i) => i) } })
   } finally { clearTimeout(timeout) }
 }
 
@@ -771,8 +783,18 @@ async function fetchBookChunks(question, detectedModule, userToken) {
     const candidates = data || []
     const { unique: exactUnique, removed: exactRemoved } = removeExactBookDuplicates(candidates)
     const reranked = await rerankBookChunksWithGroq(question, exactUnique)
+    const rerankDetails = reranked._rerankDetails || { status: 'not-run', ratings: [], keptIndices: exactUnique.map((_, i) => i) }
     console.log('[BOOK RAG] Candidates:', candidates.length, '| exact duplicates removed:', exactRemoved, '| chunks kept:', reranked.length, '| module filter:', detectedModule || 'none')
-    return Object.assign(reranked, { _bookRerankMeta: { candidates: candidates.length, exactRemoved, kept: reranked.length } })
+    return Object.assign(reranked, { _bookRerankMeta: {
+      candidates: candidates.length,
+      exactRemoved,
+      afterExactDedupe: exactUnique.length,
+      kept: reranked.length,
+      status: rerankDetails.status,
+      reason: rerankDetails.reason || '',
+      ratings: rerankDetails.ratings || [],
+      keptIndices: rerankDetails.keptIndices || [],
+    } })
   } catch (e) {
     console.error('[BOOK RAG] Exception:', e.message)
     return []
@@ -1662,6 +1684,7 @@ export default async function handler(req, res) {
         detectedModule: debugLog.detectedModule || null,
         totalMs:        debugLog.totalMs || null,
         pipeline: {
+          bookRerank: debugLog.bookRerank || null,
           bookChunkDetails: bookChunks_.map(c => ({
             book: c.source_book, page: c.page_number,
             title: c.lesson_title || '', content: c.content?.slice(0, 400) || '',
@@ -1702,7 +1725,15 @@ export default async function handler(req, res) {
     '',
     '3. BOOK RAG',
     '─────────────────────────────────────────────────────────',
-    `Chunks found: ${dl.bookChunks || 0}`,
+    `Pgvector candidates retrieved: ${dl.bookRerank?.candidates ?? dl.bookChunks ?? 0}`,
+    `Exact duplicates removed before Groq: ${dl.bookRerank?.exactRemoved ?? 0}`,
+    `Candidates sent to Groq reranker: ${dl.bookRerank?.afterExactDedupe ?? dl.bookChunks ?? 0}`,
+    `Groq reranker status: ${dl.bookRerank?.status || 'not available'}${dl.bookRerank?.reason ? ` (${dl.bookRerank.reason})` : ''}`,
+    ...((dl.bookRerank?.ratings || []).length
+      ? ['Groq ratings (5=direct, 4=useful, 3=context, 2=tangential, 1=unrelated):',
+         ...dl.bookRerank.ratings.map(r => `    [R${r.index+1}] score ${r.score} — ${r.kept ? 'KEPT → SONNET' : (r.duplicateOf != null ? `DROPPED duplicate of R${r.duplicateOf+1}` : 'DROPPED')} — ${r.book}, p.${r.page}${r.title ? ` — ${r.title}` : ''}        ${r.preview || ''}`)]
+      : ['Groq ratings: (not available — reranker did not run or used fallback)']),
+    `Chunks transferred to Sonnet: ${dl.bookChunks || 0}`,
     ...(dl.bookChunkList || []).map((c, i) =>
       `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`),
     '',
@@ -2003,6 +2034,7 @@ export default async function handler(req, res) {
     debugLog.tavilyNotes    = tavilyNotesFiltered.length
     debugLog.openAISources  = openAISources.length
     debugLog.bookChunks     = bookChunks.length
+    debugLog.bookRerank      = bookChunks._bookRerankMeta || null
     debugLog.knowledgeChunks = relevantKnowledge.length
     debugLog.knowledgeCandidates = relevantKnowledge._allCandidates || []
     debugLog.searchQuery    = searchQuery
