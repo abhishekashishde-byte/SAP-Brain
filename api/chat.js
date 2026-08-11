@@ -135,7 +135,7 @@ Question: "${question.slice(0, 500)}"
 
     // isCode should not trigger on 'function module' questions — those are Q&A not code
     const hasFmPhrase = /\b(function module|bapi|rfc module)\b/i.test(question)
-    const isCode  = result.isCode  === true || (!hasFmPhrase && /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(question))
+    const isCode  = result.isCode  === true || (!hasFmPhrase && /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |\bFUNCTION\b/i.test(question))
     const isError = result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question)
     const isCorrectionRegex = /\b(actually|that('s| is) (wrong|incorrect|not right)|you('re| are) wrong|wrong answer|incorrect answer|it should be|the correct|please (note|correct)|i('m| am) correcting)\b/i.test(question)
     const isCorrection = result.isCorrection === true || isCorrectionRegex
@@ -700,39 +700,14 @@ async function rerankBookChunksWithGroq(question, chunks) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
         model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 500,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'book_rerank',
-            strict: true,
-            schema: {
-              type: 'object',
-              properties: {
-                ratings: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      index: { type: 'integer' },
-                      score: { type: 'integer', enum: [1, 2, 3, 4, 5] },
-                      duplicate_of: { type: ['integer', 'null'] },
-                    },
-                    required: ['index', 'score', 'duplicate_of'],
-                    additionalProperties: false,
-                  },
-                },
-              },
-              required: ['ratings'],
-              additionalProperties: false,
-            },
-          },
-        },
+        response_format: { type: 'json_object' },
         messages: [{ role: 'user', content: `You are a conservative reranker for SAP book excerpts. The user's exact question is:\n\n${question}\n\nFor each chunk, score ONLY how directly useful the excerpt is for answering that exact question. Do not judge whether SAP facts are true and do not add outside knowledge.\n\n5 = directly answers the exact question or contains a decisive fact\n4 = clearly same SAP object/process and materially useful\n3 = related context but not enough to answer\n2 = same broad module but mostly tangential\n1 = unrelated to the actual question\n\nSet duplicate_of to another chunk index ONLY when this chunk repeats essentially the same useful factual content and contributes no meaningful extra condition, exception, scope, app/t-code, or outcome. Similar topic is NOT a duplicate.\n\nReturn ONLY valid JSON: {"ratings":[{"index":0,"score":5,"duplicate_of":null}]}\n\n${compact}` }]
       })
     })
     if (!response.ok) {
-      console.log('[BOOK RERANK] Groq HTTP', response.status, '— keeping pgvector candidates')
-      return chunks
+      const errBody = await response.text().catch(() => '')
+      console.log('[BOOK RERANK] Groq HTTP', response.status, errBody.slice(0, 500), '— keeping pgvector candidates')
+      return Object.assign(chunks, { _rerankDetails: { status: 'fallback', reason: `Groq HTTP ${response.status}: ${errBody.slice(0, 180)}`, ratings: [], keptIndices: chunks.map((_, i) => i) } })
     }
     const data = await response.json()
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
@@ -1982,7 +1957,7 @@ export default async function handler(req, res) {
 
     // ── STEP 7: Build system prompt ────────────────────────────────────────
     const hasCodeInHistory = allMessages.slice(-12).some(m =>
-      /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |FUNCTION /i.test(m.content || '')
+      /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |\bFUNCTION\b/i.test(m.content || '')
     )
 
     const intentPrompt = INTENT_PROMPTS[intent] || INTENT_PROMPTS['SAP_QA']
@@ -2563,6 +2538,7 @@ export default async function handler(req, res) {
           },
           // Full pipeline data for answer pipeline debugger
           pipeline: {
+            bookRerank: debugLog.bookRerank || null,
             bookChunkDetails: (bookChunks || []).map(c => ({
               book:    c.source_book,
               page:    c.page_number,
@@ -2609,7 +2585,15 @@ export default async function handler(req, res) {
       '',
       '3. BOOK RAG',
       '─────────────────────────────────────────────────────────',
-      `Chunks found: ${debugLog.bookChunks || 0}`,
+      `Pgvector candidates retrieved: ${debugLog.bookRerank?.candidates ?? debugLog.bookChunks ?? 0}`,
+      `Exact duplicates removed before Groq: ${debugLog.bookRerank?.exactRemoved ?? 0}`,
+      `Candidates sent to Groq reranker: ${debugLog.bookRerank?.afterExactDedupe ?? debugLog.bookChunks ?? 0}`,
+      `Groq reranker status: ${debugLog.bookRerank?.status || 'not-run'}${debugLog.bookRerank?.reason ? ` (${debugLog.bookRerank.reason})` : ''}`,
+      ...((debugLog.bookRerank?.ratings || []).length
+        ? ['Groq ratings (5=direct, 4=useful, 3=context, 2=tangential, 1=unrelated):',
+           ...debugLog.bookRerank.ratings.map(r => `    [R${r.index+1}] score ${r.score} — ${r.kept ? 'KEPT → SONNET' : (r.duplicateOf != null ? `DROPPED duplicate of R${r.duplicateOf+1}` : 'DROPPED')} — ${r.book}, p.${r.page}${r.title ? ` — ${r.title}` : ''}\n        ${r.preview || ''}`)]
+        : ['Groq ratings: (none — reranker did not run or used fallback)']),
+      `Chunks transferred to Sonnet: ${debugLog.bookChunks || 0}`,
       ...(bookChunks || []).map((c, i) =>
         `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`
       ),
@@ -2763,6 +2747,7 @@ export default async function handler(req, res) {
         totalMs:             debugLog.totalMs || null,
         // Full pipeline — always sent, collapsed by default in UI
         pipeline: {
+          bookRerank: debugLog.bookRerank || null,
           bookChunkDetails: (bookChunks || []).map(c => ({
             book:    c.source_book,
             page:    c.page_number,
