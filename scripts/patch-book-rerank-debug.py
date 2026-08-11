@@ -62,31 +62,20 @@ new3 = """    debugLog.bookChunks     = bookChunks.length
 if old3 not in s: raise SystemExit('debug assignment block not found')
 s = s.replace(old3, new3, 1)
 
-old4 = """    '3. BOOK RAG',
-    '─────────────────────────────────────────────────────────',
-    `Chunks found: ${dl.bookChunks || 0}`,
-    ...(dl.bookChunkList || []).map((c, i) =>
-      `[${i+1}] ${c.source_book}, p.${c.page_number}\\
-    Title: ${c.lesson_title || 'n/a'}\\
-    Content: ${c.content?.slice(0, 300) || ''}`),"""
-new4 = """    '3. BOOK RAG',
-    '─────────────────────────────────────────────────────────',
-    `Pgvector candidates retrieved: ${dl.bookRerank?.candidates ?? dl.bookChunks ?? 0}`,
+target = "    `Chunks found: ${dl.bookChunks || 0}`,\n"
+replacement = """    `Pgvector candidates retrieved: ${dl.bookRerank?.candidates ?? dl.bookChunks ?? 0}`,
     `Exact duplicates removed before Groq: ${dl.bookRerank?.exactRemoved ?? 0}`,
     `Candidates sent to Groq reranker: ${dl.bookRerank?.afterExactDedupe ?? dl.bookChunks ?? 0}`,
     `Groq reranker status: ${dl.bookRerank?.status || 'not available'}${dl.bookRerank?.reason ? ` (${dl.bookRerank.reason})` : ''}`,
     ...((dl.bookRerank?.ratings || []).length
       ? ['Groq ratings (5=direct, 4=useful, 3=context, 2=tangential, 1=unrelated):',
-         ...dl.bookRerank.ratings.map(r => `    [R${r.index+1}] score ${r.score} — ${r.kept ? 'KEPT → SONNET' : (r.duplicateOf != null ? `DROPPED duplicate of R${r.duplicateOf+1}` : 'DROPPED')} — ${r.book}, p.${r.page}${r.title ? ` — ${r.title}` : ''}\\
+         ...dl.bookRerank.ratings.map(r => `    [R${r.index+1}] score ${r.score} — ${r.kept ? 'KEPT → SONNET' : (r.duplicateOf != null ? `DROPPED duplicate of R${r.duplicateOf+1}` : 'DROPPED')} — ${r.book}, p.${r.page}${r.title ? ` — ${r.title}` : ''}\
         ${r.preview || ''}`)]
       : ['Groq ratings: (not available — reranker did not run or used fallback)']),
     `Chunks transferred to Sonnet: ${dl.bookChunks || 0}`,
-    ...(dl.bookChunkList || []).map((c, i) =>
-      `[S${i+1}] ${c.source_book}, p.${c.page_number}\\
-    Title: ${c.lesson_title || 'n/a'}\\
-    Content: ${c.content?.slice(0, 300) || ''}`),"""
-if old4 not in s: raise SystemExit('debug book section block not found')
-s = s.replace(old4, new4, 1)
+"""
+if target not in s: raise SystemExit('Chunks found line not found')
+s = s.replace(target, replacement, 1)
 
 old5 = """          bookChunkDetails: bookChunks_.map(c => ({
             book: c.source_book, page: c.page_number,
