@@ -700,6 +700,33 @@ async function rerankBookChunksWithGroq(question, chunks) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
         model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 500,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'book_rerank',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                ratings: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      index: { type: 'integer' },
+                      score: { type: 'integer', enum: [1, 2, 3, 4, 5] },
+                      duplicate_of: { type: ['integer', 'null'] },
+                    },
+                    required: ['index', 'score', 'duplicate_of'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ['ratings'],
+              additionalProperties: false,
+            },
+          },
+        },
         messages: [{ role: 'user', content: `You are a conservative reranker for SAP book excerpts. The user's exact question is:\n\n${question}\n\nFor each chunk, score ONLY how directly useful the excerpt is for answering that exact question. Do not judge whether SAP facts are true and do not add outside knowledge.\n\n5 = directly answers the exact question or contains a decisive fact\n4 = clearly same SAP object/process and materially useful\n3 = related context but not enough to answer\n2 = same broad module but mostly tangential\n1 = unrelated to the actual question\n\nSet duplicate_of to another chunk index ONLY when this chunk repeats essentially the same useful factual content and contributes no meaningful extra condition, exception, scope, app/t-code, or outcome. Similar topic is NOT a duplicate.\n\nReturn ONLY valid JSON: {"ratings":[{"index":0,"score":5,"duplicate_of":null}]}\n\n${compact}` }]
       })
     })
@@ -1881,6 +1908,9 @@ export default async function handler(req, res) {
     const t2 = Date.now()
     debugLog.parallelMs = t2 - t1
 
+    // Preserve reranker audit metadata before any downstream array mutation.
+    const bookRerankMeta = bookChunks._bookRerankMeta || null
+
     // Deduplicate book chunks by source_book + page_number
     const seenChunkKeys = new Set()
     const dedupedBookChunks = bookChunks.filter(c => {
@@ -1937,7 +1967,7 @@ export default async function handler(req, res) {
     debugLog.tavilyNotes    = tavilyNotesFiltered.length
     debugLog.openAISources  = openAISources.length
     debugLog.bookChunks     = bookChunks.length
-    debugLog.bookRerank      = bookChunks._bookRerankMeta || null
+    debugLog.bookRerank      = bookRerankMeta
     debugLog.knowledgeChunks = relevantKnowledge.length
     debugLog.knowledgeCandidates = relevantKnowledge._allCandidates || []
     debugLog.searchQuery    = searchQuery
