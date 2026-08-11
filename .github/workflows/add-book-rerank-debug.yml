@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: admin
-      - name: Apply patch
+      - name: Apply audit patch
         run: python3 scripts/patch-book-rerank-debug.py
       - name: Verify syntax
         run: node --check api/chat.js
