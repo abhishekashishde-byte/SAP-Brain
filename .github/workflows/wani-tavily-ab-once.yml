@@ -22,7 +22,7 @@ jobs:
       - name: Verify backend syntax
         run: node --check api/chat.js
       - name: Install dependencies
-        run: npm ci
+        run: npm install
       - name: Verify production build
         run: npm run build
       - name: Verify experiment anchors
