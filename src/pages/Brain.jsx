@@ -942,7 +942,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
           <OnDemandVisual msg={msg} onRequestVisual={onRequestVisual} t={t} dark={dark} />
         )}
 
-        {!isStreaming && msg._dualText && (
+        {false && !isStreaming && msg._dualText && (
           <div style={{ marginTop:16, borderTop:`1px solid rgba(255,255,255,0.08)`, paddingTop:14 }}>
             <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:6, fontFamily:"'Inter',sans-serif" }}>
               {msg._dualLabel}
@@ -2417,7 +2417,7 @@ export default function Brain({ session }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent, tavilyABTest:true }),
+        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
         signal: abortController.signal,
       })
 
@@ -2519,7 +2519,6 @@ export default function Brain({ session }) {
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
               if (evt.sourceInfo) localSourceInfo = evt.sourceInfo
               if (evt.debugDoc)    localDebugDoc   = evt.debugDoc
-              if (evt.tavilyAB?.withoutTavilyDebugDoc) localABDebugDocWithoutTavily = evt.tavilyAB.withoutTavilyDebugDoc
               if (evt.containerMode) {
                 localContainerMode = true
                 localQuickAnswer = evt.quickAnswer || null
@@ -2618,7 +2617,6 @@ export default function Brain({ session }) {
         content: replyContent,
         _model: modelUsed,
         ...(localPrimaryLabel ? { _primaryLabel: localPrimaryLabel } : {}),
-        ...(localDualText ? { _dualText: localDualText, _dualLabel: localDualLabel } : {}),
         ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
         ...(deliverableType === 'FS_SPEC' && window.__lastFsText
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
@@ -3197,7 +3195,7 @@ export default function Brain({ session }) {
                       </>
                     ) : null}
                     {/* Dual model bubble — only show while actively streaming */}
-                    {(dualStreaming || dualText) && !isLoading ? (
+                    {false && (dualStreaming || dualText) && !isLoading ? (
                       <div style={{ marginTop:16 }}>
                         <div style={{ fontSize:10, color:'#D97706', opacity:0.7, marginBottom:4, marginLeft:48, fontFamily:"'Inter',sans-serif" }}>
                           {dualLabel}
