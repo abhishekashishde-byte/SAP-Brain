@@ -44,6 +44,6 @@ jobs:
         run: |
           git config user.name "wani-maintenance"
           git config user.email "wani-maintenance@users.noreply.github.com"
-          git add api/chat.js lib/evidence-routing.js api/evidence-routing.js
+          git add -A api/chat.js api/evidence-routing.js lib/evidence-routing.js
           git commit -m "Finalize dynamic evidence routing for Vercel"
           git push origin HEAD:main
