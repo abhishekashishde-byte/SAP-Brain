@@ -1,0 +1,342 @@
+name: Install Tavily A-B experiment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/wani-tavily-ab-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Install Tavily A/B experiment runner'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch admin Tavily A-B experiment
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'ANCHOR NOT FOUND: {label}')
+              if text.count(old) != 1:
+                  raise SystemExit(f'ANCHOR NOT UNIQUE ({text.count(old)}): {label}')
+              return text.replace(old, new, 1)
+
+          chat_path = Path('api/chat.js')
+          chat = chat_path.read_text()
+
+          chat = replace_once(
+              chat,
+              "const { messages, tone = 'balanced', userName, userRole, userModules = [], docWizardStage, deliverableRequested = false } = body",
+              "const { messages, tone = 'balanced', userName, userRole, userModules = [], docWizardStage, deliverableRequested = false, tavilyABTest = false } = body",
+              'chat body destructure'
+          )
+
+          chat = replace_once(
+              chat,
+              "      // Inject Tavily results directly into Sonnet's prompt\n      if (tavilyFiltered.length > 0) {",
+              "      // A/B test snapshot: identical prompt state after books/Findings but BEFORE Tavily.\n      // Only used for the private admin experiment; normal/live users never trigger a second Sonnet call.\n      let noTavilySystemPrompt = enrichedSystemPrompt\n\n      // Inject Tavily results directly into Sonnet's prompt\n      if (tavilyFiltered.length > 0) {",
+              'pre-tavily prompt snapshot'
+          )
+
+          chat = replace_once(
+              chat,
+              "      send({ type: 'model_label', label: '' })",
+              "      // Keep Sonnet's own native verification search enabled in BOTH A/B variants.\n      // The experiment isolates one variable only: pre-injected Tavily context.\n      noTavilySystemPrompt += `\\n\\nIf you use your own web_search tool during this answer, cite what you find inline as [1] [2] etc., the same as any other source — never as a manually-typed list of raw URLs at the end of your answer. The UI builds a sources panel automatically from inline citations; a hand-typed link list duplicates and breaks that.`\n\n      const runTavilyAB = Boolean(isAdmin && tavilyABTest)\n      send({ type: 'model_label', label: runTavilyAB ? 'A — WITH Tavily' : '' })",
+              'model label and no-tavily common rule'
+          )
+
+          chat = replace_once(
+              chat,
+              "      const sonnetResult = await streamClaude(\n        'claude-sonnet-4-5',",
+              "      // Start the WITHOUT-Tavily Sonnet call first, but do not await it yet.\n      // It runs concurrently with the normal WITH-Tavily call so experiment latency is close to one call, not two serial calls.\n      let tavilyABPromise = null\n      if (runTavilyAB) {\n        const abStartedAt = Date.now()\n        tavilyABPromise = streamClaude(\n          'claude-sonnet-4-5',\n          noTavilySystemPrompt,\n          validMessages,\n          () => {},\n          useContainer ? 6144 : 4096,\n          { enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true' }\n        ).then(result => ({ result, ms: Date.now() - abStartedAt }))\n         .catch(error => ({ error, ms: Date.now() - abStartedAt }))\n      }\n\n      const sonnetResult = await streamClaude(\n        'claude-sonnet-4-5',",
+              'parallel AB promise'
+          )
+
+          ab_code = r'''
+      // Complete the private A/B variant after the primary answer has finished streaming.
+      // The second result is displayed through the existing dual-answer UI and is never
+      // substituted for the normal user answer.
+      if (tavilyABPromise) {
+        const ab = await tavilyABPromise
+        if (ab?.result?.text) {
+          const withoutRaw = ab.result.text
+          const withoutContainer = useContainer ? parseAnswerContainer(withoutRaw) : null
+          const withoutClean = useContainer ? withoutContainer.cleanText : withoutRaw
+          const withoutQuick = useContainer ? (withoutContainer.quickAnswer || '') : ''
+          const withoutUsage = ab.result.usage || null
+          const withoutNativeSearches = ab.result.webSearchCount || 0
+
+          send({ type: 'dual_start', label: 'B — WITHOUT Tavily' })
+          send({ type: 'dual_chunk', text: withoutClean })
+          send({ type: 'dual_done' })
+
+          const withoutDebugDoc = [
+            '═══════════════════════════════════════════════════════════',
+            'WANI TAVILY A/B DEBUG — WITHOUT TAVILY',
+            `Generated: ${new Date().toISOString()}`,
+            `Variant model time: ${ab.ms || 0}ms`,
+            '═══════════════════════════════════════════════════════════',
+            '',
+            '0. CONTROLLED EXPERIMENT',
+            '─────────────────────────────────────────────────────────',
+            'Variant: WITHOUT TAVILY',
+            'Same as WITH-Tavily variant: question, conversation history, Wani base prompt, Findings/KB, reranked book chunks, model, max tokens, native Sonnet web_search availability.',
+            'Only changed variable: Tavily snippets/results were NOT injected into the Sonnet system prompt.',
+            '',
+            '1. QUESTION',
+            '─────────────────────────────────────────────────────────',
+            lastMsg,
+            '',
+            '2. CLASSIFICATION / ROUTING',
+            '─────────────────────────────────────────────────────────',
+            `Intent: ${intent} (confidence: ${debugLog.confidence})`,
+            `Module detected: ${debugLog.detectedModule || 'none'}`,
+            `needsSearch: ${needsSearch}`,
+            'Routing: sonnet-direct A/B variant — WITHOUT Tavily injection',
+            '',
+            '3. BOOK RAG — IDENTICAL TO WITH-TAVILY VARIANT',
+            '─────────────────────────────────────────────────────────',
+            `Pgvector candidates retrieved: ${debugLog.bookRerank?.candidates ?? debugLog.bookChunks ?? 0}`,
+            `Exact duplicates removed before mini: ${debugLog.bookRerank?.exactRemoved ?? 0}`,
+            `Chunks transferred to Sonnet: ${(bookChunks || []).length}`,
+            ...(bookChunks || []).map((c, i) => `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`),
+            '',
+            '3b. CONSULTANT KNOWLEDGE BASE — IDENTICAL TO WITH-TAVILY VARIANT',
+            '─────────────────────────────────────────────────────────',
+            `Entries matched: ${(relevantKnowledge || []).length}`,
+            ...(relevantKnowledge || []).map((k, i) => `[K${i+1}] ${k.module} > ${k.topic} > ${k.object}\n    Finding: ${k.finding}`),
+            '',
+            '4. TAVILY',
+            '─────────────────────────────────────────────────────────',
+            `Tavily results retrieved upstream: ${(tavilyFiltered || []).length + (tavilyNotesFiltered || []).length}`,
+            'Tavily results injected into THIS Sonnet prompt: 0',
+            'NOTE: Retrieval still occurs once for the paired experiment so both variants are generated from the same turn. This variant deliberately receives none of those snippets.',
+            '',
+            '4d. SONNET SELF-VERIFICATION SEARCHES',
+            '─────────────────────────────────────────────────────────',
+            `Native verification searches used: ${withoutNativeSearches}`,
+            '',
+            '5. CLAUDE SONNET — WITHOUT TAVILY',
+            '─────────────────────────────────────────────────────────',
+            '← RAW ANSWER RECEIVED:',
+            withoutRaw,
+            '',
+            '6. ANSWER STRUCTURE',
+            '─────────────────────────────────────────────────────────',
+            `Container format used: ${useContainer}`,
+            useContainer ? `Container parseOk: ${withoutContainer.parseOk}` : null,
+            useContainer ? `Quick answer: ${withoutQuick.slice(0, 300) || '(none)'}` : null,
+            useContainer ? `References: ${withoutContainer.references.length}` : null,
+            useContainer ? `Follow-ups: ${withoutContainer.followUps.length}` : null,
+            '',
+            '6c. COST — THIS WITHOUT-TAVILY SONNET CALL ONLY',
+            '─────────────────────────────────────────────────────────',
+            withoutUsage ? `model: claude-sonnet-4-5` : 'Token usage: not captured',
+            withoutUsage ? `input_tokens: ${withoutUsage.inputTokens} | output_tokens: ${withoutUsage.outputTokens}` : null,
+            withoutUsage ? `cache_creation_input_tokens: ${withoutUsage.cacheCreationTokens || 0} | cache_read_input_tokens: ${withoutUsage.cacheReadTokens || 0}` : null,
+            withoutUsage ? `anthropic_cost_usd: $${withoutUsage.estimatedCostUsd.toFixed(6)}` : null,
+            useContainer ? `hidden_json_chars: ${withoutContainer.hiddenJsonChars || 0} (~${Math.round((withoutContainer.hiddenJsonChars || 0) / 4)} est. tokens)` : null,
+            '',
+            '7. FINAL OUTPUT — WITHOUT TAVILY',
+            '─────────────────────────────────────────────────────────',
+            withoutClean,
+            '',
+            '═══════════════════════════════════════════════════════════',
+            'END OF WITHOUT-TAVILY DEBUG',
+            '═══════════════════════════════════════════════════════════',
+          ].filter(Boolean).join('\n')
+
+          debugLog.tavilyAB = {
+            enabled: true,
+            withoutTavilyAnswer: withoutClean,
+            withoutTavilyQuickAnswer: withoutQuick,
+            withoutTavilyDebugDoc: withoutDebugDoc,
+            withoutTavilyUsage: withoutUsage,
+            withoutTavilyNativeSearches: withoutNativeSearches,
+            withoutTavilyMs: ab.ms || 0,
+          }
+        } else {
+          debugLog.tavilyAB = {
+            enabled: true,
+            error: ab?.error?.message || 'WITHOUT-Tavily Sonnet call failed',
+            withoutTavilyMs: ab?.ms || 0,
+          }
+          send({ type: 'dual_start', label: 'B — WITHOUT Tavily (failed)' })
+          send({ type: 'dual_chunk', text: `A/B test error: ${debugLog.tavilyAB.error}` })
+          send({ type: 'dual_done' })
+        }
+      }
+
+'''
+          chat = replace_once(
+              chat,
+              "      debugLog.rawClaudeAnswer = fullAnswer",
+              ab_code + "      debugLog.rawClaudeAnswer = fullAnswer",
+              'AB result completion'
+          )
+
+          chat = replace_once(
+              chat,
+              "      `Total time: ${debugLog.totalMs}ms`,\n      '═══════════════════════════════════════════════════════════',",
+              "      `Total time: ${debugLog.totalMs}ms`,\n      debugLog.tavilyAB?.enabled ? 'A/B TEST VARIANT: WITH TAVILY (control)' : null,\n      '═══════════════════════════════════════════════════════════',",
+              'primary debug AB marker'
+          )
+
+          chat = replace_once(
+              chat,
+              "      debugDoc,\n      sourceInfo: {",
+              "      ...(debugLog.tavilyAB ? { tavilyAB: debugLog.tavilyAB } : {}),\n      debugDoc,\n      sourceInfo: {",
+              'done event AB payload'
+          )
+
+          chat_path.write_text(chat)
+
+          brain_path = Path('src/pages/Brain.jsx')
+          brain = brain_path.read_text()
+
+          brain = replace_once(
+              brain,
+              "  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email || '')\n\n  // Document upload state",
+              "  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email || '')\n  // Private/admin-only controlled experiment. OFF by default so normal admin usage\n  // does not silently double Sonnet spend.\n  const [tavilyABMode, setTavilyABMode] = useState(false)\n\n  // Document upload state",
+              'frontend AB state'
+          )
+
+          brain = replace_once(
+              brain,
+              "    let localDebugDoc = null\n    let localQuickAnswer = null",
+              "    let localDebugDoc = null\n    let localABDebugDocWithoutTavily = null\n    let localQuickAnswer = null",
+              'frontend local AB debug state'
+          )
+
+          brain = replace_once(
+              brain,
+              "body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),",
+              "body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent, tavilyABTest: isAdmin && tavilyABMode }),",
+              'frontend AB request flag'
+          )
+
+          brain = replace_once(
+              brain,
+              "              if (evt.debugDoc)    localDebugDoc   = evt.debugDoc\n              if (evt.containerMode) {",
+              "              if (evt.debugDoc)    localDebugDoc   = evt.debugDoc\n              if (evt.tavilyAB?.withoutTavilyDebugDoc) localABDebugDocWithoutTavily = evt.tavilyAB.withoutTavilyDebugDoc\n              if (evt.containerMode) {",
+              'frontend receive AB debug'
+          )
+
+          brain = replace_once(
+              brain,
+              "        ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),\n        ...(localContainerMode ? {",
+              "        ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),\n        ...(localABDebugDocWithoutTavily ? { _abDebugDocWithoutTavily: localABDebugDocWithoutTavily } : {}),\n        ...(localContainerMode ? {",
+              'persist AB debug'
+          )
+
+          brain = replace_once(
+              brain,
+              "                a.download = `wani-debug-${Date.now()}.txt`",
+              "                a.download = msg._abDebugDocWithoutTavily ? `wani-debug-WITH-tavily-${Date.now()}.txt` : `wani-debug-${Date.now()}.txt`",
+              'primary debug filename'
+          )
+
+          brain = replace_once(
+              brain,
+              "              📄 Download Debug Doc",
+              "              {msg._abDebugDocWithoutTavily ? '📄 Debug — WITH Tavily' : '📄 Download Debug Doc'}",
+              'primary debug button label'
+          )
+
+          second_debug = r'''
+        {!isStreaming && msg._abDebugDocWithoutTavily && (
+          <div style={{ marginTop:6 }}>
+            <button
+              onClick={() => {
+                const blob = new Blob([msg._abDebugDocWithoutTavily], { type: 'text/plain' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `wani-debug-WITHOUT-tavily-${Date.now()}.txt`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.12)'}`,
+                borderRadius: 8,
+                padding: '3px 10px',
+                fontSize: 11,
+                color: '#D97706',
+                cursor: 'pointer',
+                fontFamily: "'Inter',sans-serif",
+              }}
+            >
+              📄 Debug — WITHOUT Tavily
+            </button>
+          </div>
+        )}
+'''
+          brain = replace_once(
+              brain,
+              "        {/* Fallback download button for FS documents */}",
+              second_debug + "        {/* Fallback download button for FS documents */}",
+              'secondary debug download button'
+          )
+
+          brain = replace_once(
+              brain,
+              "            {/* Input */}",
+              r'''            {isAdmin && (
+              <div style={{ flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'6px 12px', background:t.topbar, borderTop:`1px solid ${t.border}` }}>
+                <button
+                  onClick={()=>setTavilyABMode(v=>!v)}
+                  disabled={isLoading || isStreaming}
+                  title="Private controlled test: same question twice, only Tavily injection differs"
+                  style={{ border:`1px solid ${tavilyABMode?'#D97706':t.border}`, background:tavilyABMode?'rgba(217,119,6,0.12)':'transparent', color:tavilyABMode?'#D97706':t.text4, borderRadius:20, padding:'4px 11px', fontSize:11, fontWeight:600, cursor:(isLoading||isStreaming)?'default':'pointer', fontFamily:"'Inter',sans-serif" }}
+                >
+                  Tavily A/B: {tavilyABMode ? 'ON' : 'OFF'}
+                </button>
+                {tavilyABMode && <span style={{ fontSize:10, color:t.text4 }}>Admin test · 2 Sonnet calls · same books/Findings/history</span>}
+              </div>
+            )}
+
+            {/* Input */}''',
+              'admin AB toggle UI'
+          )
+
+          # Show a clear label over the primary saved answer during A/B mode.
+          brain = replace_once(
+              brain,
+              "        <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>",
+              "        {msg._primaryLabel && <div style={{ fontSize:10, color:'#0A6ED1', opacity:0.75, marginBottom:6, fontFamily:\"'Inter',sans-serif\" }}>{msg._primaryLabel}</div>}\n        <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>",
+              'primary AB visible label'
+          )
+
+          brain_path.write_text(brain)
+          PY
+
+      - name: Validate backend syntax
+        run: node --check api/chat.js
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate production build
+        run: npm run build
+
+      - name: Commit experiment
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/wani-tavily-ab-once.yml
+          git add api/chat.js src/pages/Brain.jsx
+          git commit -m "Add admin Tavily A/B comparison mode"
+          git push origin main
