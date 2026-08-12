@@ -1825,7 +1825,7 @@ export default function Brain({ session }) {
   const [debugData, setDebugData]         = useState(null)
   const [showDebug, setShowDebug]         = useState(false)
   const ADMIN_EMAILS = [import.meta.env.VITE_ADMIN_EMAIL_1, import.meta.env.VITE_ADMIN_EMAIL_2].filter(Boolean)
-  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email || '')
+  const isAdmin = isUnlimited || ADMIN_EMAILS.includes(session?.user?.email || '')
   // Private admin experiment; OFF by default to avoid accidental double Sonnet spend.
   const [tavilyABMode, setTavilyABMode] = useState(false)
 
