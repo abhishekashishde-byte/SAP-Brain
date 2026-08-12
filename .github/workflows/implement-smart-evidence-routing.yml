@@ -21,6 +21,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Normalize migration script literals
+        run: |
+          sed -i -E 's/^([[:space:]]*)(old|new|shared_anchor|shared_insert|full_anchor|full_insert) = """/\1\2 = r"""/' .github/scripts/implement-smart-evidence-routing.py
+          sed -i 's/^    """    /    r"""    /' .github/scripts/implement-smart-evidence-routing.py
+
       - name: Patch Wani evidence routing
         run: python .github/scripts/implement-smart-evidence-routing.py
 
