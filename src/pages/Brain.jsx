@@ -887,7 +887,6 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         <WaniLogo size={26} dark={dark}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
-        {msg._primaryLabel && <div style={{ fontSize:10, color:'#0A6ED1', opacity:0.75, marginBottom:6, fontFamily:"'Inter',sans-serif" }}>{msg._primaryLabel}</div>}
         <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
           {isPreparing ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: dark ? '#94A3B8' : '#666', fontSize: 14 }}>
@@ -969,7 +968,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
                 a.href = url
-                a.download = msg._abDebugDocWithoutTavily ? `wani-debug-WITH-tavily-${Date.now()}.txt` : `wani-debug-${Date.now()}.txt`
+                a.download = `wani-debug-${Date.now()}.txt`
                 a.click()
                 URL.revokeObjectURL(url)
               }}
@@ -984,34 +983,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
                 fontFamily: "'Inter',sans-serif",
               }}
             >
-              {msg._abDebugDocWithoutTavily ? '📄 Debug — WITH Tavily' : '📄 Download Debug Doc'}
-            </button>
-          </div>
-        )}
-        {!isStreaming && msg._abDebugDocWithoutTavily && (
-          <div style={{ marginTop:6 }}>
-            <button
-              onClick={() => {
-                const blob = new Blob([msg._abDebugDocWithoutTavily], { type: 'text/plain' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `wani-debug-WITHOUT-tavily-${Date.now()}.txt`
-                a.click()
-                URL.revokeObjectURL(url)
-              }}
-              style={{
-                background: 'transparent',
-                border: `1px solid ${dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.12)'}`,
-                borderRadius: 8,
-                padding: '3px 10px',
-                fontSize: 11,
-                color: '#D97706',
-                cursor: 'pointer',
-                fontFamily: "'Inter',sans-serif",
-              }}
-            >
-              📄 Debug — WITHOUT Tavily
+              📄 Download Debug Doc
             </button>
           </div>
         )}
@@ -2366,7 +2338,6 @@ export default function Brain({ session }) {
     let localPrimaryLabel = ''
     let localSourceInfo = null
     let localDebugDoc = null
-    let localABDebugDocWithoutTavily = null
     let localQuickAnswer = null
     let localReferences = []
     let localFollowUps = []
@@ -2616,7 +2587,6 @@ export default function Brain({ session }) {
         role: 'assistant',
         content: replyContent,
         _model: modelUsed,
-        ...(localPrimaryLabel ? { _primaryLabel: localPrimaryLabel } : {}),
         ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
         ...(deliverableType === 'FS_SPEC' && window.__lastFsText
           ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
@@ -2624,7 +2594,6 @@ export default function Brain({ session }) {
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
         ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
-        ...(localABDebugDocWithoutTavily ? { _abDebugDocWithoutTavily: localABDebugDocWithoutTavily } : {}),
         ...(localContainerMode ? {
           _containerMode: true,
           _quickAnswer: localQuickAnswer,

@@ -18,7 +18,7 @@ import {
   ON_DEMAND_VISUAL_PROMPT, validateVisualData,
 } from './_shared.js'
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
-import { assessEvidenceRouting, attachSelectedTavilyResults } from './evidence-routing.js'
+import { assessEvidenceRouting, attachSelectedTavilyResults } from '../lib/evidence-routing.js'
 import { createClient } from '@supabase/supabase-js'
 
 // ── APPROVED SOURCE DOMAINS ───────────────────────────────────────────────────
