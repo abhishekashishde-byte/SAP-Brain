@@ -1,4 +1,4 @@
-name: Fix Tavily A/B admin UI detection
+name: Make Tavily-enhanced Wani flow the default
 
 on:
   push:
@@ -18,19 +18,42 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Patch admin detection
+      - name: Remove Tavily A/B experiment UI and keep enhanced flow as default
         run: |
           python - <<'PY'
           from pathlib import Path
+
           p = Path('src/pages/Brain.jsx')
           s = p.read_text()
-          old = "  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email || '')"
-          new = "  const isAdmin = isUnlimited || ADMIN_EMAILS.includes(session?.user?.email || '')"
-          if old not in s:
-              raise SystemExit('Expected admin detection line not found')
-          s = s.replace(old, new, 1)
+
+          state_block = """  // Private admin experiment; OFF by default to avoid accidental double Sonnet spend.\n  const [tavilyABMode, setTavilyABMode] = useState(false)\n"""
+          if state_block not in s:
+              raise SystemExit('Expected Tavily A/B state block not found')
+          s = s.replace(state_block, '', 1)
+
+          request_old = ", tavilyABTest: isAdmin && tavilyABMode"
+          if request_old not in s:
+              raise SystemExit('Expected Tavily A/B request flag not found')
+          s = s.replace(request_old, '', 1)
+
+          ui_block = """            {isAdmin && (\n              <div style={{ flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'6px 12px', background:t.topbar, borderTop:`1px solid ${t.border}` }}>\n                <button\n                  onClick={()=>setTavilyABMode(v=>!v)}\n                  disabled={isLoading || isStreaming}\n                  title=\"Private controlled test: same question twice, only Tavily injection differs\"\n                  style={{ border:`1px solid ${tavilyABMode?'#D97706':t.border}`, background:tavilyABMode?'rgba(217,119,6,0.12)':'transparent', color:tavilyABMode?'#D97706':t.text4, borderRadius:20, padding:'4px 11px', fontSize:11, fontWeight:600, cursor:(isLoading||isStreaming)?'default':'pointer', fontFamily:\"'Inter',sans-serif\" }}\n                >\n                  Tavily A/B: {tavilyABMode ? 'ON' : 'OFF'}\n                </button>\n                {tavilyABMode && <span style={{ fontSize:10, color:t.text4 }}>Admin test · 2 Sonnet calls · same books/Findings/history</span>}\n              </div>\n            )}\n\n"""
+          if ui_block not in s:
+              raise SystemExit('Expected Tavily A/B UI block not found')
+          s = s.replace(ui_block, '', 1)
+
           p.write_text(s)
           PY
+
+      - name: Verify A/B UI is gone and Tavily-enhanced normal path remains
+        run: |
+          if grep -q "tavilyABMode\|Tavily A/B:" src/pages/Brain.jsx; then
+            echo "A/B UI remnants still present"
+            exit 1
+          fi
+          if ! grep -q "ALL SAP Q&A → Sonnet answers directly with books + Tavily injected" api/chat.js; then
+            echo "Expected Tavily-enhanced default answer path not found"
+            exit 1
+          fi
 
       - name: Commit patch
         run: |
@@ -41,5 +64,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/pages/Brain.jsx
-          git commit -m "Use server-confirmed admin status for Tavily A/B UI"
+          git commit -m "Make Tavily-enhanced answers default and remove A/B toggle"
           git push origin main
