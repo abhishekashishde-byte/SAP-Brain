@@ -1368,8 +1368,14 @@ export default async function handler(req, res) {
   const { userId, token: userToken, userEmail } = authUser
 
   // ── ADMIN EMAIL CHECK ─────────────────────────────────────────────────────
-  const ADMIN_EMAILS = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2].filter(Boolean)
-  const isAdmin = ADMIN_EMAILS.includes(userEmail)
+  // Server is the single source of truth for admin-only controls and A/B execution.
+  const ADMIN_EMAILS = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2, 'abhishek.ashish.de@gmail.com']
+    .filter(Boolean).map(e => e.toLowerCase())
+  const isAdmin = ADMIN_EMAILS.includes((userEmail || '').toLowerCase())
+
+  if (body.action === 'admin_status') {
+    return res.status(200).json({ isAdmin })
+  }
 
   // ── ACTIONS: generate_visual — on-demand only, triggered by the "View as
   // visual" button on an already-completed answer. Cheap non-streaming call,

@@ -1824,8 +1824,23 @@ export default function Brain({ session }) {
   // ── ADMIN DEBUG PANEL ─────────────────────────────────────────────────────
   const [debugData, setDebugData]         = useState(null)
   const [showDebug, setShowDebug]         = useState(false)
-  const ADMIN_EMAILS = [import.meta.env.VITE_ADMIN_EMAIL_1, import.meta.env.VITE_ADMIN_EMAIL_2].filter(Boolean)
-  const isAdmin = ['abhishek.ashish.de@gmail.com', ...ADMIN_EMAILS].includes((session?.user?.email || '').toLowerCase())
+  // Admin identity is confirmed by the authenticated backend, not by Vite/client env vars.
+  const [serverIsAdmin, setServerIsAdmin] = useState(false)
+  const isAdmin = serverIsAdmin
+  useEffect(() => {
+    const token = session?.access_token
+    if (!token) { setServerIsAdmin(false); return }
+    let cancelled = false
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'admin_status' }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('admin status failed')))
+      .then(data => { if (!cancelled) setServerIsAdmin(data?.isAdmin === true) })
+      .catch(() => { if (!cancelled) setServerIsAdmin(false) })
+    return () => { cancelled = true }
+  }, [session?.access_token])
   // Private admin experiment; OFF by default to avoid accidental double Sonnet spend.
   const [tavilyABMode, setTavilyABMode] = useState(false)
 
