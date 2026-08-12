@@ -1,0 +1,45 @@
+name: Fix Tavily A/B admin UI detection
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-tavily-admin-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch admin detection
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/Brain.jsx')
+          s = p.read_text()
+          old = "  const isAdmin = ADMIN_EMAILS.includes(session?.user?.email || '')"
+          new = "  const isAdmin = isUnlimited || ADMIN_EMAILS.includes(session?.user?.email || '')"
+          if old not in s:
+              raise SystemExit('Expected admin detection line not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Brain.jsx
+          git commit -m "Use server-confirmed admin status for Tavily A/B UI"
+          git push origin main
