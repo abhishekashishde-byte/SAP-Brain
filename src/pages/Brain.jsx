@@ -2417,7 +2417,7 @@ export default function Brain({ session }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
+        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent, tavilyABTest:true }),
         signal: abortController.signal,
       })
 
