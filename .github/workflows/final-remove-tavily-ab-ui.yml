@@ -1,0 +1,104 @@
+name: Final remove Tavily A-B UI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/final-remove-tavily-ab-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Remove residual A-B UI and move evidence helper
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('src/pages/Brain.jsx')
+          s = p.read_text()
+
+          replacements = [
+              ("a.download = msg._abDebugDocWithoutTavily ? `wani-debug-WITH-tavily-${Date.now()}.txt` : `wani-debug-${Date.now()}.txt`",
+               "a.download = `wani-debug-${Date.now()}.txt`"),
+              ("{msg._abDebugDocWithoutTavily ? '📄 Debug — WITH Tavily' : '📄 Download Debug Doc'}",
+               "📄 Download Debug Doc"),
+              ("    let localABDebugDocWithoutTavily = null\n", ""),
+              ("        ...(localABDebugDocWithoutTavily ? { _abDebugDocWithoutTavily: localABDebugDocWithoutTavily } : {}),\n", ""),
+              ("        {msg._primaryLabel && <div style={{ fontSize:10, color:'#0A6ED1', opacity:0.75, marginBottom:6, fontFamily:\"'Inter',sans-serif\" }}>{msg._primaryLabel}</div>}\n", ""),
+              ("        ...(localPrimaryLabel ? { _primaryLabel: localPrimaryLabel } : {}),\n", ""),
+          ]
+          for old, new in replacements:
+              s = s.replace(old, new)
+
+          # Remove the entire secondary WITHOUT-Tavily debug button block.
+          s, n = re.subn(
+              r"\n        \{!isStreaming && msg\._abDebugDocWithoutTavily && \(.*?\n        \)\}\n(?=        \{/\* Fallback download button for FS documents \*/\})",
+              "\n",
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1:
+              raise SystemExit(f'Expected to remove 1 WITHOUT-Tavily button block, removed {n}')
+
+          p.write_text(s)
+          PY
+
+          # Keep evidence scoring as ordinary backend code, not a Vercel /api function.
+          if [ -f api/evidence-routing.js ]; then
+            mkdir -p lib
+            git mv api/evidence-routing.js lib/evidence-routing.js
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('api/chat.js')
+          s = p.read_text()
+          s = s.replace("from './evidence-routing.js'", "from '../lib/evidence-routing.js'")
+          p.write_text(s)
+          PY
+
+      - name: Verify A-B UI is gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE 'WITH Tavily|WITHOUT Tavily|WITH-tavily|WITHOUT-tavily|_abDebugDocWithoutTavily' src/pages/Brain.jsx; then
+            echo 'Residual Tavily A-B UI found'
+            exit 1
+          fi
+          if grep -nE 'runTavilyAB|tavilyABTest|dual_answer' api/chat.js; then
+            echo 'Residual Tavily A-B backend path found'
+            exit 1
+          fi
+          test -f lib/evidence-routing.js
+          test ! -f api/evidence-routing.js
+          grep -q "from '../lib/evidence-routing.js'" api/chat.js
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'Remove residual Tavily A-B UI and finalize evidence routing'
+          git push origin HEAD:main
