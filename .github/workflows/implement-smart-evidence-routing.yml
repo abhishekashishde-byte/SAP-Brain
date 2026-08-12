@@ -1,16 +1,15 @@
-name: Implement smart evidence routing
+name: Finalize smart evidence routing
 
 on:
   push:
     paths:
       - '.github/workflows/implement-smart-evidence-routing.yml'
-      - '.github/scripts/implement-smart-evidence-routing.py'
 
 permissions:
   contents: write
 
 jobs:
-  migrate:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,19 +20,19 @@ jobs:
         with:
           node-version: 20
 
-      - name: Normalize migration script literals
+      - name: Move evidence helper out of API directory
         run: |
-          sed -i -E 's/^([[:space:]]*)(old|new|shared_anchor|shared_insert|full_anchor|full_insert) = """/\1\2 = r"""/' .github/scripts/implement-smart-evidence-routing.py
-          sed -i 's/^    """    /    r"""    /' .github/scripts/implement-smart-evidence-routing.py
+          mkdir -p lib
+          git mv api/evidence-routing.js lib/evidence-routing.js
+          sed -i "s#'./evidence-routing.js'#'../lib/evidence-routing.js'#" api/chat.js
 
-      - name: Patch Wani evidence routing
-        run: python .github/scripts/implement-smart-evidence-routing.py
-
-      - name: Verify A/B path is gone
+      - name: Verify routing implementation
         run: |
           ! grep -n "runTavilyAB\|tavilyABTest\|WANI TAVILY A/B DEBUG\|A — WITH Tavily\|B — WITHOUT Tavily" api/chat.js src/pages/Brain.jsx
-          grep -n "EVIDENCE QUALITY / ROUTING\|RAG/KB score\|Tavily sent to Sonnet" api/chat.js
           grep -n "assessEvidenceRouting\|answerSearchResults\|referenceSearchResults" api/chat.js
+          grep -n "RAG/KB score\|Tavily sent to Sonnet\|EVIDENCE QUALITY / ROUTING" api/chat.js
+          test ! -f api/evidence-routing.js
+          test -f lib/evidence-routing.js
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -41,14 +40,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Commit implementation
+      - name: Commit final implementation
         run: |
           git config user.name "wani-maintenance"
           git config user.email "wani-maintenance@users.noreply.github.com"
-          git add api/chat.js api/evidence-routing.js src/pages/Brain.jsx
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
-          git commit -m "Implement dynamic RAG and Tavily evidence routing"
+          git add api/chat.js lib/evidence-routing.js api/evidence-routing.js
+          git commit -m "Finalize dynamic evidence routing for Vercel"
           git push origin HEAD:main
