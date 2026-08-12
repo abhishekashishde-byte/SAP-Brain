@@ -1543,7 +1543,7 @@ export default async function handler(req, res) {
   }
 
   // ── STREAMING HANDLER ─────────────────────────────────────────────────────
-  const { messages, tone = 'balanced', userName, userRole, userModules = [], docWizardStage, deliverableRequested = false } = body
+  const { messages, tone = 'balanced', userName, userRole, userModules = [], docWizardStage, deliverableRequested = false, tavilyABTest = false } = body
   const lastMsg = messages?.[messages.length - 1]?.content || ''
   const prevAssistantMsg = [...(messages || [])].reverse().find(m => m.role === 'assistant')?.content || ''
 
@@ -2211,7 +2211,8 @@ export default async function handler(req, res) {
       // raw hand-typed URL dump at the end of an answer before this was added.
       enrichedSystemPrompt += `\n\nIf you use your own web_search tool during this answer, cite what you find inline as [1] [2] etc., the same as any other source — never as a manually-typed list of raw URLs at the end of your answer. The UI builds a sources panel automatically from inline citations; a hand-typed link list duplicates and breaks that.`
 
-      send({ type: 'model_label', label: '' })
+      const runTavilyAB = Boolean(isAdmin && tavilyABTest)
+      send({ type: 'model_label', label: runTavilyAB ? 'A — WITH Tavily' : '' })
 
       const useContainer = VISUAL_ELIGIBLE_INTENTS.has(intent)
       usedContainerFormat = useContainer
@@ -2311,6 +2312,56 @@ export default async function handler(req, res) {
         }
       }
 
+      // ── PRIVATE ADMIN TAVILY A/B EXPERIMENT ──────────────────────────────
+      // A = today's exact production prompt. B = byte-for-byte same prompt after removing
+      // Tavily-derived content only. Sonnet's own native web_search stays enabled in BOTH.
+      let noTavilySystemPrompt = enrichedSystemPrompt
+      if (runTavilyAB) {
+        // Step-7 Tavily content block (first injection)
+        if (tavilyFiltered.length > 0) {
+          const step7TavilyText = tavilyFiltered.map((r, i) =>
+            `[T${i+1}] ${r.source} — ${r.title}\n${r.snippet}`
+          ).join('\n\n')
+          const step7TavilyBlock = `\n\nSAP COMMUNITY & BLOGS (from Tavily — SAP sources only):\n${step7TavilyText}`
+          noTavilySystemPrompt = noTavilySystemPrompt.replace(step7TavilyBlock, '')
+
+          // sonnet-direct Tavily content block (second injection in current production path)
+          const directTavilyText = tavilyFiltered.map((r, i) =>
+            `[Web ${i+1}] ${r.title}\nURL: ${r.url}\n${(r.snippet || '').slice(0, 1000)}`
+          ).join('\n\n')
+          const directTavilyBlock = `\n\n🔍 WEB SEARCH RESULTS — cite relevant ones with URL inline:\n${directTavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
+          noTavilySystemPrompt = noTavilySystemPrompt.replace(directTavilyBlock, '')
+        }
+
+        // Tavily-derived source reference list (general + community lane titles/URLs)
+        if (allSearchResults.length > 0) {
+          const sourceRefAB = allSearchResults.map((r, i) => `[${i+1}] ${r.title} — ${r.url}`).join('\n')
+          const sourceBlockAB = `\n\nSOURCE REFERENCES:\n${sourceRefAB}\n\nCITATION RULES: Weave citations INLINE using [1] [2] notation. Do NOT add a Sources section at the end. This rule applies identically when you use your own web_search tool mid-answer — those results also get cited inline as [1] [2], never as a manually-typed list of raw URLs at the end of your answer. The UI renders a proper sources panel automatically from whatever you cite inline; a hand-typed link dump duplicates it and looks broken.`
+          noTavilySystemPrompt = noTavilySystemPrompt.replace(sourceBlockAB, '')
+        }
+
+        // SAP note refs are extracted from Tavily search results, therefore excluded in B.
+        if (noteRefs.length > 0) {
+          const noteBlockAB = `\n\n📋 SAP NOTES FOUND:\n${noteRefs.map(n => `- SAP Note ${n.number}: ${n.url}`).join('\n')}`
+          noTavilySystemPrompt = noTavilySystemPrompt.replace(noteBlockAB, '')
+        }
+      }
+
+      // Start B before awaiting A so both Sonnet calls run concurrently.
+      let tavilyABPromise = null
+      if (runTavilyAB) {
+        const abStartedAt = Date.now()
+        tavilyABPromise = streamClaude(
+          'claude-sonnet-4-5',
+          noTavilySystemPrompt,
+          validMessages,
+          () => {},
+          useContainer ? 6144 : 4096,
+          { enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true' }
+        ).then(result => ({ result, ms: Date.now() - abStartedAt }))
+         .catch(error => ({ error, ms: Date.now() - abStartedAt }))
+      }
+
       // Sonnet answers directly — THIS is the final answer, streamed live.
       // Native web_search tool is enabled here specifically for self-
       // verification: before stating a specific technical identifier not
@@ -2365,6 +2416,120 @@ export default async function handler(req, res) {
         const cleanForStream = metaIdx !== -1 ? fullAnswer.slice(0, metaIdx) : fullAnswer
         if (cleanForStream.length > sentPos) {
           send({ type: 'chunk', text: cleanForStream.slice(sentPos) })
+        }
+      }
+
+      if (tavilyABPromise) {
+        const ab = await tavilyABPromise
+        if (ab?.result?.text) {
+          const withoutRaw = ab.result.text
+          const withoutContainer = useContainer ? parseAnswerContainer(withoutRaw) : null
+          const withoutClean = useContainer ? withoutContainer.cleanText : withoutRaw
+          const withoutQuick = useContainer ? (withoutContainer.quickAnswer || '') : ''
+          const withoutUsage = ab.result.usage || null
+          const withoutNativeSearches = ab.result.webSearchCount || 0
+
+          send({ type: 'dual_start', label: 'B — WITHOUT Tavily' })
+          send({ type: 'dual_chunk', text: withoutClean })
+          send({ type: 'dual_done' })
+
+          const withoutDebugDoc = [
+            '═══════════════════════════════════════════════════════════',
+            'WANI TAVILY A/B DEBUG — WITHOUT TAVILY',
+            `Generated: ${new Date().toISOString()}`,
+            `Variant model time: ${ab.ms || 0}ms`,
+            '═══════════════════════════════════════════════════════════',
+            '',
+            '0. CONTROLLED EXPERIMENT',
+            '─────────────────────────────────────────────────────────',
+            'Variant: WITHOUT TAVILY',
+            'Same inputs as control: question, conversation history, Wani base prompt, Findings/KB, reranked books, model, max tokens, native Sonnet web_search availability.',
+            'Only changed variable: every known Tavily-derived prompt block was removed before this Sonnet call.',
+            `Control Tavily general snippets available: ${(tavilyFiltered || []).length}`,
+            `Control Tavily community references available: ${(tavilyNotesFiltered || []).length}`,
+            'Tavily snippets/references injected into THIS variant: 0',
+            '',
+            '1. QUESTION',
+            '─────────────────────────────────────────────────────────',
+            lastMsg,
+            '',
+            '2. CLASSIFICATION',
+            '─────────────────────────────────────────────────────────',
+            `Intent: ${intent} (confidence: ${debugLog.confidence})`,
+            `Module detected: ${debugLog.detectedModule || 'none'}`,
+            `needsSearch: ${needsSearch}`,
+            'Routing: sonnet-direct A/B — WITHOUT Tavily',
+            '',
+            '3. BOOK RAG — SAME AS CONTROL',
+            '─────────────────────────────────────────────────────────',
+            `Pgvector candidates retrieved: ${debugLog.bookRerank?.candidates ?? debugLog.bookChunks ?? 0}`,
+            `Exact duplicates removed before mini: ${debugLog.bookRerank?.exactRemoved ?? 0}`,
+            `Chunks transferred to Sonnet: ${(bookChunks || []).length}`,
+            ...(bookChunks || []).map((c, i) => `[${i+1}] ${c.source_book}, p.${c.page_number}\n    Title: ${c.lesson_title || 'n/a'}\n    Content: ${c.content?.slice(0, 300) || ''}`),
+            '',
+            '3b. CONSULTANT KNOWLEDGE BASE — SAME AS CONTROL',
+            '─────────────────────────────────────────────────────────',
+            `Entries matched: ${(relevantKnowledge || []).length}`,
+            ...(relevantKnowledge || []).map((k, i) => `[K${i+1}] ${k.module} > ${k.topic} > ${k.object}\n    Finding: ${k.finding}`),
+            '',
+            '4. TAVILY',
+            '─────────────────────────────────────────────────────────',
+            `Upstream general results retrieved for paired test: ${(tavilyFiltered || []).length}`,
+            `Upstream community results retrieved for paired test: ${(tavilyNotesFiltered || []).length}`,
+            'Injected into THIS prompt: 0',
+            '',
+            '4d. SONNET NATIVE SELF-VERIFICATION',
+            '─────────────────────────────────────────────────────────',
+            `Native verification searches used: ${withoutNativeSearches}`,
+            '',
+            '5. CLAUDE SONNET — WITHOUT TAVILY',
+            '─────────────────────────────────────────────────────────',
+            '← RAW ANSWER RECEIVED:',
+            withoutRaw,
+            '',
+            '6. ANSWER STRUCTURE',
+            '─────────────────────────────────────────────────────────',
+            `Container format used: ${useContainer}`,
+            useContainer ? `Container parseOk: ${withoutContainer.parseOk}` : null,
+            useContainer ? `Quick answer: ${withoutQuick.slice(0, 300) || '(none)'}` : null,
+            useContainer ? `References: ${withoutContainer.references.length}` : null,
+            useContainer ? `Follow-ups: ${withoutContainer.followUps.length}` : null,
+            '',
+            '6c. COST — WITHOUT-TAVILY SONNET CALL ONLY',
+            '─────────────────────────────────────────────────────────',
+            withoutUsage ? 'model: claude-sonnet-4-5' : 'Token usage: not captured',
+            withoutUsage ? `input_tokens: ${withoutUsage.inputTokens} | output_tokens: ${withoutUsage.outputTokens}` : null,
+            withoutUsage ? `cache_creation_input_tokens: ${withoutUsage.cacheCreationTokens || 0} | cache_read_input_tokens: ${withoutUsage.cacheReadTokens || 0}` : null,
+            withoutUsage ? `anthropic_cost_usd: $${withoutUsage.estimatedCostUsd.toFixed(6)}` : null,
+            useContainer ? `hidden_json_chars: ${withoutContainer.hiddenJsonChars || 0} (~${Math.round((withoutContainer.hiddenJsonChars || 0) / 4)} est. tokens)` : null,
+            '',
+            '7. FINAL OUTPUT — WITHOUT TAVILY',
+            '─────────────────────────────────────────────────────────',
+            withoutClean,
+            '',
+            '═══════════════════════════════════════════════════════════',
+            'END OF WITHOUT-TAVILY DEBUG',
+            '═══════════════════════════════════════════════════════════',
+          ].filter(Boolean).join('\n')
+
+          debugLog.tavilyAB = {
+            enabled: true,
+            withoutTavilyAnswer: withoutClean,
+            withoutTavilyQuickAnswer: withoutQuick,
+            withoutTavilyDebugDoc: withoutDebugDoc,
+            withoutTavilyUsage: withoutUsage,
+            withoutTavilyNativeSearches: withoutNativeSearches,
+            withoutTavilyMs: ab.ms || 0,
+          }
+        } else {
+          debugLog.tavilyAB = {
+            enabled: true,
+            error: ab?.error?.message || 'WITHOUT-Tavily Sonnet call failed',
+            withoutTavilyMs: ab?.ms || 0,
+          }
+          send({ type: 'dual_start', label: 'B — WITHOUT Tavily (failed)' })
+          send({ type: 'dual_chunk', text: `A/B test error: ${debugLog.tavilyAB.error}` })
+          send({ type: 'dual_done' })
         }
       }
 
@@ -2734,6 +2899,7 @@ export default async function handler(req, res) {
         references: containerResult.references || [],
         followUps: containerResult.followUps || [],
       } : { containerMode: false }),
+      ...(debugLog.tavilyAB ? { tavilyAB: debugLog.tavilyAB } : {}),
       debugDoc,
       sourceInfo: {
         intent,

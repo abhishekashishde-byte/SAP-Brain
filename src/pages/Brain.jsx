@@ -887,6 +887,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         <WaniLogo size={26} dark={dark}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
+        {msg._primaryLabel && <div style={{ fontSize:10, color:'#0A6ED1', opacity:0.75, marginBottom:6, fontFamily:"'Inter',sans-serif" }}>{msg._primaryLabel}</div>}
         <div style={{ fontSize:16,lineHeight:1.8,wordBreak:'break-word' }}>
           {isPreparing ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: dark ? '#94A3B8' : '#666', fontSize: 14 }}>
@@ -968,7 +969,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
                 a.href = url
-                a.download = `wani-debug-${Date.now()}.txt`
+                a.download = msg._abDebugDocWithoutTavily ? `wani-debug-WITH-tavily-${Date.now()}.txt` : `wani-debug-${Date.now()}.txt`
                 a.click()
                 URL.revokeObjectURL(url)
               }}
@@ -983,7 +984,34 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
                 fontFamily: "'Inter',sans-serif",
               }}
             >
-              📄 Download Debug Doc
+              {msg._abDebugDocWithoutTavily ? '📄 Debug — WITH Tavily' : '📄 Download Debug Doc'}
+            </button>
+          </div>
+        )}
+        {!isStreaming && msg._abDebugDocWithoutTavily && (
+          <div style={{ marginTop:6 }}>
+            <button
+              onClick={() => {
+                const blob = new Blob([msg._abDebugDocWithoutTavily], { type: 'text/plain' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `wani-debug-WITHOUT-tavily-${Date.now()}.txt`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.12)'}`,
+                borderRadius: 8,
+                padding: '3px 10px',
+                fontSize: 11,
+                color: '#D97706',
+                cursor: 'pointer',
+                fontFamily: "'Inter',sans-serif",
+              }}
+            >
+              📄 Debug — WITHOUT Tavily
             </button>
           </div>
         )}
@@ -1798,6 +1826,8 @@ export default function Brain({ session }) {
   const [showDebug, setShowDebug]         = useState(false)
   const ADMIN_EMAILS = [import.meta.env.VITE_ADMIN_EMAIL_1, import.meta.env.VITE_ADMIN_EMAIL_2].filter(Boolean)
   const isAdmin = ADMIN_EMAILS.includes(session?.user?.email || '')
+  // Private admin experiment; OFF by default to avoid accidental double Sonnet spend.
+  const [tavilyABMode, setTavilyABMode] = useState(false)
 
   // Document upload state
   const [uploadedDoc, setUploadedDoc]         = useState(null) // { name, content, type, docType }
@@ -2323,6 +2353,7 @@ export default function Brain({ session }) {
     let localPrimaryLabel = ''
     let localSourceInfo = null
     let localDebugDoc = null
+    let localABDebugDocWithoutTavily = null
     let localQuickAnswer = null
     let localReferences = []
     let localFollowUps = []
@@ -2373,7 +2404,7 @@ export default function Brain({ session }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
+        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent, tavilyABTest: isAdmin && tavilyABMode }),
         signal: abortController.signal,
       })
 
@@ -2475,6 +2506,7 @@ export default function Brain({ session }) {
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
               if (evt.sourceInfo) localSourceInfo = evt.sourceInfo
               if (evt.debugDoc)    localDebugDoc   = evt.debugDoc
+              if (evt.tavilyAB?.withoutTavilyDebugDoc) localABDebugDocWithoutTavily = evt.tavilyAB.withoutTavilyDebugDoc
               if (evt.containerMode) {
                 localContainerMode = true
                 localQuickAnswer = evt.quickAnswer || null
@@ -2581,6 +2613,7 @@ export default function Brain({ session }) {
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
         ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
+        ...(localABDebugDocWithoutTavily ? { _abDebugDocWithoutTavily: localABDebugDocWithoutTavily } : {}),
         ...(localContainerMode ? {
           _containerMode: true,
           _quickAnswer: localQuickAnswer,
@@ -3185,6 +3218,20 @@ export default function Brain({ session }) {
                 onMouseLeave={e=>{ e.currentTarget.style.transform='scale(1)' }}
               >+</button>
             </div>
+
+            {isAdmin && (
+              <div style={{ flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'6px 12px', background:t.topbar, borderTop:`1px solid ${t.border}` }}>
+                <button
+                  onClick={()=>setTavilyABMode(v=>!v)}
+                  disabled={isLoading || isStreaming}
+                  title="Private controlled test: same question twice, only Tavily injection differs"
+                  style={{ border:`1px solid ${tavilyABMode?'#D97706':t.border}`, background:tavilyABMode?'rgba(217,119,6,0.12)':'transparent', color:tavilyABMode?'#D97706':t.text4, borderRadius:20, padding:'4px 11px', fontSize:11, fontWeight:600, cursor:(isLoading||isStreaming)?'default':'pointer', fontFamily:"'Inter',sans-serif" }}
+                >
+                  Tavily A/B: {tavilyABMode ? 'ON' : 'OFF'}
+                </button>
+                {tavilyABMode && <span style={{ fontSize:10, color:t.text4 }}>Admin test · 2 Sonnet calls · same books/Findings/history</span>}
+              </div>
+            )}
 
             {/* Input */}
             <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingBottom:'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
