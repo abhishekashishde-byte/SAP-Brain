@@ -1841,8 +1841,6 @@ export default function Brain({ session }) {
       .catch(() => { if (!cancelled) setServerIsAdmin(false) })
     return () => { cancelled = true }
   }, [session?.access_token])
-  // Private admin experiment; OFF by default to avoid accidental double Sonnet spend.
-  const [tavilyABMode, setTavilyABMode] = useState(false)
 
   // Document upload state
   const [uploadedDoc, setUploadedDoc]         = useState(null) // { name, content, type, docType }
@@ -2419,7 +2417,7 @@ export default function Brain({ session }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent, tavilyABTest: isAdmin && tavilyABMode }),
+        body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),
         signal: abortController.signal,
       })
 
@@ -3233,20 +3231,6 @@ export default function Brain({ session }) {
                 onMouseLeave={e=>{ e.currentTarget.style.transform='scale(1)' }}
               >+</button>
             </div>
-
-            {isAdmin && (
-              <div style={{ flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'6px 12px', background:t.topbar, borderTop:`1px solid ${t.border}` }}>
-                <button
-                  onClick={()=>setTavilyABMode(v=>!v)}
-                  disabled={isLoading || isStreaming}
-                  title="Private controlled test: same question twice, only Tavily injection differs"
-                  style={{ border:`1px solid ${tavilyABMode?'#D97706':t.border}`, background:tavilyABMode?'rgba(217,119,6,0.12)':'transparent', color:tavilyABMode?'#D97706':t.text4, borderRadius:20, padding:'4px 11px', fontSize:11, fontWeight:600, cursor:(isLoading||isStreaming)?'default':'pointer', fontFamily:"'Inter',sans-serif" }}
-                >
-                  Tavily A/B: {tavilyABMode ? 'ON' : 'OFF'}
-                </button>
-                {tavilyABMode && <span style={{ fontSize:10, color:t.text4 }}>Admin test · 2 Sonnet calls · same books/Findings/history</span>}
-              </div>
-            )}
 
             {/* Input */}
             <div className="chat-input-wrap" style={{ borderTop:`1px solid ${t.border}`,background:t.topbar,backdropFilter:'blur(10px)',flexShrink:0,position:'relative',zIndex:2,paddingBottom:'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
