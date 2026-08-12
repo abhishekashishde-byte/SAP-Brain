@@ -41,7 +41,6 @@ jobs:
           for old, new in replacements:
               s = s.replace(old, new)
 
-          # Remove the entire secondary WITHOUT-Tavily debug button block.
           s, n = re.subn(
               r"\n        \{!isStreaming && msg\._abDebugDocWithoutTavily && \(.*?\n        \)\}\n(?=        \{/\* Fallback download button for FS documents \*/\})",
               "\n",
@@ -55,7 +54,6 @@ jobs:
           p.write_text(s)
           PY
 
-          # Keep evidence scoring as ordinary backend code, not a Vercel /api function.
           if [ -f api/evidence-routing.js ]; then
             mkdir -p lib
             git mv api/evidence-routing.js lib/evidence-routing.js
@@ -86,7 +84,7 @@ jobs:
 
       - name: Install and build
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           npm run build
 
       - name: Commit cleanup
