@@ -1,0 +1,36 @@
+name: Enable Tavily A-B test
+
+on:
+  push:
+    paths:
+      - '.github/workflows/enable-tavily-ab-test.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Enable automatic admin A-B comparison
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/Brain.jsx')
+          s = p.read_text()
+          old = "body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent }),"
+          new = "body: JSON.stringify({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent, tavilyABTest:true }),"
+          if old not in s:
+              raise SystemExit('Expected chat request anchor not found; refusing blind edit')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "wani-deploy-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/pages/Brain.jsx
+          git commit -m "Enable automatic Tavily A-B comparison for admin" || exit 0
+          git push origin main
