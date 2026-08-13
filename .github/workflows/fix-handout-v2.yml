@@ -1,0 +1,37 @@
+name: Fix Wani handout v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-handout-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply fixes
+        run: python3 .github/scripts/fix_handout_v2.py
+      - name: Verify
+        run: |
+          grep -q "wani-handout-mark.svg" src/pages/Brain.jsx
+          grep -q "download.*wani-handout" src/pages/Brain.jsx
+          grep -q "Handout persistence failed" src/pages/Brain.jsx
+          grep -q "65-80%" api/chat.js
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add api/chat.js src/pages/Brain.jsx public/wani-handout-mark.svg
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Improve handout UX persistence branding and detail'
+          git push origin HEAD:main
