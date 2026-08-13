@@ -15,13 +15,6 @@ replacement = """    if (isCode && !hasFmPhrase) { intent = 'CODE_ANALYSIS';   c
 if anchor not in s:
     raise SystemExit('intent override anchor not found')
 s = s.replace(anchor, replacement, 1)
-
-# Strengthen classifier instruction too, so model and deterministic guard agree.
-prompt_anchor = "isCorrection: true if user is correcting previous answer\\nneedsSearch: true if question needs live/specific data verification"
-prompt_repl = "isCorrection: true if user is correcting/challenging a previous answer, including 'you are wrong', 'still wrong', 'are you sure', or supplying the correct mechanism\\nIMPORTANT: a correction/challenge about an SAP answer is SAP_QA/PROCESS_QA context, NOT CODE_ANALYSIS unless the latest message actually contains pasted program code.\\nneedsSearch: true if question needs live/specific data verification"
-if prompt_anchor not in s:
-    raise SystemExit('classifier prompt anchor not found')
-s = s.replace(prompt_anchor, prompt_repl, 1)
 p.write_text(s)
 
 # ---- lib/evidence-routing.js: pushback web evidence must be directly supportive ----
@@ -32,12 +25,8 @@ new = """    const selectedIndexes = [...new Set(requested)]\n      .filter(i =>
 if old not in s:
     raise SystemExit('selectedIndexes block not found')
 s = s.replace(old, new, 1)
-
-# Make the fallback conservative even when the judge fails: never send indirect web\n# evidence on a correction turn.
-old2 = "selectedTavily: isCorrection ? [] : fallbackTop"
-if old2 not in s:
-    raise SystemExit('fallback selection anchor not found')
-# already conservative; leave behavior but tag is verified by assertion below
+if "selectedTavily: isCorrection ? [] : fallbackTop" not in s:
+    raise SystemExit('conservative fallback anchor not found')
 p.write_text(s)
 
 print('pushback routing fixes applied')
