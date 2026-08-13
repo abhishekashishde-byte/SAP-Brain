@@ -134,12 +134,19 @@ Question: "${question.slice(0, 500)}"
     const raw = data.choices?.[0]?.message?.content?.trim() || '{}'
     const result = JSON.parse(raw.replace(/```json|```/g, '').trim())
 
-    // isCode should not trigger on 'function module' questions — those are Q&A not code
-    const hasFmPhrase = /\b(function module|bapi|rfc module)\b/i.test(question)
-    const isCode  = result.isCode  === true || (!hasFmPhrase && /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |\bFUNCTION\b/i.test(question))
-    const isError = result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question)
-    const isCorrectionRegex = /\b(actually|that('s| is) (wrong|incorrect|not right)|you('re| are) wrong|wrong answer|incorrect answer|it should be|the correct|please (note|correct)|i('m| am) correcting)\b/i.test(question)
+    // Detect correction/pushback BEFORE code classification. A sentence such as
+    // "you are still wrong, go to edit material master..." is SAP correction context,
+    // not ABAP merely because the classifier happened to set isCode=true.
+    const isCorrectionRegex = /\b(actually|still wrong|you(?:'re| are| r|re)?\s*(?:still\s*)?(?:wrong|incorrect)|u\s*(?:are|r)?\s*(?:still\s*)?(?:wrong|incorrect)|that(?:'s| is) (?:wrong|incorrect|not right)|wrong answer|incorrect answer|it should be|the correct|please (?:note|correct)|i(?:'m| am) correcting|no[, —-]+.*(?:wrong|incorrect))\b/i.test(question)
     const isCorrection = result.isCorrection === true || isCorrectionRegex
+
+    // isCode should not trigger on 'function module' questions — those are Q&A not code.
+    // On a correction turn, only treat it as code when the message itself contains strong
+    // code structure. A model-only isCode flag cannot override explicit pushback.
+    const hasFmPhrase = /\b(function module|bapi|rfc module)\b/i.test(question)
+    const hasStrongCodePayload = /(?:^|\n)\s*(?:REPORT\s+\w+|CLASS\s+\w+|METHOD\s+\w+|FUNCTION\s+\w+|FORM\s+\w+|DATA\s*:\s*\w+|SELECT\s+.+\s+FROM\s+\w+|LOOP\s+AT\s+\w+)/im.test(question)
+    const isCode = hasStrongCodePayload || (!isCorrection && (result.isCode === true || (!hasFmPhrase && /METHOD |CLASS |LOOP AT |SELECT |DATA:|FIELD-SYMBOL|ENDLOOP|ENDIF|FORM |\bFUNCTION\b/i.test(question))))
+    const isError = result.isError === true || /\b(dump|ST22|SM21|short dump|ABAP runtime|Runtime Error|DBIF_|SAPSQL_|TSV_TNEW|message class|message no\.)\b/i.test(question)
 
     const isFsKeyword    = /\b(functional spec|FS|create.*spec|write.*spec|generate.*spec|specification for)\b/i.test(question)
     // Generic "turn what we discussed into a document" request — has no natural home in the
@@ -188,6 +195,14 @@ Question: "${question.slice(0, 500)}"
 
     if (isCode && !hasFmPhrase) { intent = 'CODE_ANALYSIS';   confidence = 1.0 }
     if (isError)          { intent = 'ERROR_ANALYSIS';   confidence = 1.0 }
+    // Correction turns inherit the SAP Q&A path unless the user actually pasted code
+    // or an SAP runtime error. This keeps the prior SAP context/evidence path active
+    // instead of switching to the code-only Sonnet route.
+    if (isCorrection && !hasStrongCodePayload && !isError) {
+      intent = 'SAP_QA'
+      confidence = Math.max(confidence, 0.95)
+      secondaryIntent = null
+    }
     if (isFsKeyword && !isCode && !isError)    { intent = 'FS_SPEC';        confidence = 0.95 }
     if (isTestKeyword && !isCode && !isError)  { intent = 'TEST_CASES';     confidence = 0.95 }
     if (isFioriKeyword && !isCode && !isError) { intent = 'FIORI_REC';      confidence = 0.95 }
