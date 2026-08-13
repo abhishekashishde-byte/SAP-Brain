@@ -1,0 +1,294 @@
+name: Add Wani handout feature
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-handout-feature.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch backend and frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # ---------------- api/chat.js ----------------
+          p = Path('api/chat.js')
+          s = p.read_text()
+
+          handout_fn = r'''
+// ── ON-DEMAND HANDOUT — image generation from the already-verified answer.
+// This never re-runs RAG, Tavily, or Sonnet. The image model only turns the
+// existing answer into a concise handwritten one-page consultant handout.
+async function generateHandoutOnDemand(question, answerText) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+
+  const prompt = `Create a single-page portrait handwritten consultant cheat-sheet from the verified SAP answer below.
+
+STYLE:
+- clean white paper, hand-drawn/sketchnote look
+- colorful marker headings, boxes, arrows, checkmarks, small relevant doodles
+- professional SAP consultant handout, not childish
+- summarize aggressively: retain only the most useful 4-7 points
+- make the page easy to scan in 20 seconds
+- preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths)
+- never invent, alter, or autocorrect SAP technical identifiers
+- if the answer contains uncertainty, preserve that uncertainty
+- leave the bottom 8% of the page COMPLETELY BLANK WHITE: no text, borders, icons, drawings, footer, logo, signature, watermark, copyright, or decoration there. This area is reserved for branding added later by Wani.
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, or footer yourself.
+
+QUESTION:
+${(question || '').slice(0, 700)}
+
+VERIFIED ANSWER:
+${(answerText || '').slice(0, 9000)}`
+
+  const imageRes = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1.5',
+      prompt,
+      size: '1024x1536',
+      quality: 'medium',
+      output_format: 'png',
+    }),
+  })
+
+  const data = await imageRes.json().catch(() => ({}))
+  if (!imageRes.ok) throw new Error(data?.error?.message || 'Handout image generation failed')
+  const imageBase64 = data?.data?.[0]?.b64_json
+  if (!imageBase64) throw new Error('Image API returned no image data')
+  return { imageBase64 }
+}
+
+'''
+
+          marker = '// ── ON-DEMAND VISUAL — cheap (Haiku) restructuring of an already-written'
+          if 'async function generateHandoutOnDemand' not in s:
+              if marker not in s:
+                  raise SystemExit('Backend marker not found')
+              s = s.replace(marker, handout_fn + marker, 1)
+
+          action_marker = "  // ── ACTIONS: generate_visual — on-demand only, triggered by the \"View as"
+          handout_action = r'''  // ── ACTION: generate_handout — optional handwritten image made from the
+  // already-completed verified answer. No RAG/search/Sonnet rerun. ────────────
+  if (body.action === 'generate_handout') {
+    try {
+      const { question = '', answerText = '' } = body
+      if (!answerText.trim()) return res.status(400).json({ error: 'Missing answerText' })
+      const result = await generateHandoutOnDemand(question, answerText)
+      return res.status(200).json(result)
+    } catch (err) {
+      console.error('[HANDOUT]', err)
+      return res.status(500).json({ error: err.message || 'Could not create handout' })
+    }
+  }
+
+'''
+          if "body.action === 'generate_handout'" not in s:
+              if action_marker not in s:
+                  raise SystemExit('Action marker not found')
+              s = s.replace(action_marker, handout_action + action_marker, 1)
+
+          p.write_text(s)
+
+          # ---------------- src/pages/Brain.jsx ----------------
+          p = Path('src/pages/Brain.jsx')
+          s = p.read_text()
+
+          handout_component = r'''
+// Optional handwritten one-page handout. Image content is generated from the
+// existing verified answer; the exact Wani logo asset is overlaid afterwards
+// in-browser, so the image model never redraws the brand mark.
+function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
+  const [requesting, setRequesting] = useState(false)
+  const [error, setError] = useState('')
+  const [visible, setVisible] = useState(false)
+  const hasHandout = !!msg._handoutData
+
+  const handleClick = async () => {
+    if (hasHandout) { setVisible(v => !v); return }
+    setRequesting(true); setError('')
+    try {
+      await onRequestHandout()
+      setVisible(true)
+    } catch (e) {
+      setError(e.message || 'Could not create handout.')
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop:8 }}>
+      <button onClick={handleClick} disabled={requesting} style={{
+        display:'inline-flex', alignItems:'center', gap:6, padding:'7px 10px', borderRadius:9,
+        border:`1px solid ${dark?'rgba(255,255,255,0.13)':'rgba(0,0,0,0.10)'}`,
+        background:dark?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.72)',
+        color:t.text3, cursor:requesting?'wait':'pointer', fontSize:12, fontWeight:600,
+        fontFamily:"'Inter',sans-serif"
+      }}>
+        <span style={{ fontSize:14 }}>✍️</span>
+        {requesting ? 'Creating handout…' : hasHandout ? (visible ? 'Hide handout' : 'View handout') : 'Create Handout'}
+      </button>
+      {error && <div style={{ marginTop:6, fontSize:12, color:'#DC2626' }}>{error}</div>}
+      {hasHandout && visible && (
+        <div style={{ marginTop:10, maxWidth:620 }}>
+          <img src={msg._handoutData} alt="Wani handout" style={{ width:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${t.border}`, boxShadow:'0 8px 28px rgba(0,0,0,0.10)' }}/>
+          <a href={msg._handoutData} download={`wani-handout-${Date.now()}.png`} style={{ display:'inline-block', marginTop:8, fontSize:12, color:'#4F46E5', fontWeight:600, textDecoration:'none' }}>Download PNG</a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+'''
+          marker = 'function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, session }) {'
+          if 'function OnDemandHandout' not in s:
+              if marker not in s:
+                  raise SystemExit('MessageBubble marker not found')
+              s = s.replace(marker, handout_component + marker, 1)
+
+          # Add handout callback to MessageBubble signature.
+          s = s.replace(
+              'function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, session }) {',
+              'function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, onRequestHandout, session }) {',
+              1
+          )
+
+          old_visual_block = '''        {!isStreaming && !msg._deliverable && !msg._stopped && content?.trim() && onRequestVisual && (\n          <OnDemandVisual msg={msg} onRequestVisual={onRequestVisual} t={t} dark={dark} />\n        )}'''
+          new_visual_block = '''        {!isStreaming && !msg._deliverable && !msg._stopped && content?.trim() && (\n          <>\n            {onRequestVisual && <OnDemandVisual msg={msg} onRequestVisual={onRequestVisual} t={t} dark={dark} />}\n            {onRequestHandout && <OnDemandHandout msg={msg} onRequestHandout={onRequestHandout} t={t} dark={dark} />}\n          </>\n        )}'''
+          if old_visual_block in s:
+              s = s.replace(old_visual_block, new_visual_block, 1)
+          elif '<OnDemandHandout' not in s:
+              raise SystemExit('Visual render block not found')
+
+          # Add browser-side exact branding helper + request handler before handleGenerateVisual.
+          visual_handler_marker = '  const handleGenerateVisual = async (convId, msgIndex, questionText, answerText) => {'
+          branding_code = r'''  const addExactWaniBranding = async (imageBase64) => {
+    const loadImage = src => new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = reject
+      img.src = src
+    })
+    const generated = await loadImage(`data:image/png;base64,${imageBase64}`)
+    const waniMark = await loadImage('/logo-w-light.png')
+    const canvas = document.createElement('canvas')
+    canvas.width = generated.naturalWidth || generated.width
+    canvas.height = generated.naturalHeight || generated.height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(generated, 0, 0, canvas.width, canvas.height)
+
+    // Guaranteed clean footer, regardless of image-model drift.
+    const footerH = Math.round(canvas.height * 0.055)
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, canvas.height - footerH, canvas.width, footerH)
+
+    const markH = Math.round(footerH * 0.48)
+    const markW = Math.round((waniMark.naturalWidth / waniMark.naturalHeight) * markH)
+    const fontSize = Math.max(16, Math.round(footerH * 0.29))
+    ctx.font = `500 ${fontSize}px Inter, Arial, sans-serif`
+    ctx.fillStyle = '#171717'
+    ctx.textBaseline = 'middle'
+    const label = '© Wani'
+    const labelW = ctx.measureText(label).width
+    const gap = Math.round(footerH * 0.12)
+    const margin = Math.round(footerH * 0.22)
+    const totalW = labelW + gap + markW
+    const x = canvas.width - margin - totalW
+    const cy = canvas.height - footerH / 2
+    ctx.fillText(label, x, cy)
+    ctx.drawImage(waniMark, x + labelW + gap, cy - markH / 2, markW, markH)
+    return canvas.toDataURL('image/png', 0.96)
+  }
+
+  const handleGenerateHandout = async (convId, msgIndex, questionText, answerText) => {
+    const token = session?.access_token
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ action: 'generate_handout', question: questionText, answerText }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Could not create handout.')
+    const branded = await addExactWaniBranding(data.imageBase64)
+
+    // Handout image is deliberately session-local; do not persist a large base64
+    // blob inside the conversation JSON in Supabase.
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c
+      const msgs = [...(c.messages || [])]
+      if (!msgs[msgIndex]) return c
+      msgs[msgIndex] = { ...msgs[msgIndex], _handoutData: branded }
+      return { ...c, messages: msgs }
+    }))
+    return branded
+  }
+
+'''
+          if 'const handleGenerateHandout' not in s:
+              if visual_handler_marker not in s:
+                  raise SystemExit('Visual handler marker not found')
+              s = s.replace(visual_handler_marker, branding_code + visual_handler_marker, 1)
+
+          # Pass callback into MessageBubble at its existing call site.
+          call_line = "                        onRequestVisual={msg.role === 'assistant' ? () => handleGenerateVisual(activeConvId, i, prevUser, msg.content) : null}"
+          if 'onRequestHandout=' not in s:
+              if call_line not in s:
+                  raise SystemExit('MessageBubble call line not found')
+              s = s.replace(call_line, call_line + "\n                        onRequestHandout={msg.role === 'assistant' ? () => handleGenerateHandout(activeConvId, i, prevUser, msg.content) : null}", 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Verify implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "generateHandoutOnDemand" api/chat.js
+          grep -q "body.action === 'generate_handout'" api/chat.js
+          grep -q "function OnDemandHandout" src/pages/Brain.jsx
+          grep -q "addExactWaniBranding" src/pages/Brain.jsx
+          grep -q "© Wani" src/pages/Brain.jsx
+          grep -q "'/logo-w-light.png'" src/pages/Brain.jsx
+          grep -q "Create Handout" src/pages/Brain.jsx
+
+      - name: Install and build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add api/chat.js src/pages/Brain.jsx
+          if git diff --cached --quiet; then
+            echo 'No implementation changes to commit'
+            exit 0
+          fi
+          git commit -m 'Add optional handwritten Wani handouts'
+          git push origin HEAD:main
