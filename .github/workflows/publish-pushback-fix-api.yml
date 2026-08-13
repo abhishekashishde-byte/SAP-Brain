@@ -1,0 +1,34 @@
+name: Publish correction routing fix API
+
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-pushback-fix-api.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply and verify
+        run: |
+          python3 .github/scripts/fix_pushback_architecture.py
+          grep -q "PUSHBACK / RE-VERIFICATION MODE" api/chat.js
+          grep -q "knowledgeForPrompt" api/chat.js
+          grep -q "strongCodeSyntax" api/chat.js
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Publish through GitHub API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=$(gh api repos/${{ github.repository }}/contents/api/chat.js?ref=main --jq .sha)
+          CONTENT=$(base64 -w0 api/chat.js)
+          gh api --method PUT repos/${{ github.repository }}/contents/api/chat.js \
+            -f message='Harden correction and pushback verification routing' \
+            -f content="$CONTENT" \
+            -f sha="$SHA" \
+            -f branch=main
