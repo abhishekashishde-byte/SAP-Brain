@@ -1106,6 +1106,56 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
   return opts.enableWebSearch ? { text: fullText, webSearchCount, webSearchQueries, usage } : { text: fullText, usage }
 }
 
+
+// ── ON-DEMAND HANDOUT — image generation from the already-verified answer.
+// This never re-runs RAG, Tavily, or Sonnet. The image model only turns the
+// existing answer into a concise handwritten one-page consultant handout.
+async function generateHandoutOnDemand(question, answerText) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+
+  const prompt = `Create a single-page portrait handwritten consultant cheat-sheet from the verified SAP answer below.
+
+STYLE:
+- clean white paper, hand-drawn/sketchnote look
+- colorful marker headings, boxes, arrows, checkmarks, small relevant doodles
+- professional SAP consultant handout, not childish
+- summarize aggressively: retain only the most useful 4-7 points
+- make the page easy to scan in 20 seconds
+- preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths)
+- never invent, alter, or autocorrect SAP technical identifiers
+- if the answer contains uncertainty, preserve that uncertainty
+- leave the bottom 8% of the page COMPLETELY BLANK WHITE: no text, borders, icons, drawings, footer, logo, signature, watermark, copyright, or decoration there. This area is reserved for branding added later by Wani.
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, or footer yourself.
+
+QUESTION:
+${(question || '').slice(0, 700)}
+
+VERIFIED ANSWER:
+${(answerText || '').slice(0, 9000)}`
+
+  const imageRes = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1.5',
+      prompt,
+      size: '1024x1536',
+      quality: 'medium',
+      output_format: 'png',
+    }),
+  })
+
+  const data = await imageRes.json().catch(() => ({}))
+  if (!imageRes.ok) throw new Error(data?.error?.message || 'Handout image generation failed')
+  const imageBase64 = data?.data?.[0]?.b64_json
+  if (!imageBase64) throw new Error('Image API returned no image data')
+  return { imageBase64 }
+}
+
 // ── ON-DEMAND VISUAL — cheap (Haiku) restructuring of an already-written
 // answer, only called when the reader clicks "View as visual". Never part
 // of the main answer pipeline — see ON_DEMAND_VISUAL_PROMPT in _shared.js.
@@ -1376,6 +1426,20 @@ export default async function handler(req, res) {
 
   if (body.action === 'admin_status') {
     return res.status(200).json({ isAdmin })
+  }
+
+  // ── ACTION: generate_handout — optional handwritten image made from the
+  // already-completed verified answer. No RAG/search/Sonnet rerun. ────────────
+  if (body.action === 'generate_handout') {
+    try {
+      const { question = '', answerText = '' } = body
+      if (!answerText.trim()) return res.status(400).json({ error: 'Missing answerText' })
+      const result = await generateHandoutOnDemand(question, answerText)
+      return res.status(200).json(result)
+    } catch (err) {
+      console.error('[HANDOUT]', err)
+      return res.status(500).json({ error: err.message || 'Could not create handout' })
+    }
   }
 
   // ── ACTIONS: generate_visual — on-demand only, triggered by the "View as

@@ -636,7 +636,53 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, session }) {
+
+// Optional handwritten one-page handout. Image content is generated from the
+// existing verified answer; the exact Wani logo asset is overlaid afterwards
+// in-browser, so the image model never redraws the brand mark.
+function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
+  const [requesting, setRequesting] = useState(false)
+  const [error, setError] = useState('')
+  const [visible, setVisible] = useState(false)
+  const hasHandout = !!msg._handoutData
+
+  const handleClick = async () => {
+    if (hasHandout) { setVisible(v => !v); return }
+    setRequesting(true); setError('')
+    try {
+      await onRequestHandout()
+      setVisible(true)
+    } catch (e) {
+      setError(e.message || 'Could not create handout.')
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop:8 }}>
+      <button onClick={handleClick} disabled={requesting} style={{
+        display:'inline-flex', alignItems:'center', gap:6, padding:'7px 10px', borderRadius:9,
+        border:`1px solid ${dark?'rgba(255,255,255,0.13)':'rgba(0,0,0,0.10)'}`,
+        background:dark?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.72)',
+        color:t.text3, cursor:requesting?'wait':'pointer', fontSize:12, fontWeight:600,
+        fontFamily:"'Inter',sans-serif"
+      }}>
+        <span style={{ fontSize:14 }}>✍️</span>
+        {requesting ? 'Creating handout…' : hasHandout ? (visible ? 'Hide handout' : 'View handout') : 'Create Handout'}
+      </button>
+      {error && <div style={{ marginTop:6, fontSize:12, color:'#DC2626' }}>{error}</div>}
+      {hasHandout && visible && (
+        <div style={{ marginTop:10, maxWidth:620 }}>
+          <img src={msg._handoutData} alt="Wani handout" style={{ width:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${t.border}`, boxShadow:'0 8px 28px rgba(0,0,0,0.10)' }}/>
+          <a href={msg._handoutData} download={`wani-handout-${Date.now()}.png`} style={{ display:'inline-block', marginTop:8, fontSize:12, color:'#4F46E5', fontWeight:600, textDecoration:'none' }}>Download PNG</a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, onRequestHandout, session }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -937,8 +983,11 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
             finished answer; clicking it restructures the answer already on
             screen via a separate, cheap call. Skipped for deliverables
             (FS/PPT already have their own download) and stopped/empty replies. */}
-        {!isStreaming && !msg._deliverable && !msg._stopped && content?.trim() && onRequestVisual && (
-          <OnDemandVisual msg={msg} onRequestVisual={onRequestVisual} t={t} dark={dark} />
+        {!isStreaming && !msg._deliverable && !msg._stopped && content?.trim() && (
+          <>
+            {onRequestVisual && <OnDemandVisual msg={msg} onRequestVisual={onRequestVisual} t={t} dark={dark} />}
+            {onRequestHandout && <OnDemandHandout msg={msg} onRequestHandout={onRequestHandout} t={t} dark={dark} />}
+          </>
         )}
 
         {false && !isStreaming && msg._dualText && (
@@ -2807,6 +2856,67 @@ export default function Brain({ session }) {
   // a separate, cheap (Haiku) call; never touches or re-runs the main
   // answer. Result is cached onto the message (both in local state and
   // persisted) so re-viewing it later never re-calls the API.
+  const addExactWaniBranding = async (imageBase64) => {
+    const loadImage = src => new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = reject
+      img.src = src
+    })
+    const generated = await loadImage(`data:image/png;base64,${imageBase64}`)
+    const waniMark = await loadImage('/logo-w-light.png')
+    const canvas = document.createElement('canvas')
+    canvas.width = generated.naturalWidth || generated.width
+    canvas.height = generated.naturalHeight || generated.height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(generated, 0, 0, canvas.width, canvas.height)
+
+    const footerH = Math.round(canvas.height * 0.055)
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, canvas.height - footerH, canvas.width, footerH)
+
+    const markH = Math.round(footerH * 0.48)
+    const markW = Math.round((waniMark.naturalWidth / waniMark.naturalHeight) * markH)
+    const fontSize = Math.max(16, Math.round(footerH * 0.29))
+    ctx.font = `500 ${fontSize}px Inter, Arial, sans-serif`
+    ctx.fillStyle = '#171717'
+    ctx.textBaseline = 'middle'
+    const label = '© Wani'
+    const labelW = ctx.measureText(label).width
+    const gap = Math.round(footerH * 0.12)
+    const margin = Math.round(footerH * 0.22)
+    const totalW = labelW + gap + markW
+    const x = canvas.width - margin - totalW
+    const cy = canvas.height - footerH / 2
+    ctx.fillText(label, x, cy)
+    ctx.drawImage(waniMark, x + labelW + gap, cy - markH / 2, markW, markH)
+    return canvas.toDataURL('image/png', 0.96)
+  }
+
+  const handleGenerateHandout = async (convId, msgIndex, questionText, answerText) => {
+    const token = session?.access_token
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ action: 'generate_handout', question: questionText, answerText }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Could not create handout.')
+    const branded = await addExactWaniBranding(data.imageBase64)
+
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c
+      const msgs = [...(c.messages || [])]
+      if (!msgs[msgIndex]) return c
+      msgs[msgIndex] = { ...msgs[msgIndex], _handoutData: branded }
+      return { ...c, messages: msgs }
+    }))
+    return branded
+  }
+
   const handleGenerateVisual = async (convId, msgIndex, questionText, answerText) => {
     const token = session?.access_token
     const res = await fetch('/api/chat', {
@@ -3119,6 +3229,7 @@ export default function Brain({ session }) {
                           handleSendText(`${prompt}\n\nCode:\n${cleanCode}`)
                         }}
                         onRequestVisual={msg.role === 'assistant' ? () => handleGenerateVisual(activeConvId, i, prevUser, msg.content) : null}
+                        onRequestHandout={msg.role === 'assistant' ? () => handleGenerateHandout(activeConvId, i, prevUser, msg.content) : null}
                       />
                     })}
                     {isLoading&&!isStreaming&&(
