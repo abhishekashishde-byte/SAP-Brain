@@ -2056,8 +2056,10 @@ export default async function handler(req, res) {
       bookChunks,
       knowledgeEntries: relevantKnowledge,
       tavilyResults: tavilyCandidates,
+      isCorrection,
     })
     const selectedTavily = attachSelectedTavilyResults(evidenceDecision, tavilyCandidates)
+    const knowledgeForPrompt = evidenceDecision.pushback?.detected ? [] : relevantKnowledge
     const referenceSearchResults = selectedTavily.map(x => x.result)
     const answerSearchResults = evidenceDecision.useTavilyForAnswer ? referenceSearchResults : []
     const allSearchResults = tavilyCandidates
@@ -2070,6 +2072,7 @@ export default async function handler(req, res) {
     debugLog.bookChunks     = bookChunks.length
     debugLog.bookRerank      = bookRerankMeta
     debugLog.knowledgeChunks = relevantKnowledge.length
+    debugLog.knowledgeSuppressedForPushback = evidenceDecision.pushback?.detected ? relevantKnowledge.length : 0
     debugLog.knowledgeCandidates = relevantKnowledge._allCandidates || []
     debugLog.searchQuery    = searchQuery
     debugLog.evidenceDecision = evidenceDecision
@@ -2138,8 +2141,8 @@ export default async function handler(req, res) {
     // These are findings THIS consultant previously confirmed as correct (via the
     // Knowledge Base save flow) — not generic training data or search results.
     // Wani must surface that provenance explicitly rather than blending it in silently.
-    if (relevantKnowledge.length > 0) {
-      systemPrompt += `\n\n📌 VERIFIED FROM REAL PROJECTS — CONFIRMED BY THIS CONSULTANT EARLIER:\n${relevantKnowledge.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}\n\nATTRIBUTION RULE — MANDATORY: These findings came from this consultant's own earlier confirmed discussion, not from books, web search, or your training. Treat them as the highest-priority, authoritative source — they override generic documentation or training knowledge on the same topic. When you use one, say so explicitly and naturally, e.g. "Based on our earlier discussion, this is correct: ..." or "You confirmed this before — ...". Do not present it as if it were a fresh answer or a generic citation.`
+    if (knowledgeForPrompt.length > 0) {
+      systemPrompt += `\n\n📌 VERIFIED FROM REAL PROJECTS — CONFIRMED BY THIS CONSULTANT EARLIER:\n${knowledgeForPrompt.map(k => `- ${k.finding} (${k.module} > ${k.topic} > ${k.object})`).join('\n')}\n\nATTRIBUTION RULE — MANDATORY: These findings came from this consultant's own earlier confirmed discussion, not from books, web search, or your training. Treat them as the highest-priority, authoritative source — they override generic documentation or training knowledge on the same topic. When you use one, say so explicitly and naturally, e.g. "Based on our earlier discussion, this is correct: ..." or "You confirmed this before — ...". Do not present it as if it were a fresh answer or a generic citation.`
     }
 
     // ── Inject personal memories ───────────────────────────────────────────
@@ -2167,8 +2170,14 @@ export default async function handler(req, res) {
       systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nCITATION RULES: Weave citations INLINE using [1] [2] notation. Do NOT add a Sources section at the end. This rule applies identically when you use your own web_search tool mid-answer — those results also get cited inline as [1] [2], never as a manually-typed list of raw URLs at the end of your answer. The UI renders a proper sources panel automatically from whatever you cite inline; a hand-typed link dump duplicates it and looks broken.`
     }
 
-    if (bookChunks.length===0 && relevantKnowledge.length===0 && openAISources.length===0 && answerSearchResults.length===0) {
+    if (bookChunks.length===0 && knowledgeForPrompt.length===0 && openAISources.length===0 && answerSearchResults.length===0) {
       systemPrompt += `\n\n⚠️ ZERO GROUNDING THIS TURN: no book chunks, no saved knowledge, no search sources — nothing was actually retrieved for this question. You are answering purely from your own training. If the answer requires stating a specific table field, TDOBJECT/TDID value, T-code, BAdI, or other named technical object, you must flag it as unverified ("verify in your system") rather than stating it with confidence — this is the exact situation the grounding rule above exists for.`
+    }
+
+    // ── Pushback / correction verification mode ─────────────────────────────
+    if (evidenceDecision.pushback?.detected) {
+      const disputed = (evidenceDecision.pushback.disputedClaims || []).map((c, i) => `${i+1}. ${c}`).join('\n') || 'The previous answer is being challenged; identify the disputed claim from the conversation.'
+      systemPrompt += `\n\n🚨 PUSHBACK / RE-VERIFICATION MODE — MANDATORY:\nThe user has challenged the previous answer. Treat the previous answer and any matching saved KB finding as UNTRUSTED for this turn. Do not defend or repeat it merely because it appears in conversation history or KB.\n\nDISPUTED CLAIMS:\n${disputed}\n\nVERIFICATION RULES:\n- Re-evaluate the claim from independent evidence only: book evidence, directly supporting selected web evidence, or your native web_search.\n- Same-topic evidence is not enough. It must directly support or contradict the disputed mechanism.\n- Before stating an exact SAP technical identifier (table-field, T-code, BAdI, SAP Note, Fiori app ID, SPRO path), verify that exact identifier in independent evidence.\n- If the exact identifier cannot be verified, DO NOT guess another one. Give the functional/mechanism answer you can support and explicitly say the technical identifier remains unverified.\n- If the user's correction itself is not independently verified, acknowledge it as a lead, not as established fact.\n- Correct the earlier answer plainly when evidence supports a correction.`
     }
 
     // ── Document context ───────────────────────────────────────────────────
@@ -2194,9 +2203,6 @@ export default async function handler(req, res) {
     }
     if (isBapiSearch) systemPrompt += `\n\n⚠️ BAPI/FM ACCURACY RULE: NEVER invent BAPI or Function Module names. Only state names you are 100% certain exist. Verify in SE37 or https://api.sap.com`
     if (isExitSearch) systemPrompt += `\n\n⚠️ USER EXIT/BAdI RULE: Format as markdown table: Exit/BAdI Name | Type | T-code | What It Controls. Only state exits you are certain exist. Verify in SE84.`
-
-    // ── Permanent hardcoded corrections ────────────────────────────────────────
-    systemPrompt += `\n\n⚠️ PERMANENT CORRECTIONS — ALWAYS APPLY:\n- MRP Area exists indicator field is MARC-DIBER (NOT MARC-KZAUN — KZAUN is unrelated to MRP Areas)\n- MDMA table stores MRP Area data for materials\n- Standard SAP report for mass update of MRP area indicator contains DIBER in its name`
 
     // ── Global corrections ─────────────────────────────────────────────────
     if (globalCorrections.length > 0) {
@@ -2264,7 +2270,7 @@ export default async function handler(req, res) {
     // code to Groq but are SAP Q&A questions. Override isCode when no code was actually pasted.
     const isBapiFmQuestion = isBapiSearch || isExitSearch ||
       (/\b(function module|bapi|rfc|user exit|badi|enhancement spot|custom logic|custom code|z-program|z program|abap program)\b/i.test(lastMsg) && !body.attachedCode && !/(SELECT |DATA:|LOOP AT|ENDLOOP|METHOD |CLASS |FORM |PERFORM )/i.test(lastMsg))
-    const isRealCode = isCode && !isBapiFmQuestion
+    const isRealCode = isCode && !isBapiFmQuestion && !evidenceDecision.pushback?.detected
 
     const isComplexAbap = isRealCode && (
       /\b(CLASS|INTERFACE|BADI|ENHANCEMENT|METHOD\s+\w+|CALL METHOD)\b/i.test(systemPrompt) ||
