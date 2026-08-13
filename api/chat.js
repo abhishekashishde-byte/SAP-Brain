@@ -1120,8 +1120,11 @@ STYLE:
 - clean white paper, hand-drawn/sketchnote look
 - colorful marker headings, boxes, arrows, checkmarks, small relevant doodles
 - professional SAP consultant handout, not childish
-- summarize aggressively: retain only the most useful 4-7 points
-- make the page easy to scan in 20 seconds
+- do NOT over-compress the answer: preserve useful technical substance, conditions, hierarchy, gotchas, and practical details
+- aim for 5-8 clearly separated sections when the verified answer supports them
+- include roughly 65-80% of the substantive information from the verified answer, shortened into visual phrases rather than deleting useful facts
+- for a short question, enrich only from the VERIFIED ANSWER: include hierarchy/process, gotchas, technical fields/t-codes, and implementation notes already present
+- make the page easy to scan in 30-45 seconds while still feeling like a useful consultant handout
 - preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths)
 - never invent, alter, or autocorrect SAP technical identifiers
 - if the answer contains uncertainty, preserve that uncertainty
