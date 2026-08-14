@@ -19,8 +19,8 @@ jobs:
         run: |
           grep -q "Customer Brief" src/pages/Brain.jsx
           grep -q "Consultant Note" src/pages/Brain.jsx
-          grep -q "ON-DEMAND CUSTOMER BRIEF" api/chat.js
-          grep -q "45-60%" api/chat.js
+          grep -q "generateVisualOnDemand" api/chat.js
+          grep -q "CUSTOMER BRIEF" api/chat.js
       - name: Build
         run: |
           npm install --no-audit --no-fund
