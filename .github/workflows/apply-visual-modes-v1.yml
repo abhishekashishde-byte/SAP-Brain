@@ -1,0 +1,35 @@
+name: Apply visual modes v1
+on:
+  push:
+    paths:
+      - '.github/scripts/replace_visual_modes_v1.py'
+      - '.github/workflows/apply-visual-modes-v1.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python3 .github/scripts/replace_visual_modes_v1.py
+      - name: Verify
+        run: |
+          grep -q "Customer Brief" src/pages/Brain.jsx
+          grep -q "Consultant Note" src/pages/Brain.jsx
+          grep -q "ON-DEMAND CUSTOMER BRIEF" api/chat.js
+          grep -q "45-60%" api/chat.js
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add src/pages/Brain.jsx api/chat.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Replace visual with customer brief and consultant note'
+          for i in 1 2 3; do git push origin HEAD:main && break || sleep 5; done
