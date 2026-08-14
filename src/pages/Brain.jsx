@@ -584,7 +584,7 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
   const [requesting, setRequesting] = useState(false)
   const [error, setError] = useState('')
   const [visible, setVisible] = useState(false)
-  const hasVisual = !!(msg._visualFormat && msg._visualData)
+  const hasVisual = !!msg._customerBriefData
 
   const handleClick = async () => {
     if (hasVisual) { setVisible(v => !v); return }
@@ -593,53 +593,36 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
       await onRequestVisual()
       setVisible(true)
     } catch (e) {
-      setError(e.message || 'Could not generate a visual for this answer.')
+      setError(e.message || 'Could not create customer brief.')
     } finally {
       setRequesting(false)
     }
   }
 
-  const accent = '#0A6ED1'
   return (
-    <div style={{ marginTop: 14 }}>
+    <div style={{ marginTop:10 }}>
       <button onClick={handleClick} disabled={requesting} style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        background: 'transparent', border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.18)'}`,
-        borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 400,
-        color: dark ? '#C8C4DC' : '#374151', cursor: requesting ? 'default' : 'pointer',
-        fontFamily: "'Inter','DM Sans',sans-serif", transition: 'all 0.15s', whiteSpace: 'nowrap',
-      }}
-      onMouseEnter={e => { if (!requesting) { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent } }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.18)'; e.currentTarget.style.color = dark ? '#C8C4DC' : '#374151' }}
-      >
-        {requesting ? (
-          <>
-            <span style={{
-              width: 11, height: 11, borderRadius: '50%',
-              border: `2px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}`,
-              borderTopColor: accent, animation: 'spin 0.8s linear infinite',
-            }} />
-            Building visual…
-          </>
-        ) : (
-          <>
-            <IconChart size={13} color="currentColor" />
-            {hasVisual ? (visible ? 'Hide visual' : 'View as visual') : 'View as visual'}
-          </>
-        )}
+        display:'inline-flex', alignItems:'center', gap:7, padding:'7px 12px', borderRadius:10,
+        border:`1px solid ${t.border2}`, background:dark?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.72)',
+        color:t.text3, cursor:requesting?'wait':'pointer', fontSize:12, fontWeight:600,
+        fontFamily:"'Inter',sans-serif"
+      }}>
+        <span style={{ fontSize:14 }}>📄</span>
+        {requesting ? 'Creating customer brief…' : hasVisual ? (visible ? 'Hide customer brief' : 'View customer brief') : 'Customer Brief'}
       </button>
-      {error && <div style={{ marginTop: 6, fontSize: 12, color: '#DC2626' }}>{error}</div>}
+      {error && <div style={{ marginTop:6, fontSize:12, color:'#DC2626' }}>{error}</div>}
       {hasVisual && visible && (
-        <AnswerVisual visualFormat={msg._visualFormat} visualData={msg._visualData} />
+        <div style={{ marginTop:10, maxWidth:620, position:'relative' }}>
+          <img src={msg._customerBriefData} alt="Wani customer brief" style={{ width:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${t.border}`, boxShadow:'0 8px 28px rgba(0,0,0,0.10)' }}/>
+          <a href={msg._customerBriefData} download={`wani-customer-brief-${Date.now()}.png`} title="Download customer brief" aria-label="Download customer brief" style={{ position:'absolute', top:10, right:10, width:38, height:38, borderRadius:'50%', border:'1px solid rgba(255,255,255,0.65)', background:'rgba(20,20,24,0.78)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', fontSize:20, lineHeight:1, boxShadow:'0 3px 12px rgba(0,0,0,0.22)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)' }}>↓</a>
+        </div>
       )}
     </div>
   )
 }
 
-
-// Optional handwritten one-page handout. Image content is generated from the
-// existing verified answer; the exact Wani logo asset is overlaid afterwards
-// in-browser, so the image model never redraws the brand mark.
+// Optional handwritten one-page Consultant Note. Image content is generated from the
+// existing verified answer; the exact Wani logo asset is overlaid afterwards.
 function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
   const [requesting, setRequesting] = useState(false)
   const [error, setError] = useState('')
@@ -669,13 +652,13 @@ function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
         fontFamily:"'Inter',sans-serif"
       }}>
         <span style={{ fontSize:14 }}>✍️</span>
-        {requesting ? 'Creating handout…' : hasHandout ? (visible ? 'Hide handout' : 'View handout') : 'Create Handout'}
+        {requesting ? 'Creating consultant note…' : hasHandout ? (visible ? 'Hide consultant note' : 'View consultant note') : 'Consultant Note'}
       </button>
       {error && <div style={{ marginTop:6, fontSize:12, color:'#DC2626' }}>{error}</div>}
       {hasHandout && visible && (
         <div style={{ marginTop:10, maxWidth:620, position:'relative' }}>
-          <img src={msg._handoutData} alt="Wani handout" style={{ width:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${t.border}`, boxShadow:'0 8px 28px rgba(0,0,0,0.10)' }}/>
-          <a href={msg._handoutData} download={`wani-handout-${Date.now()}.jpg`} title="Download handout" aria-label="Download handout" style={{ position:'absolute', top:10, right:10, width:38, height:38, borderRadius:'50%', border:'1px solid rgba(255,255,255,0.65)', background:'rgba(20,20,24,0.78)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', fontSize:20, lineHeight:1, boxShadow:'0 3px 12px rgba(0,0,0,0.22)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)' }}>↓</a>
+          <img src={msg._handoutData} alt="Wani consultant note" style={{ width:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${t.border}`, boxShadow:'0 8px 28px rgba(0,0,0,0.10)' }}/>
+          <a href={msg._handoutData} download={`wani-consultant-note-${Date.now()}.png`} title="Download consultant note" aria-label="Download consultant note" style={{ position:'absolute', top:10, right:10, width:38, height:38, borderRadius:'50%', border:'1px solid rgba(255,255,255,0.65)', background:'rgba(20,20,24,0.78)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', fontSize:20, lineHeight:1, boxShadow:'0 3px 12px rgba(0,0,0,0.22)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)' }}>↓</a>
         </div>
       )}
     </div>
@@ -2931,13 +2914,14 @@ export default function Brain({ session }) {
       body: JSON.stringify({ action: 'generate_visual', question: questionText, answerText }),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || 'Could not generate a visual for this answer.')
+    if (!res.ok) throw new Error(data.error || 'Could not create customer brief.')
+    const branded = await addExactWaniBranding(data.imageBase64)
 
     let updatedMsgs = null
     setConversations(prev => prev.map(c => {
       if (c.id !== convId) return c
       const msgs = [...(c.messages || [])]
-      if (msgs[msgIndex]) msgs[msgIndex] = { ...msgs[msgIndex], _visualFormat: data.format, _visualData: data.data }
+      if (msgs[msgIndex]) msgs[msgIndex] = { ...msgs[msgIndex], _customerBriefData: branded }
       updatedMsgs = msgs
       return { ...c, messages: msgs }
     }))

@@ -1136,10 +1136,11 @@ STYLE:
 - colorful marker headings, boxes, arrows, checkmarks, small relevant doodles
 - professional SAP consultant handout, not childish
 - do NOT over-compress the answer: preserve useful technical substance, conditions, hierarchy, gotchas, and practical details
-- aim for 5-8 clearly separated sections when the verified answer supports them
-- include roughly 65-80% of the substantive information from the verified answer, shortened into visual phrases rather than deleting useful facts
+- aim for 3-4 clearly separated sections; keep it concise and visually breathable
+- include roughly 45-60% of the substantive information from the verified answer, prioritising the mechanism, key technical facts, practical action, and one important gotcha
 - for a short question, enrich only from the VERIFIED ANSWER: include hierarchy/process, gotchas, technical fields/t-codes, and implementation notes already present
-- make the page easy to scan in 30-45 seconds while still feeling like a useful consultant handout
+- make the page easy to scan in about 20-30 seconds while still feeling useful to an SAP consultant
+- avoid a separate Quick Comparison / Summary Comparison table if it repeats points already shown in the main sections
 - preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths)
 - never invent, alter, or autocorrect SAP technical identifiers
 - if the answer contains uncertainty, preserve that uncertainty
@@ -1178,24 +1179,40 @@ ${(answerText || '').slice(0, 9000)}`
 // answer, only called when the reader clicks "View as visual". Never part
 // of the main answer pipeline — see ON_DEMAND_VISUAL_PROMPT in _shared.js.
 async function generateVisualOnDemand(question, answerText) {
-  const raw = await callClaude(ON_DEMAND_VISUAL_PROMPT, [{
-    role: 'user',
-    content: `Question: ${(question || '').slice(0, 500)}\n\nAnswer to restructure:\n${(answerText || '').slice(0, 6000)}`,
-  }])
-  const cleaned = raw.replace(/```json|```/g, '').trim()
-  let parsed
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch (e) {
-    console.error('[ON-DEMAND VISUAL] JSON parse failed:', e.message)
-    throw new Error('Could not generate a visual for this answer — try again.')
-  }
-  const format = parsed.format
-  if (!format || !validateVisualData(format, parsed.data)) {
-    console.error('[ON-DEMAND VISUAL] Invalid/unrecognised format or data:', format)
-    throw new Error('Could not generate a visual for this answer — try again.')
-  }
-  return { format, data: parsed.data }
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+  const prompt = `Create a single-page portrait CUSTOMER BRIEF from the verified SAP answer below.
+
+STYLE:
+- clean corporate consulting infographic on a white background
+- polished, formal, client-facing; NOT handwritten and NOT playful
+- navy / deep blue with restrained green, purple or gold accents
+- strong title, clean section headers, professional icons, simple diagrams and compact callout boxes
+- generous whitespace and balanced top/bottom margins; do not crowd the page edges
+- use approximately 55-70% of the substantive verified answer: meaningful, but not a wall of text
+- prefer 3-4 main sections; avoid repetitive summary/comparison sections when the same point is already clear above
+- preserve the core mechanism, key distinction, practical action, and important caveats
+- preserve SAP technical identifiers EXACTLY as supplied; never invent or autocorrect T-codes, tables, fields, app IDs, BAdIs, notes or SPRO paths
+- if uncertainty exists in the verified answer, preserve it
+- no Wani branding at the top and no slogan/website anywhere
+- leave the bottom 8% COMPLETELY BLANK WHITE for Wani branding added later
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, footer, signature or watermark
+
+QUESTION:
+${(question || '').slice(0, 700)}
+
+VERIFIED ANSWER:
+${(answerText || '').slice(0, 9000)}`
+  const imageRes = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1.5', prompt, size: '1024x1536', quality: 'medium', output_format: 'png' }),
+  })
+  const data = await imageRes.json().catch(() => ({}))
+  if (!imageRes.ok) throw new Error(data?.error?.message || 'Customer brief image generation failed')
+  const imageBase64 = data?.data?.[0]?.b64_json
+  if (!imageBase64) throw new Error('Image API returned no image data')
+  return { imageBase64 }
 }
 
 // ── 12. MISC HELPERS ──────────────────────────────────────────────────────────
