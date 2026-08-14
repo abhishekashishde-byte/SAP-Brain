@@ -8,7 +8,7 @@ b = brain.read_text()
 c = chat.read_text()
 
 # 1) Replace old HTML OnDemandVisual UI with image-based Customer Brief UI.
-pat = re.compile(r'// \\"View as visual\\" — on-demand only\.[\s\S]*?function OnDemandVisual\(\{ msg, onRequestVisual, t, dark \}\) \{[\s\S]*?\n\}\n\n// Optional handwritten one-page handout\.', re.M)
+pat = re.compile(r'// "View as visual" — on-demand only\.[\s\S]*?function OnDemandVisual\(\{ msg, onRequestVisual, t, dark \}\) \{[\s\S]*?\n\}\n\n// Optional handwritten one-page handout\.', re.M)
 replacement = '''// Customer Brief — formal, client-facing one-page image generated only on demand.
 // It uses the already-verified Wani answer; no RAG/search/Sonnet rerun.
 function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
