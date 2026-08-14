@@ -94,6 +94,7 @@ export default function AdminDashboard({ onClose }) {
               <Metric label="Active today" value={data.summary.activeToday} />
               <Metric label="Questions today" value={data.summary.questionsToday} hint="Metered non-admin questions" />
               <Metric label="Questions this month" value={data.summary.questionsMonth} />
+              <Metric label="Images generated" value={data.summary.imagesTotal || 0} hint={`${data.summary.customerBriefs || 0} briefs · ${data.summary.consultantNotes || 0} notes`} />
             </div>
 
             <div style={{ ...cardStyle, marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -110,10 +111,10 @@ export default function AdminDashboard({ onClose }) {
 
             <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
                   <thead>
                     <tr style={{ background: '#171522' }}>
-                      {['User','Status','Last online','Today','Month','Credits left','Joined'].map(h => (
+                      {['User','Status','Last online','Today','Month','Customer briefs','Consultant notes','Images','Credits left','Joined'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, textTransform: 'uppercase', letterSpacing: .6, color: '#8A849E', borderBottom: '1px solid #2A2736' }}>{h}</th>
                       ))}
                     </tr>
@@ -136,6 +137,9 @@ export default function AdminDashboard({ onClose }) {
                         </td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.questionsToday}</td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.questionsMonth}</td>
+                        <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.customerBriefs || 0}</td>
+                        <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.consultantNotes || 0}</td>
+                        <td style={{ padding: '13px 14px', fontSize: 13, fontWeight: 700, color: '#C4B5FD' }}>{u.imagesTotal || 0}</td>
                         <td style={{ padding: '13px 14px', fontSize: 12 }}>
                           {u.unlimited ? <span style={{ color: '#A78BFA' }}>Unlimited</span> : `${u.dailyRemaining} today · ${u.monthlyRemaining} month`}
                         </td>
@@ -145,7 +149,7 @@ export default function AdminDashboard({ onClose }) {
                       </tr>
                     ))}
                     {users.length === 0 && (
-                      <tr><td colSpan="7" style={{ padding: 24, textAlign: 'center', color: '#77718B' }}>No users found.</td></tr>
+                      <tr><td colSpan="10" style={{ padding: 24, textAlign: 'center', color: '#77718B' }}>No users found.</td></tr>
                     )}
                   </tbody>
                 </table>
