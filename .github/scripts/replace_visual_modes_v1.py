@@ -1,17 +1,11 @@
 from pathlib import Path
-import re
 
 brain = Path('src/pages/Brain.jsx')
 chat = Path('api/chat.js')
-
 b = brain.read_text()
 c = chat.read_text()
 
-# 1) Replace old HTML OnDemandVisual UI with image-based Customer Brief UI.
-pat = re.compile(r'// "View as visual" — on-demand only\.[\s\S]*?function OnDemandVisual\(\{ msg, onRequestVisual, t, dark \}\) \{[\s\S]*?\n\}\n\n// Optional handwritten one-page handout\.', re.M)
-replacement = '''// Customer Brief — formal, client-facing one-page image generated only on demand.
-// It uses the already-verified Wani answer; no RAG/search/Sonnet rerun.
-function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
+customer_component = '''function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
   const [requesting, setRequesting] = useState(false)
   const [error, setError] = useState('')
   const [visible, setVisible] = useState(false)
@@ -52,37 +46,29 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
   )
 }
 
-// Optional handwritten one-page handout.'''
-nb, n = pat.subn(replacement, b, count=1)
-if n != 1:
-    raise SystemExit(f'OnDemandVisual block replacement failed: {n}')
-b = nb
+// Optional handwritten one-page Consultant Note. Image content is generated from the
+// existing verified answer; the exact Wani logo asset is overlaid afterwards.
+'''
+start = b.index('function OnDemandVisual(')
+end = b.index('function OnDemandHandout(', start)
+b = b[:start] + customer_component + b[end:]
 
-# 2) Rename handwritten output to Consultant Note in UI.
 b = b.replace("{requesting ? 'Creating handout…' : hasHandout ? (visible ? 'Hide handout' : 'View handout') : 'Create Handout'}",
               "{requesting ? 'Creating consultant note…' : hasHandout ? (visible ? 'Hide consultant note' : 'View consultant note') : 'Consultant Note'}")
 b = b.replace('alt="Wani handout"', 'alt="Wani consultant note"')
 b = b.replace('download={`wani-handout-${Date.now()}.jpg`}', 'download={`wani-consultant-note-${Date.now()}.png`}')
 b = b.replace('title="Download handout" aria-label="Download handout"', 'title="Download consultant note" aria-label="Download consultant note"')
 
-# 3) Visual request now persists a branded image instead of HTML visual JSON.
 needle = "if (!res.ok) throw new Error(data.error || 'Could not generate a visual for this answer.')"
-if needle not in b:
-    raise SystemExit('visual request error line not found')
+if needle not in b: raise SystemExit('visual request error line not found')
 b = b.replace(needle, "if (!res.ok) throw new Error(data.error || 'Could not create customer brief.')\n    const branded = await addExactWaniBranding(data.imageBase64)", 1)
 old_assign = "if (msgs[msgIndex]) msgs[msgIndex] = { ...msgs[msgIndex], _visualFormat: data.format, _visualData: data.data }"
-if old_assign not in b:
-    raise SystemExit('old visual persistence assignment not found')
+if old_assign not in b: raise SystemExit('old visual persistence assignment not found')
 b = b.replace(old_assign, "if (msgs[msgIndex]) msgs[msgIndex] = { ...msgs[msgIndex], _customerBriefData: branded }", 1)
 
-# 4) Replace old Haiku HTML visual backend with formal image generation.
-visual_pat = re.compile(r'// ── ON-DEMAND VISUAL — cheap \(Haiku\)[\s\S]*?async function generateVisualOnDemand\(question, answerText\) \{[\s\S]*?\n\}\n', re.M)
-formal_fn = '''// ── ON-DEMAND CUSTOMER BRIEF — formal client-facing image from the already-verified answer.
-// No RAG/search/Sonnet rerun. This changes presentation, not factual substance.
-async function generateVisualOnDemand(question, answerText) {
+formal_fn = '''async function generateVisualOnDemand(question, answerText) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
-
   const prompt = `Create a single-page portrait CUSTOMER BRIEF from the verified SAP answer below.
 
 STYLE:
@@ -91,8 +77,8 @@ STYLE:
 - navy / deep blue with restrained green, purple or gold accents
 - strong title, clean section headers, professional icons, simple diagrams and compact callout boxes
 - generous whitespace and balanced top/bottom margins; do not crowd the page edges
-- use approximately 55-70% of the substantive verified answer: enough to be meaningful, but not a wall of text
-- prefer 3-4 main sections; avoid repetitive summary/comparison sections when the same point is already obvious above
+- use approximately 55-70% of the substantive verified answer: meaningful, but not a wall of text
+- prefer 3-4 main sections; avoid repetitive summary/comparison sections when the same point is already clear above
 - preserve the core mechanism, key distinction, practical action, and important caveats
 - preserve SAP technical identifiers EXACTLY as supplied; never invent or autocorrect T-codes, tables, fields, app IDs, BAdIs, notes or SPRO paths
 - if uncertainty exists in the verified answer, preserve it
@@ -105,17 +91,10 @@ ${(question || '').slice(0, 700)}
 
 VERIFIED ANSWER:
 ${(answerText || '').slice(0, 9000)}`
-
   const imageRes = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1.5',
-      prompt,
-      size: '1024x1536',
-      quality: 'medium',
-      output_format: 'png',
-    }),
+    body: JSON.stringify({ model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1.5', prompt, size: '1024x1536', quality: 'medium', output_format: 'png' }),
   })
   const data = await imageRes.json().catch(() => ({}))
   if (!imageRes.ok) throw new Error(data?.error?.message || 'Customer brief image generation failed')
@@ -124,18 +103,14 @@ ${(answerText || '').slice(0, 9000)}`
   return { imageBase64 }
 }
 '''
-nc, n = visual_pat.subn(formal_fn, c, count=1)
-if n != 1:
-    raise SystemExit(f'visual backend replacement failed: {n}')
-c = nc
+vs = c.index('async function generateVisualOnDemand(')
+ve = c.find('\n// ──', vs)
+if ve == -1: raise SystemExit('visual backend end marker not found')
+c = c[:vs] + formal_fn + c[ve:]
 
-# 5) Tune Consultant Note to the lighter density agreed in review.
-c = c.replace('- aim for 5-8 clearly separated sections when the verified answer supports them',
-              '- aim for 3-4 clearly separated sections; keep it concise and visually breathable')
-c = c.replace('- include roughly 65-80% of the substantive information from the verified answer, shortened into visual phrases rather than deleting useful facts',
-              '- include roughly 45-60% of the substantive information from the verified answer, prioritising the mechanism, key technical facts, practical action, and one important gotcha')
-c = c.replace('- make the page easy to scan in 30-45 seconds while still feeling like a useful consultant handout',
-              '- make the page easy to scan in about 20-30 seconds while still feeling useful to an SAP consultant\n- avoid a separate Quick Comparison / Summary Comparison table if it repeats points already shown in the main sections')
+c = c.replace('- aim for 5-8 clearly separated sections when the verified answer supports them', '- aim for 3-4 clearly separated sections; keep it concise and visually breathable')
+c = c.replace('- include roughly 65-80% of the substantive information from the verified answer, shortened into visual phrases rather than deleting useful facts', '- include roughly 45-60% of the substantive information from the verified answer, prioritising the mechanism, key technical facts, practical action, and one important gotcha')
+c = c.replace('- make the page easy to scan in 30-45 seconds while still feeling like a useful consultant handout', '- make the page easy to scan in about 20-30 seconds while still feeling useful to an SAP consultant\n- avoid a separate Quick Comparison / Summary Comparison table if it repeats points already shown in the main sections')
 
 brain.write_text(b)
 chat.write_text(c)
