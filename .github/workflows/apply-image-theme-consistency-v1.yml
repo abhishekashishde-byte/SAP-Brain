@@ -14,7 +14,18 @@ jobs:
         with:
           fetch-depth: 0
       - name: Apply patch
-        run: python3 .github/scripts/apply_image_theme_consistency_v1.py
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/apply_image_theme_consistency_v1.py')
+          s = p.read_text()
+          old = "brain = replace_once(brain, \"const branded = await addExactWaniBranding(data.imageBase64)\", \"const branded = await addExactWaniBranding(data.imageBase64, activeThemeKey)\", 'handout branding theme')"
+          new = "needle = \"const branded = await addExactWaniBranding(data.imageBase64)\"\nif brain.count(needle) != 2:\n    raise SystemExit(f'handout branding theme: expected 2 pre-theme branding calls, found {brain.count(needle)}')\nbrain = brain.replace(needle, \"const branded = await addExactWaniBranding(data.imageBase64, activeThemeKey)\", 1)"
+          if old not in s:
+              raise SystemExit('branding matcher line not found in patch script')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          python3 .github/scripts/apply_image_theme_consistency_v1.py
       - name: Verify theme wiring
         run: |
           grep -q "activeThemeKey" src/pages/Brain.jsx
