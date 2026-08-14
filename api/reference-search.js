@@ -239,10 +239,10 @@ export default async function handler(req, res) {
   // A quota notice is not an answer and must never be sent to the visual model.
   // Without this guard, the model can use the original question to invent a new
   // visual even though the main question was correctly blocked by the credit gate.
-  if (!isAdmin && req.body?.action === 'generate_visual' && isQuotaAnswerText(req.body?.answerText)) {
+  if (!isAdmin && ['generate_visual', 'generate_handout'].includes(req.body?.action) && isQuotaAnswerText(req.body?.answerText)) {
     return res.status(429).json({
       code: 'WANI_QUOTA_VISUAL_BLOCKED',
-      error: 'Visuals are unavailable for a free-credit limit message.',
+      error: 'Image outputs are unavailable for a free-credit limit message.',
     })
   }
 

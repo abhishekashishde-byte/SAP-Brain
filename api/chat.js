@@ -1122,18 +1122,71 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
 }
 
 
+// Image palettes are server-owned. The client sends only one of the profile
+// theme keys; unknown values fall back to Aurora and are never interpolated into
+// prompts directly. This keeps theme customization deterministic and safe.
+const IMAGE_THEME_PROFILES = {
+  aurora: {
+    name: 'Aurora',
+    page: 'deep midnight indigo / near-black violet canvas (#0C0A1A to #140B1F)',
+    text: 'high-contrast soft lavender and near-white text (#F4F1FF / #CECBF6)',
+    accents: 'violet, periwinkle and muted lavender accents (#7F77DD / #AFA9EC); no orange or bright cyan unless semantically necessary',
+    cards: 'slightly lighter translucent indigo panels with subtle violet borders',
+    footer: 'the same deep midnight indigo background',
+  },
+  ember: {
+    name: 'Ember',
+    page: 'deep warm espresso / burnt-brown canvas (#140B08 to #1C0F0A)',
+    text: 'high-contrast warm cream text (#FFF0E9 / #F5C4B3)',
+    accents: 'coral, terracotta and warm orange accents (#F0997B / #D85A30); avoid purple-blue styling',
+    cards: 'slightly lighter warm-brown panels with restrained coral borders',
+    footer: 'the same deep warm espresso background',
+  },
+  graphite: {
+    name: 'Graphite',
+    page: 'deep neutral graphite / charcoal canvas (#0D0D0C to #141412)',
+    text: 'high-contrast warm off-white and light stone text (#F0EFE9 / #D3D1C7)',
+    accents: 'silver, slate and restrained warm-gray accents (#B4B2A9 / #888780); avoid purple or saturated colors',
+    cards: 'slightly lighter charcoal panels with subtle silver-gray borders',
+    footer: 'the same neutral graphite background',
+  },
+  light: {
+    name: 'Light',
+    page: 'clean white to very pale ice-blue canvas (#FFFFFF / #F5F8FD)',
+    text: 'deep navy and dark blue text (#0C3158 / #0C447C)',
+    accents: 'SAP-like blue with restrained soft violet accents (#185FA5 / #7F77DD); keep the overall page bright and airy',
+    cards: 'white or very pale blue cards with fine blue-gray borders',
+    footer: 'very pale ice-blue (#F5F8FD)',
+  },
+}
+
+function resolveImageTheme(themeKey) {
+  const key = typeof themeKey === 'string' && Object.prototype.hasOwnProperty.call(IMAGE_THEME_PROFILES, themeKey)
+    ? themeKey
+    : 'aurora'
+  return { key, ...IMAGE_THEME_PROFILES[key] }
+}
+
 // ── ON-DEMAND HANDOUT — image generation from the already-verified answer.
 // This never re-runs RAG, Tavily, or Sonnet. The image model only turns the
 // existing answer into a concise handwritten one-page consultant handout.
-async function generateHandoutOnDemand(question, answerText) {
+async function generateHandoutOnDemand(question, answerText, themeKey) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+  const theme = resolveImageTheme(themeKey)
 
   const prompt = `Create a single-page portrait handwritten consultant cheat-sheet from the verified SAP answer below.
 
+MANDATORY WANI THEME — ${theme.name.toUpperCase()}:
+- page/canvas: ${theme.page}
+- body text: ${theme.text}
+- marker/accent colors: ${theme.accents}
+- boxes/cards: ${theme.cards}
+- the entire visual must unmistakably belong to this theme; do not revert to a generic white-paper or default blue/purple design
+
 STYLE:
-- clean white paper, hand-drawn/sketchnote look
-- colorful marker headings, boxes, arrows, checkmarks, small relevant doodles
+- hand-drawn/sketchnote look on the THEMED page/canvas specified above
+- theme-matched marker headings, boxes, arrows, checkmarks and small relevant doodles; keep strong text/background contrast
 - professional SAP consultant handout, not childish
 - do NOT over-compress the answer: preserve useful technical substance, conditions, hierarchy, gotchas, and practical details
 - aim for 3-4 clearly separated sections; keep it concise and visually breathable
@@ -1144,7 +1197,7 @@ STYLE:
 - preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths)
 - never invent, alter, or autocorrect SAP technical identifiers
 - if the answer contains uncertainty, preserve that uncertainty
-- leave the bottom 8% of the page COMPLETELY BLANK WHITE: no text, borders, icons, drawings, footer, logo, signature, watermark, copyright, or decoration there. This area is reserved for branding added later by Wani.
+- leave the bottom 8% of the page COMPLETELY BLANK using the SAME solid footer background specified by the theme: no text, borders, icons, drawings, logo, signature, watermark, copyright, or decoration there. This area is reserved for exact branding added later by Wani.
 - DO NOT draw any Wani logo, W mark, copyright symbol, website, or footer yourself.
 
 QUESTION:
@@ -1175,18 +1228,25 @@ ${(answerText || '').slice(0, 9000)}`
   return { imageBase64 }
 }
 
-// ── ON-DEMAND VISUAL — cheap (Haiku) restructuring of an already-written
-// answer, only called when the reader clicks "View as visual". Never part
-// of the main answer pipeline — see ON_DEMAND_VISUAL_PROMPT in _shared.js.
-async function generateVisualOnDemand(question, answerText) {
+// ── ON-DEMAND CUSTOMER BRIEF — image generation from an already-verified answer.
+// Never part of the main RAG/search/Sonnet pipeline.
+async function generateVisualOnDemand(question, answerText, themeKey) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+  const theme = resolveImageTheme(themeKey)
   const prompt = `Create a single-page portrait CUSTOMER BRIEF from the verified SAP answer below.
 
+MANDATORY WANI THEME — ${theme.name.toUpperCase()}:
+- page/canvas: ${theme.page}
+- body text: ${theme.text}
+- accent palette: ${theme.accents}
+- cards/panels: ${theme.cards}
+- the entire brief must unmistakably belong to this theme; do not revert to a generic white/blue consulting template
+
 STYLE:
-- clean corporate consulting infographic on a white background
+- clean corporate consulting infographic using the THEMED page/canvas specified above
 - polished, formal, client-facing; NOT handwritten and NOT playful
-- navy / deep blue with restrained green, purple or gold accents
+- use ONLY the theme palette above for decorative colors; semantic warning/success colors may be used sparingly when genuinely needed
 - strong title, clean section headers, professional icons, simple diagrams and compact callout boxes
 - generous whitespace and balanced top/bottom margins; do not crowd the page edges
 - use approximately 55-70% of the substantive verified answer: meaningful, but not a wall of text
@@ -1195,7 +1255,7 @@ STYLE:
 - preserve SAP technical identifiers EXACTLY as supplied; never invent or autocorrect T-codes, tables, fields, app IDs, BAdIs, notes or SPRO paths
 - if uncertainty exists in the verified answer, preserve it
 - no Wani branding at the top and no slogan/website anywhere
-- leave the bottom 8% COMPLETELY BLANK WHITE for Wani branding added later
+- leave the bottom 8% COMPLETELY BLANK using the SAME solid footer background specified by the theme, for exact Wani branding added later
 - DO NOT draw any Wani logo, W mark, copyright symbol, website, footer, signature or watermark
 
 QUESTION:
@@ -1467,9 +1527,9 @@ export default async function handler(req, res) {
   // already-completed verified answer. No RAG/search/Sonnet rerun. ────────────
   if (body.action === 'generate_handout') {
     try {
-      const { question = '', answerText = '' } = body
+      const { question = '', answerText = '', themeKey = 'aurora' } = body
       if (!answerText.trim()) return res.status(400).json({ error: 'Missing answerText' })
-      const result = await generateHandoutOnDemand(question, answerText)
+      const result = await generateHandoutOnDemand(question, answerText, themeKey)
       return res.status(200).json(result)
     } catch (err) {
       console.error('[HANDOUT]', err)
@@ -1477,14 +1537,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── ACTIONS: generate_visual — on-demand only, triggered by the "View as
-  // visual" button on an already-completed answer. Cheap non-streaming call,
-  // never part of the main pipeline. ─────────────────────────────────────────
+  // ── ACTION: generate_visual — on-demand Customer Brief image from an already-
+  // completed verified answer; never part of the main answer pipeline. ─────────
   if (body.action === 'generate_visual') {
     try {
-      const { question = '', answerText = '' } = body
+      const { question = '', answerText = '', themeKey = 'aurora' } = body
       if (!answerText.trim()) return res.status(400).json({ error: 'Missing answerText' })
-      const result = await generateVisualOnDemand(question, answerText)
+      const result = await generateVisualOnDemand(question, answerText, themeKey)
       return res.status(200).json(result)
     } catch (err) {
       return res.status(500).json({ error: err.message })

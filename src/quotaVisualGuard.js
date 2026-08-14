@@ -1,8 +1,14 @@
 const VISUAL_BUTTON_LABELS = new Set([
-  'View as visual',
-  'Hide visual',
-  'Building visual…',
-  'Building visual...',
+  'Customer Brief',
+  'View customer brief',
+  'Hide customer brief',
+  'Creating customer brief…',
+  'Creating customer brief...',
+  'Consultant Note',
+  'View consultant note',
+  'Hide consultant note',
+  'Creating consultant note…',
+  'Creating consultant note...',
 ])
 
 const QUOTA_TEXT_PATTERNS = [

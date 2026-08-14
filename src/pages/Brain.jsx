@@ -109,6 +109,28 @@ const BG_THEME_LIST = [
   { key:'light',    label:'Light' },
 ]
 
+// Image outputs inherit the same profile theme as the Wani workspace. These
+// values are used only for local UI/branding; api/chat.js keeps its own strict
+// whitelist so an arbitrary client string can never become an image prompt.
+const IMAGE_THEME_UI = {
+  aurora: {
+    footerBg:'#100B1C', footerInk:'#F4F1FF', invertMark:true,
+    downloadBg:'rgba(72,61,145,0.92)', downloadBorder:'rgba(206,203,246,0.65)', downloadInk:'#FFFFFF',
+  },
+  ember: {
+    footerBg:'#180D09', footerInk:'#FFF0E9', invertMark:true,
+    downloadBg:'rgba(153,60,29,0.92)', downloadBorder:'rgba(245,196,179,0.68)', downloadInk:'#FFFFFF',
+  },
+  graphite: {
+    footerBg:'#151513', footerInk:'#F0EFE9', invertMark:true,
+    downloadBg:'rgba(68,68,65,0.94)', downloadBorder:'rgba(211,209,199,0.62)', downloadInk:'#FFFFFF',
+  },
+  light: {
+    footerBg:'#F5F8FD', footerInk:'#0C3158', invertMark:false,
+    downloadBg:'rgba(12,68,124,0.90)', downloadBorder:'rgba(255,255,255,0.78)', downloadInk:'#FFFFFF',
+  },
+}
+
 const MODULE_COLORS = {
   "PP – Production Planning":{ from:'#16a34a',to:'#059669',emoji:'⚙️' },
   "PM – Plant Maintenance":  { from:'#4f46e5',to:'#7c3aed',emoji:'🔧' },
@@ -585,6 +607,7 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
   const [error, setError] = useState('')
   const [visible, setVisible] = useState(false)
   const hasVisual = !!msg._customerBriefData
+  const visualTheme = IMAGE_THEME_UI[msg._customerBriefTheme] || (dark ? IMAGE_THEME_UI.aurora : IMAGE_THEME_UI.light)
 
   const handleClick = async () => {
     if (hasVisual) { setVisible(v => !v); return }
@@ -614,7 +637,7 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
       {hasVisual && visible && (
         <div style={{ marginTop:10, maxWidth:620, position:'relative' }}>
           <img src={msg._customerBriefData} alt="Wani customer brief" style={{ width:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${t.border}`, boxShadow:'0 8px 28px rgba(0,0,0,0.10)' }}/>
-          <a href={msg._customerBriefData} download={`wani-customer-brief-${Date.now()}.png`} title="Download customer brief" aria-label="Download customer brief" style={{ position:'absolute', top:10, right:10, width:38, height:38, borderRadius:'50%', border:'1px solid rgba(255,255,255,0.65)', background:'rgba(20,20,24,0.78)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', fontSize:20, lineHeight:1, boxShadow:'0 3px 12px rgba(0,0,0,0.22)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)' }}>↓</a>
+          <a href={msg._customerBriefData} download={`wani-customer-brief-${Date.now()}.jpg`} title="Download customer brief" aria-label="Download customer brief" style={{ position:'absolute', top:10, right:10, width:38, height:38, borderRadius:'50%', border:`1px solid ${visualTheme.downloadBorder}`, background:visualTheme.downloadBg, color:visualTheme.downloadInk, display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', fontSize:20, lineHeight:1, boxShadow:'0 3px 12px rgba(0,0,0,0.22)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)' }}>↓</a>
         </div>
       )}
     </div>
@@ -628,6 +651,7 @@ function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
   const [error, setError] = useState('')
   const [visible, setVisible] = useState(false)
   const hasHandout = !!msg._handoutData
+  const visualTheme = IMAGE_THEME_UI[msg._handoutTheme] || (dark ? IMAGE_THEME_UI.aurora : IMAGE_THEME_UI.light)
 
   const handleClick = async () => {
     if (hasHandout) { setVisible(v => !v); return }
@@ -636,7 +660,7 @@ function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
       await onRequestHandout()
       setVisible(true)
     } catch (e) {
-      setError(e.message || 'Could not create handout.')
+      setError(e.message || 'Could not create consultant note.')
     } finally {
       setRequesting(false)
     }
@@ -658,7 +682,7 @@ function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
       {hasHandout && visible && (
         <div style={{ marginTop:10, maxWidth:620, position:'relative' }}>
           <img src={msg._handoutData} alt="Wani consultant note" style={{ width:'100%', height:'auto', display:'block', borderRadius:12, border:`1px solid ${t.border}`, boxShadow:'0 8px 28px rgba(0,0,0,0.10)' }}/>
-          <a href={msg._handoutData} download={`wani-consultant-note-${Date.now()}.png`} title="Download consultant note" aria-label="Download consultant note" style={{ position:'absolute', top:10, right:10, width:38, height:38, borderRadius:'50%', border:'1px solid rgba(255,255,255,0.65)', background:'rgba(20,20,24,0.78)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', fontSize:20, lineHeight:1, boxShadow:'0 3px 12px rgba(0,0,0,0.22)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)' }}>↓</a>
+          <a href={msg._handoutData} download={`wani-consultant-note-${Date.now()}.jpg`} title="Download consultant note" aria-label="Download consultant note" style={{ position:'absolute', top:10, right:10, width:38, height:38, borderRadius:'50%', border:`1px solid ${visualTheme.downloadBorder}`, background:visualTheme.downloadBg, color:visualTheme.downloadInk, display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', fontSize:20, lineHeight:1, boxShadow:'0 3px 12px rgba(0,0,0,0.22)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)' }}>↓</a>
         </div>
       )}
     </div>
@@ -1810,9 +1834,10 @@ export default function Brain({ session }) {
   const [showProfile, setShowProfile]     = useState(false)
   const [showSaveFinding, setShowSaveFinding] = useState(false)
   const [profile, setProfile]             = useState(null)
-  const dark = profile?.theme !== 'light'
+  const activeThemeKey = Object.prototype.hasOwnProperty.call(BG_THEMES, profile?.theme) ? profile.theme : 'aurora'
+  const dark = activeThemeKey !== 'light'
   const t = dark ? T.dark : T.light
-  const bgTheme = BG_THEMES[profile?.theme] || BG_THEMES.aurora
+  const bgTheme = BG_THEMES[activeThemeKey]
   const [showSummarise, setShowSummarise] = useState(false)
   const [isSummarising, setIsSummarising] = useState(false)
   const [autoCompacting, setAutoCompacting] = useState(false)
@@ -2834,12 +2859,10 @@ export default function Brain({ session }) {
     }
   }
 
-  // On-demand visual — called only when the reader clicks "View as visual"
-  // on an already-finished answer. Restructures that answer's own text via
-  // a separate, cheap (Haiku) call; never touches or re-runs the main
-  // answer. Result is cached onto the message (both in local state and
-  // persisted) so re-viewing it later never re-calls the API.
-  const addExactWaniBranding = async (imageBase64) => {
+  // Customer Brief / Consultant Note branding. Image generation uses the
+  // selected profile theme; this browser-side pass adds the exact Wani mark so
+  // the image model never redraws or clips the brand asset.
+  const addExactWaniBranding = async (imageBase64, themeKey = activeThemeKey) => {
     const loadImage = src => new Promise((resolve, reject) => {
       const img = new Image()
       img.onload = () => resolve(img)
@@ -2854,15 +2877,16 @@ export default function Brain({ session }) {
     const ctx = canvas.getContext('2d')
     ctx.drawImage(generated, 0, 0, canvas.width, canvas.height)
 
+    const brandTheme = IMAGE_THEME_UI[themeKey] || IMAGE_THEME_UI.aurora
     const footerH = Math.round(canvas.height * 0.065)
-    ctx.fillStyle = '#FFFFFF'
+    ctx.fillStyle = brandTheme.footerBg
     ctx.fillRect(0, canvas.height - footerH, canvas.width, footerH)
 
     const markH = Math.round(footerH * 0.56)
     const markW = Math.round((waniMark.naturalWidth / waniMark.naturalHeight) * markH)
     const fontSize = Math.max(16, Math.round(footerH * 0.29))
     ctx.font = `500 ${fontSize}px Inter, Arial, sans-serif`
-    ctx.fillStyle = '#171717'
+    ctx.fillStyle = brandTheme.footerInk
     ctx.textBaseline = 'middle'
     const label = '© Wani'
     const labelW = ctx.measureText(label).width
@@ -2872,8 +2896,11 @@ export default function Brain({ session }) {
     const x = canvas.width - margin - totalW
     const cy = canvas.height - footerH / 2
     ctx.fillText(label, x, cy)
+    ctx.save()
+    if (brandTheme.invertMark) ctx.filter = 'invert(1)'
     ctx.drawImage(waniMark, x + labelW + gap, cy - markH / 2, markW, markH)
-    return canvas.toDataURL('image/jpeg', 0.88)
+    ctx.restore()
+    return canvas.toDataURL('image/jpeg', 0.90)
   }
 
   const handleGenerateHandout = async (convId, msgIndex, questionText, answerText) => {
@@ -2884,18 +2911,18 @@ export default function Brain({ session }) {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ action: 'generate_handout', question: questionText, answerText }),
+      body: JSON.stringify({ action: 'generate_handout', question: questionText, answerText, themeKey: activeThemeKey }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Could not create handout.')
-    const branded = await addExactWaniBranding(data.imageBase64)
+    const branded = await addExactWaniBranding(data.imageBase64, activeThemeKey)
 
     let updatedMsgs = null
     setConversations(prev => prev.map(c => {
       if (c.id !== convId) return c
       const msgs = [...(c.messages || [])]
       if (!msgs[msgIndex]) return c
-      msgs[msgIndex] = { ...msgs[msgIndex], _handoutData: branded }
+      msgs[msgIndex] = { ...msgs[msgIndex], _handoutData: branded, _handoutTheme: activeThemeKey }
       updatedMsgs = msgs
       return { ...c, messages: msgs, updated_at:new Date().toISOString() }
     }))
@@ -2911,17 +2938,17 @@ export default function Brain({ session }) {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ action: 'generate_visual', question: questionText, answerText }),
+      body: JSON.stringify({ action: 'generate_visual', question: questionText, answerText, themeKey: activeThemeKey }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Could not create customer brief.')
-    const branded = await addExactWaniBranding(data.imageBase64)
+    const branded = await addExactWaniBranding(data.imageBase64, activeThemeKey)
 
     let updatedMsgs = null
     setConversations(prev => prev.map(c => {
       if (c.id !== convId) return c
       const msgs = [...(c.messages || [])]
-      if (msgs[msgIndex]) msgs[msgIndex] = { ...msgs[msgIndex], _customerBriefData: branded }
+      if (msgs[msgIndex]) msgs[msgIndex] = { ...msgs[msgIndex], _customerBriefData: branded, _customerBriefTheme: activeThemeKey }
       updatedMsgs = msgs
       return { ...c, messages: msgs }
     }))
