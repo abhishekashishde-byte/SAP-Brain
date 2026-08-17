@@ -1099,6 +1099,10 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
   }
   if (opts.enableWebSearch) {
     body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
+    // Anthropic tool_choice `any` guarantees at least one tool call. Because web_search
+    // is the only tool in this request, this guarantees a real verification search on
+    // turns Wani explicitly classified as needing live verification.
+    if (opts.forceWebSearch) body.tool_choice = { type: 'any' }
   }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1878,7 +1882,7 @@ export default async function handler(req, res) {
     `RAG/KB reason: ${dl.evidenceDecision?.rag?.reason || '(not evaluated)'}`,
     `Pushback/re-verification detected: ${dl.evidenceDecision?.pushback?.detected ?? false}`,
     `Pushback reason: ${dl.evidenceDecision?.pushback?.reason || '(none)'}`,
-    `Tavily selected for references: ${dl.tavilySelected ?? 0}`,
+    `Tavily shown as Verified Links: ${dl.tavilySelected ?? 0}`,
     `Tavily sent to Sonnet: ${dl.tavilySentToSonnet ?? 0}`,
     `Answer evidence: ${dl.evidenceDecision?.useTavilyForAnswer ? 'RAG/KB + SELECTED TAVILY' : 'RAG/KB ONLY'}`,
     `Routing reason: ${dl.evidenceDecision?.routingReason || '(not evaluated)'}`,
@@ -1899,7 +1903,7 @@ export default async function handler(req, res) {
     '',
     '5. SONNET',
     '─────────────────────────────────────────────────────────',
-    `Verification searches used: ${dl.sonnetVerificationSearches || 0}`,
+    `Verification searches used: ${dl.sonnetVerificationSearches || 0}${dl.forceSonnetVerification ? ' (MANDATORY)' : ''}`,
     `Models time: ${dl.modelsMs || 0}ms`,
     '',
     '7. FINAL OUTPUT TO USER',
@@ -2184,8 +2188,17 @@ export default async function handler(req, res) {
     })
     const selectedTavily = attachSelectedTavilyResults(evidenceDecision, tavilyCandidates)
     const knowledgeForPrompt = evidenceDecision.pushback?.detected ? [] : relevantKnowledge
-    const referenceSearchResults = selectedTavily.map(x => x.result)
-    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? referenceSearchResults : []
+
+    // Two independent Tavily lanes:
+    // - DISPLAY: every result that already passed Wani's same-topic relevance filter
+    //   remains eligible for Verified Links. The second evidence judge must never make
+    //   authentic, relevant SAP findings disappear from the answer-level UI.
+    // - GROUNDING: only evidence-router-selected results may enter Sonnet's prompt.
+    // This preserves the product rule: low-rated Tavily findings stay visible but cannot
+    // influence the answer.
+    const referenceSearchResults = tavilyCandidates
+    const selectedGroundingResults = selectedTavily.map(x => x.result)
+    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? selectedGroundingResults : []
     const allSearchResults = tavilyCandidates
     const relatedLinks = openAISources
 
@@ -2292,6 +2305,16 @@ export default async function handler(req, res) {
     if (answerSearchResults.length > 0) {
       const sourceRef = answerSearchResults.map((r, i) => `[${i+1}] ${r.title} — ${r.url}`).join('\n')
       systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nCITATION RULES: Weave citations INLINE using [1] [2] notation. Do NOT add a Sources section at the end. This rule applies identically when you use your own web_search tool mid-answer — those results also get cited inline as [1] [2], never as a manually-typed list of raw URLs at the end of your answer. The UI renders a proper sources panel automatically from whatever you cite inline; a hand-typed link dump duplicates it and looks broken.`
+    }
+
+    // If classification says this SAP answer needs live verification, do not leave
+    // Sonnet's native search optional. It must independently check the answer on the
+    // FIRST turn, even when Book RAG or selected Tavily evidence already exists. This
+    // specifically protects exact T-codes, tables, fields, BAdIs, app IDs and behavior
+    // claims from an upstream evidence judge being confidently wrong.
+    const forceSonnetVerification = !isDeliverable && needsSearch && SAP_QA_INTENTS.has(intent)
+    if (forceSonnetVerification) {
+      systemPrompt += `\n\n🌐 LIVE VERIFICATION REQUIRED — MANDATORY FOR THIS TURN:\nBefore writing the final answer, you MUST use your native web_search tool at least once. Do not treat Book RAG, Tavily scoring, saved knowledge, or your training memory as a substitute for this independent check. Verify the central SAP mechanism and every exact technical identifier you intend to rely on (especially T-codes, tables/fields, BAdIs, app IDs, SAP Notes, and SPRO paths). If live search conflicts with retrieved context, surface the conflict and prefer directly verified evidence. If a specific identifier cannot be verified, do not present it as fact.`
     }
 
     if (bookChunks.length===0 && knowledgeForPrompt.length===0 && openAISources.length===0 && answerSearchResults.length===0) {
@@ -2574,13 +2597,17 @@ export default async function handler(req, res) {
       // Container-eligible intents get a higher token budget — the quick-
       // answer block plus the trailing references/follow-ups JSON add real
       // length on top of the answer itself.
+      debugLog.forceSonnetVerification = forceSonnetVerification
       const sonnetResult = await streamClaude(
         'claude-sonnet-4-5',
         enrichedSystemPrompt,
         validMessages,
         onChunk,
         useContainer ? 6144 : 4096,
-        { enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true' }
+        {
+          enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true',
+          forceWebSearch: forceSonnetVerification && process.env.WANI_DISABLE_SEARCH !== 'true',
+        }
       )
       fullAnswer = sonnetResult.text
       debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
@@ -2886,7 +2913,7 @@ export default async function handler(req, res) {
       `RAG/KB reason: ${evidenceDecision?.rag?.reason || '(not evaluated)'}`,
       `Pushback/re-verification detected: ${evidenceDecision?.pushback?.detected ?? false}`,
       `Pushback reason: ${evidenceDecision?.pushback?.reason || '(none)'}`,
-      `Tavily selected for references: ${referenceSearchResults.length}`,
+      `Tavily shown as Verified Links: ${referenceSearchResults.length}`,
       `Tavily sent to Sonnet: ${answerSearchResults.length}`,
       `Answer evidence: ${evidenceDecision?.useTavilyForAnswer ? 'RAG/KB + SELECTED TAVILY' : 'RAG/KB ONLY'}`,
       `Routing reason: ${evidenceDecision?.routingReason || '(not evaluated)'}`,
@@ -2926,7 +2953,7 @@ export default async function handler(req, res) {
       '',
       '4d. SONNET SELF-VERIFICATION SEARCHES (native tool, run by Sonnet itself while answering)',
       '─────────────────────────────────────────────────────────',
-      `Verification searches used: ${debugLog.sonnetVerificationSearches ?? 0}`,
+      `Verification searches used: ${debugLog.sonnetVerificationSearches ?? 0}${debugLog.forceSonnetVerification ? ' (MANDATORY)' : ''}`,
       (debugLog.sonnetVerificationSearches ?? 0) > 0
         ? 'Sonnet checked at least one specific claim against a live search before including it in the answer below.'
         : '(Sonnet did not need to verify anything this turn — either nothing uncertain was stated, or it was already grounded above.)',
