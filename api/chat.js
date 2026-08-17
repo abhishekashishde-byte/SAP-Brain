@@ -2190,8 +2190,18 @@ export default async function handler(req, res) {
     })
     const selectedTavily = attachSelectedTavilyResults(evidenceDecision, tavilyCandidates)
     const knowledgeForPrompt = evidenceDecision.pushback?.detected ? [] : relevantKnowledge
-    const referenceSearchResults = selectedTavily.map(x => x.result)
-    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? referenceSearchResults : []
+
+    // IMPORTANT: keep answer-grounding and user-facing Verified Links as two
+    // independent lanes. The evidence judge decides what Sonnet may see; it must
+    // never erase relevant authentic SAP pages from the answer UI.
+    const groundingSearchResults = selectedTavily.map(x => x.result)
+    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? groundingSearchResults : []
+
+    // Tavily candidates here have ALREADY passed the separate same-topic relevance
+    // filter and are restricted to approved SAP domains. They remain visible as
+    // Verified Links even when their evidence/support rating is too low for Sonnet.
+    // This restores Wani's original discovery value without weakening grounding.
+    const referenceSearchResults = tavilyCandidates.slice(0, 4)
     const allSearchResults = tavilyCandidates
     const relatedLinks = openAISources
 
@@ -2214,7 +2224,8 @@ export default async function handler(req, res) {
     debugLog.knowledgeCandidates = relevantKnowledge._allCandidates || []
     debugLog.searchQuery    = searchQuery
     debugLog.evidenceDecision = evidenceDecision
-    debugLog.tavilySelected = referenceSearchResults.length
+    debugLog.tavilySelected = groundingSearchResults.length
+    debugLog.tavilyDisplayed = referenceSearchResults.length
     debugLog.tavilySentToSonnet = answerSearchResults.length
     debugLog.strictGroundingMode = strictGroundingMode
     debugLog.exactSapIdentifiers = exactSapIdentifiers
@@ -2916,7 +2927,8 @@ You MUST obey all of these rules:
       `RAG/KB reason: ${evidenceDecision?.rag?.reason || '(not evaluated)'}`,
       `Pushback/re-verification detected: ${evidenceDecision?.pushback?.detected ?? false}`,
       `Pushback reason: ${evidenceDecision?.pushback?.reason || '(none)'}`,
-      `Tavily selected for references: ${referenceSearchResults.length}`,
+      `Tavily selected for answer grounding: ${groundingSearchResults.length}`,
+      `Tavily shown as Verified Links: ${referenceSearchResults.length}`,
       `Tavily sent to Sonnet: ${answerSearchResults.length}`,
       `Answer evidence: ${evidenceDecision?.useTavilyForAnswer ? 'RAG/KB + SELECTED TAVILY' : 'RAG/KB ONLY'}`,
       `Routing reason: ${evidenceDecision?.routingReason || '(not evaluated)'}`,
@@ -2924,7 +2936,8 @@ You MUST obey all of these rules:
         const src = tavilyCandidates[r.index] || {}
         const selected = (evidenceDecision?.selectedTavily || []).some(x => x.index === r.index)
         const sent = selected && evidenceDecision?.useTavilyForAnswer
-        return `    [T${r.index+1}] score ${r.score.toFixed(2)} | relevance ${r.relevance.toFixed(2)} | authority ${r.authority.toFixed(2)} | support ${r.support.toFixed(2)} — ${sent ? 'SENT TO SONNET' : selected ? 'REFERENCE ONLY' : 'DROPPED'} — ${src.source || 'Web'} — ${src.title || ''}\n        ${r.reason || ''}`
+        const displayed = referenceSearchResults.some(x => x.url === src.url)
+        return `    [T${r.index+1}] score ${r.score.toFixed(2)} | relevance ${r.relevance.toFixed(2)} | authority ${r.authority.toFixed(2)} | support ${r.support.toFixed(2)} — ${sent ? 'SENT TO SONNET + DISPLAYED' : displayed ? 'DISPLAY ONLY (NOT SENT TO SONNET)' : 'NOT DISPLAYED'} — ${src.source || 'Web'} — ${src.title || ''}\n        ${r.reason || ''}`
       })),
       '',
       '4a. WEB SEARCH — TAVILY GENERAL (unrestricted)',
@@ -3054,6 +3067,7 @@ You MUST obey all of these rules:
         tavilyRaw:      debugLog.tavilyRaw    || 0,
         tavilyFiltered: debugLog.tavilyFiltered || 0,
         tavilyNotes:    debugLog.tavilyNotes  || 0,
+        tavilyDisplayed: debugLog.tavilyDisplayed || 0,
         openAISources:  debugLog.openAISources || 0,
         // Links found by OpenAI search but NOT shown to Sonnet. Render these under a
         // heading that clearly separates them from cited sources (e.g. "Related reading"),
