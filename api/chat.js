@@ -2065,8 +2065,19 @@ export default async function handler(req, res) {
       : Promise.resolve([])
 
     // 5b. Search query rewrite (context-aware, uses recent real messages)
+    // Preserve exact SAP-looking identifiers in search. A query rewriter may add
+    // useful context, but it must never search only for an inferred/related concept
+    // while dropping the exact object the consultant typed (e.g. C223_D).
+    const exactSearchIdentifiers = Array.from(new Set(
+      (lastMsg.match(/\b[A-Z][A-Z0-9_\/-]{2,}\b/g) || [])
+        .filter(x => !['SAP','ECC','S4HANA','HANA'].includes(x) && (/\d|_/.test(x) || x.length <= 8))
+    )).slice(0, 6)
     const searchQueryPromise = (!isDeliverable && needsSearch)
-      ? rewriteForSearch(lastMsg, recentContext).catch(() => lastMsg)
+      ? rewriteForSearch(lastMsg, recentContext)
+          .then(q => exactSearchIdentifiers.length
+            ? `${q} ${exactSearchIdentifiers.filter(id => !q.includes(id)).map(id => `\"${id}\"`).join(' ')}`.trim()
+            : q)
+          .catch(() => lastMsg)
       : Promise.resolve(lastMsg)
 
     // 5c. User knowledge + memories
@@ -2184,6 +2195,14 @@ export default async function handler(req, res) {
     const allSearchResults = tavilyCandidates
     const relatedLinks = openAISources
 
+    // Direct-evidence gate for obscure/exact SAP identifiers. The evidence judge may
+    // correctly reject same-topic search results; when that happens, do NOT let model
+    // training fill the gap with a plausible-sounding mechanism. This is intentionally
+    // generic: it protects T-codes, fields, programs, BAdIs, Notes, etc., not one C223_D case.
+    const hasDirectGrounding = bookChunks.length > 0 || knowledgeForPrompt.length > 0 || answerSearchResults.length > 0
+    const exactSapIdentifiers = exactSearchIdentifiers
+    const strictGroundingMode = !hasDirectGrounding && needsSearch && exactSapIdentifiers.length > 0
+
     debugLog.tavilyRaw      = tavilyRaw.length
     debugLog.tavilyFiltered = tavilyFiltered.length
     debugLog.tavilyNotes    = tavilyNotesFiltered.length
@@ -2197,6 +2216,8 @@ export default async function handler(req, res) {
     debugLog.evidenceDecision = evidenceDecision
     debugLog.tavilySelected = referenceSearchResults.length
     debugLog.tavilySentToSonnet = answerSearchResults.length
+    debugLog.strictGroundingMode = strictGroundingMode
+    debugLog.exactSapIdentifiers = exactSapIdentifiers
     // List copies for the shared buildDebugDoc renderer (used by all answer paths)
     debugLog.bookChunkList  = bookChunks
     debugLog.knowledgeList  = relevantKnowledge
@@ -2291,6 +2312,20 @@ export default async function handler(req, res) {
 
     if (bookChunks.length===0 && knowledgeForPrompt.length===0 && openAISources.length===0 && answerSearchResults.length===0) {
       systemPrompt += `\n\n⚠️ ZERO GROUNDING THIS TURN: no book chunks, no saved knowledge, no search sources — nothing was actually retrieved for this question. You are answering purely from your own training. If the answer requires stating a specific table field, TDOBJECT/TDID value, T-code, BAdI, or other named technical object, you must flag it as unverified ("verify in your system") rather than stating it with confidence — this is the exact situation the grounding rule above exists for.`
+    }
+
+    if (strictGroundingMode) {
+      systemPrompt += `\n\n🛑 STRICT DIRECT-EVIDENCE GATE — MANDATORY, HIGHER PRIORITY THAN NORMAL ANSWERING STYLE:
+The question contains exact SAP identifier(s): ${exactSapIdentifiers.join(', ')}. Wani retrieved NO direct book/KB/selected-web evidence that validates the behavior of those exact identifiers. Same-topic pages that merely mention a related object do NOT count.
+
+You MUST obey all of these rules:
+- Do NOT infer what an identifier does from its name, suffix, naming pattern, a similar transaction, or general SAP convention. In particular, a suffix such as _D is NOT evidence of display-only behavior.
+- Do NOT state a program name, transaction type, screen logic, implicit filter, table-field meaning, validity rule, lock rule, consistency rule, or causal mechanism for the exact identifier as fact unless direct evidence supports that exact claim.
+- You MAY use your native web_search to try to verify the exact identifier. If you do, every factual claim learned from it must be accompanied by an inline citation to the source you actually found. A search having run is not proof by itself.
+- If direct verification still fails, say plainly: \"I couldn't verify the exact behavior of <identifier> from a reliable source.\" Then separate what the user has OBSERVED in their own system from clearly labeled HYPOTHESES / checks.
+- The user's observed system behavior is evidence about their system and must not be overridden by a generic naming assumption.
+- Never upgrade a hypothesis into \"the root cause\" without direct supporting evidence. Use \"possible cause\", \"worth checking\", or \"unverified\" instead.
+- It is better to give a shorter, explicit uncertainty than a detailed invented explanation.`
     }
 
     // ── Pushback / correction verification mode ─────────────────────────────
