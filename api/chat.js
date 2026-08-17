@@ -66,6 +66,49 @@ function stripUnapprovedLinks(text) {
   return { text: out, removed }
 }
 
+
+// Public Verified Links must be deterministic. The model may return an empty
+// references array even when Wani retrieved valid SAP pages, so merge its
+// references with the actual retrieved/validated search results before sending
+// the answer to the browser. Never invent a URL here.
+function referenceTypeFromSource(source = '', url = '') {
+  const value = `${source} ${url}`.toLowerCase()
+  if (value.includes('community.sap.com') || value.includes('sap community')) return 'SAP Community'
+  if (value.includes('blogs.sap.com') || value.includes('sap blog')) return 'SAP Blog'
+  if (value.includes('help.sap.com') || value.includes('sap help')) return 'SAP Help'
+  if (value.includes('me.sap.com') || value.includes('support.sap.com') || value.includes('sap support')) return 'SAP Support'
+  if (value.includes('fioriappslibrary')) return 'SAP Fiori Library'
+  if (value.includes('learning.sap.com')) return 'SAP Learning'
+  return 'SAP'
+}
+
+function mergeVerifiedReferences(modelReferences = [], ...retrievedGroups) {
+  const out = []
+  const seen = new Set()
+  const add = (ref, fallbackNote = '') => {
+    const url = typeof ref?.url === 'string' ? ref.url.trim() : ''
+    if (!url || !isApprovedUrl(url) || seen.has(url)) return
+    seen.add(url)
+    out.push({
+      type: ref.type || referenceTypeFromSource(ref.source, url),
+      title: ref.title || url,
+      url,
+      note: ref.note || fallbackNote,
+    })
+  }
+
+  // Keep valid model references first (often produced from Sonnet's own
+  // self-verification search), then fill any gaps from Wani's real search lanes.
+  for (const ref of Array.isArray(modelReferences) ? modelReferences : []) add(ref)
+  for (const group of retrievedGroups) {
+    for (const ref of Array.isArray(group) ? group : []) {
+      add(ref, 'SAP source retrieved by Wani for this question.')
+      if (out.length >= 3) return out
+    }
+  }
+  return out.slice(0, 3)
+}
+
 // ── SUPABASE CLIENT ───────────────────────────────────────────────────────────
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -2777,6 +2820,12 @@ export default async function handler(req, res) {
     }
 
     // ── STEP 14: Send done ────────────────────────────────────────────────
+    // Do not make public links depend on Sonnet remembering to populate its hidden
+    // references JSON. If Wani found approved SAP pages, merge those real URLs in.
+    const finalVerifiedReferences = usedContainerFormat
+      ? mergeVerifiedReferences(containerResult.references, referenceSearchResults, relatedLinks)
+      : []
+
     const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION','GENERAL_DOC'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'
 
@@ -2958,7 +3007,7 @@ export default async function handler(req, res) {
       ...(usedContainerFormat ? {
         containerMode: true,
         quickAnswer: containerResult.quickAnswer || null,
-        references: containerResult.references || [],
+        references: finalVerifiedReferences,
         followUps: containerResult.followUps || [],
       } : { containerMode: false }),
       debugDoc,

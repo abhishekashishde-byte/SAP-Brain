@@ -698,6 +698,30 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
   const [liked, setLiked] = useState(null)
   const [codeExpanded, setCodeExpanded] = useState(false)
 
+  // Backward-compatible recovery for answers saved while the server sometimes
+  // emitted `_references: []` despite having real web results. Prefer the stored
+  // container references; only fall back to URLs Wani actually persisted from its
+  // search lanes. Keep the same SAP-domain allow-list client-side as a safety net.
+  const approvedSapHosts = [
+    'community.sap.com','blogs.sap.com','help.sap.com','me.sap.com','support.sap.com',
+    'launchpad.support.sap.com','fioriappslibrary.hana.ondemand.com','api.sap.com','learning.sap.com',
+  ]
+  const isApprovedSavedLink = (url) => {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '')
+      return approvedSapHosts.some(d => host === d || host.endsWith('.' + d))
+    } catch { return false }
+  }
+  const storedReferences = Array.isArray(msg._references) ? msg._references.filter(r => isApprovedSavedLink(r?.url)) : []
+  const storedLinkFallback = [
+    ...(Array.isArray(msg._links) ? msg._links : []),
+    ...(Array.isArray(msg._sourceInfo?.relatedLinks) ? msg._sourceInfo.relatedLinks : []),
+  ]
+    .filter((r, i, arr) => r?.url && isApprovedSavedLink(r.url) && arr.findIndex(x => x?.url === r.url) === i)
+    .slice(0, 3)
+    .map(r => ({ type:r.type || r.source || 'SAP', title:r.title || r.url, url:r.url, note:r.note || 'SAP source retrieved by Wani for this question.' }))
+  const displayReferences = storedReferences.length > 0 ? storedReferences : storedLinkFallback
+
   const inlineFormat = (text) => {
     if (!text) return ''
     // Strip bold markers that WRAP a link: **[label](url)** → [label](url), so the link
@@ -953,7 +977,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
           ) : (!isStreaming && msg._containerMode) ? (
             <AnswerContainer
               quickAnswer={msg._quickAnswer}
-              references={msg._references}
+              references={displayReferences}
               followUps={msg._followUps}
               detailedExplanation={content}
               renderMarkdown={renderMarkdown}
