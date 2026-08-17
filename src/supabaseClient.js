@@ -17,7 +17,7 @@ export const signOut = async () => {
   return result
 }
 
-const CONVERSATION_LIST_FIELDS = 'id,user_id,title,model_used,created_at,updated_at,project_id,topic_tag,summary,deliverable_type,is_project,project_name,fs_title,fs_generated_at,module,topic,is_summarised'
+const CONVERSATION_LIST_FIELDS = 'id,user_id,title,created_at,updated_at,deliverable_type,is_project,project_name,fs_title,fs_generated_at,module,topic,is_summarised'
 
 // History must stay lightweight. Never download the full messages JSON just to
 // render titles/cards; one large account can otherwise transfer tens of MB on login.
@@ -28,7 +28,7 @@ export const loadConversations = async (userId) => {
       .select(CONVERSATION_LIST_FIELDS)
       .eq('user_id', userId)
       .order('updated_at', { ascending: false })
-    if (error) return []
+    if (error) { console.error('loadConversations error:', error); return [] }
     return data || []
   } catch { return [] }
 }
