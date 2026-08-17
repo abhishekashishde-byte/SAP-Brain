@@ -8,7 +8,7 @@ import QuickAnswer from '../components/visuals/QuickAnswer.jsx'
 import WaniHeroCard from '../components/WaniHeroCard.jsx'
 import {
   supabase, signOut,
-  loadConversations, createConversation, updateConversation, deleteConversation,
+  loadConversations, loadConversation, createConversation, updateConversation, deleteConversation,
   markAsProject, loadProjects,
   getProfile, upsertProfile,
 } from '../supabaseClient'
@@ -2214,26 +2214,60 @@ export default function Brain({ session }) {
   },[filterDropdownOpen])
 
   useEffect(()=>{
+    const userId = session?.user?.id
+    if (!userId) return
+    let cancelled = false
+    setDbLoading(true)
     const loadAll = async () => {
       try {
-        const [convs, prof, projs] = await Promise.all([
-          loadConversations(session.user.id).catch(()=>[]),
-          getProfile(session.user.id).catch(()=>null),
-          loadProjects(session.user.id).catch(()=>[]),
+        // History is metadata-only. Projects are derived from the same lightweight
+        // list so login makes one conversation-list query instead of two heavy ones.
+        const [convs, prof] = await Promise.all([
+          loadConversations(userId).catch(()=>[]),
+          getProfile(userId).catch(()=>null),
         ])
-        setConversations(convs||[])
+        if (cancelled) return
+        const list = convs || []
+        setConversations(list)
         setProfile(prof)
-        setProjects(projs||[])
+        setProjects(list.filter(c => c.is_project))
       } catch(e) {
         console.error('Startup load error:', e)
-        setConversations([])
-        setProjects([])
+        if (!cancelled) {
+          setConversations([])
+          setProjects([])
+        }
       } finally {
-        setDbLoading(false)
+        if (!cancelled) setDbLoading(false)
       }
     }
     loadAll()
-  },[session])
+    return () => { cancelled = true }
+  },[session?.user?.id])
+
+  // Conversation messages are intentionally lazy-loaded. The History screen gets
+  // only ~metadata on login; opening one chat fetches only that row's messages.
+  useEffect(() => {
+    const userId = session?.user?.id
+    if (!activeConvId || !userId) return
+    const existing = conversations.find(c => c.id === activeConvId)
+    if (!existing || Array.isArray(existing.messages)) return
+
+    let cancelled = false
+    loadConversation(activeConvId, userId)
+      .then(full => {
+        if (cancelled || !full) return
+        setConversations(prev => prev.map(c => c.id === full.id ? { ...c, ...full } : c))
+        if (full.is_project) {
+          setProjects(prev => {
+            const found = prev.some(p => p.id === full.id)
+            return found ? prev.map(p => p.id === full.id ? { ...p, ...full } : p) : [full, ...prev]
+          })
+        }
+      })
+      .catch(err => console.error('Conversation load failed:', err))
+    return () => { cancelled = true }
+  }, [activeConvId, session?.user?.id])
 
   // No auto-scroll — user scrolls freely
   // useEffect removed intentionally

@@ -75,21 +75,27 @@ export default function App() {
       })
   }, [sessionUserId, sessionEmail])
 
-  // Ask the server whether this verified user is an administrator. The server
-  // remains authoritative; normal users get 403 and never see the Admin control.
+  // Ask the server whether this verified user is an administrator. Do NOT load
+  // the full admin dashboard just to answer this boolean; that made the Admin control
+  // depend on a much heavier request and could leave it missing on a slow login.
   useEffect(() => {
     if (!session || approved !== true) {
       setAdminAvailable(false)
       return
     }
     let cancelled = false
-    fetch('/api/recall', {
+    const token = session.access_token
+    fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'admin_dashboard' }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ action: 'admin_status' }),
     })
-      .then(res => {
-        if (!cancelled) setAdminAvailable(res.ok)
+      .then(res => res.ok ? res.json() : Promise.reject(new Error('admin status failed')))
+      .then(data => {
+        if (!cancelled) setAdminAvailable(data?.isAdmin === true)
       })
       .catch(() => {
         if (!cancelled) setAdminAvailable(false)
