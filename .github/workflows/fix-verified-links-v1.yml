@@ -34,4 +34,5 @@ jobs:
           git add api/chat.js src/pages/Brain.jsx
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Restore verified links from retrieved SAP sources'
+          git restore package-lock.json package.json 2>/dev/null || true
           for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done
