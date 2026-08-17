@@ -1,0 +1,39 @@
+name: Fix strict grounding v1
+on:
+  push:
+    paths:
+      - '.github/scripts/fix_strict_grounding_v1.py'
+      - '.github/workflows/fix-strict-grounding-v1.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply strict grounding patch
+        run: python3 .github/scripts/fix_strict_grounding_v1.py
+      - name: Verify targeted safeguards
+        run: |
+          grep -q "strictGroundingMode" api/chat.js
+          grep -q "STRICT DIRECT-EVIDENCE GATE" api/chat.js
+          grep -q "exactSearchIdentifiers" api/chat.js
+          grep -q "a suffix such as _D is NOT evidence" api/chat.js
+          grep -q "showIntroVideo" src/pages/Brain.jsx
+          grep -q "CONVERSATION_LIST_FIELDS" src/supabaseClient.js
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit application change
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add api/chat.js
+          git restore package-lock.json package.json 2>/dev/null || true
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Require direct evidence for exact SAP identifier claims'
+          git status --porcelain
+          git push origin HEAD:main
