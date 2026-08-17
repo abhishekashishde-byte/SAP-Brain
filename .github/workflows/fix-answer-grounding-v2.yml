@@ -1,0 +1,36 @@
+name: Fix answer grounding v2
+on:
+  push:
+    paths:
+      - '.github/scripts/fix_answer_grounding_v2.py'
+      - '.github/workflows/fix-answer-grounding-v2.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply grounding repair
+        run: python3 .github/scripts/fix_answer_grounding_v2.py
+      - name: Verify architecture
+        run: |
+          grep -q "tavilyDisplayCandidates" api/chat.js
+          grep -q "evidenceDecision.rag?.sufficient === true || answerSearchResults.length > 0" api/chat.js
+          grep -q "MUST use your native web_search at least once" api/chat.js
+          grep -q "IA03" api/chat.js
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit runtime change
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git restore package-lock.json 2>/dev/null || true
+          git add api/chat.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Repair first-turn grounding and preserve Tavily findings'
+          git push origin HEAD:main
