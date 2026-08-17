@@ -39,7 +39,7 @@ Technical Summary:`
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         max_tokens: 600,
         temperature: 0.2,
         messages: [{ role: 'user', content: prompt }],

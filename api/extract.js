@@ -39,7 +39,7 @@ Return ONLY a JSON array of fact strings (max 5). If no specific facts are worth
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         max_tokens: 400,
         temperature: 0,
         messages: [{ role: 'user', content: extractPrompt }],

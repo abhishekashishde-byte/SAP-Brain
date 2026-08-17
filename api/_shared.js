@@ -193,7 +193,7 @@ export async function callGroq(systemPrompt, messages) {
       'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-120b',
       max_tokens: 1200,
       temperature: 0.2,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],

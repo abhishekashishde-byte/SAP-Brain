@@ -126,7 +126,7 @@ async function groqClassify(question, gate = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         max_tokens: 180,
         temperature: 0,
         messages: [{
@@ -1402,7 +1402,7 @@ async function saveGlobalCorrection(userMsg, assistantMsg, userId) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', max_tokens: 150, temperature: 0,
+        model: 'openai/gpt-oss-120b', max_tokens: 150, temperature: 0,
         messages: [{ role: 'user', content: `Extract the corrected SAP fact. Return JSON: {"fact":"clear statement","topic":"1-3 words"} or {"fact":"","topic":""}\nUser: "${userMsg}"\nWrong answer: "${assistantMsg?.slice(0, 300)}"` }]
       })
     })
@@ -1474,7 +1474,7 @@ async function suggestFinding(messages, module) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', max_tokens: 300, temperature: 0,
+        model: 'openai/gpt-oss-120b', max_tokens: 300, temperature: 0,
         messages: [{ role: 'user', content: `Scan this SAP conversation for ONE finding worth saving.\nReturn JSON: {"found":true,"module":"PM","topic":"Migration","object":"MKAL","finding":"specific fact","confidence":"verified"}\nOr: {"found":false}\n\nConversation:\n${conversation}` }]
       })
     })
@@ -1536,7 +1536,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile', max_tokens: 15, temperature: 0,
+          model: 'openai/gpt-oss-120b', max_tokens: 15, temperature: 0,
           messages: [{ role: 'user', content: `Classify this SAP document. Return ONLY one word:\nFUNCTIONAL_SPEC, TEST_SCRIPT, MEETING_NOTES, PROJECT_PLAN, TECHNICAL_SPEC, OTHER\n\nDocument: ${(body.content || '').slice(0, 1000)}` }]
         })
       })
@@ -2708,7 +2708,7 @@ You MUST obey all of these rules:
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile', max_tokens: 400, temperature: 0,
+            model: 'openai/gpt-oss-120b', max_tokens: 400, temperature: 0,
             messages: [{ role: 'user', content: `Extract key SAP findings from this conversation as bullet points (max 8). Each bullet = standalone fact. Include T-codes, table names, decisions, problems solved.\n\nConversation:\n${convText}\n\nKey findings:` }]
           })
         })

@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   try {
     // The previous hard-coded Groq model can return provider 404 when retired/unavailable.
     // Try current models in order; categorisation is non-critical, so never turn this into a 503 for the UI.
-    const models = [process.env.GROQ_CATEGORISE_MODEL, 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'].filter(Boolean)
+    const models = [process.env.GROQ_CATEGORISE_MODEL, 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'].filter(Boolean)
     let data = null
     for (const model of [...new Set(models)]) {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
