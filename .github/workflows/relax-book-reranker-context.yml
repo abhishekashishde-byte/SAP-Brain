@@ -1,0 +1,32 @@
+name: Relax Book RAG reranker context
+on:
+  push:
+    paths:
+      - '.github/scripts/relax_book_reranker_context.py'
+      - '.github/workflows/relax-book-reranker-context.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python3 .github/scripts/relax_book_reranker_context.py
+      - name: Verify
+        run: |
+          grep -q "const bestContext = ranked.find(item => item.score === 3)" api/chat.js
+          grep -q "Score 1/2 chunks remain excluded" api/chat.js
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit runtime change
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add api/chat.js
+          git commit -m 'Retain one useful Book RAG context chunk'
+          for i in 1 2 3; do git push origin HEAD:main && break || sleep 5; done
