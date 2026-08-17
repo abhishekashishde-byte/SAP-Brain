@@ -49,13 +49,6 @@ function jsonError(status, error) {
   )
 }
 
-function getBearerToken(request) {
-  const authorization = request.headers.get('authorization') || ''
-  if (!authorization.startsWith('Bearer ')) return null
-  const token = authorization.slice(7).trim()
-  return token || null
-}
-
 export default async function middleware(request) {
   const url = new URL(request.url)
   const pathname = url.pathname
@@ -67,66 +60,21 @@ export default async function middleware(request) {
     return jsonError(413, 'Request body too large')
   }
 
-  const token = getBearerToken(request)
-  if (!token) return jsonError(401, 'Authentication required')
-
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-
-  if (!supabaseUrl || !anonKey || !serviceKey) {
-    console.error('[api-auth-middleware] Supabase configuration is incomplete')
-    return jsonError(503, 'Authentication service unavailable')
+  // Authentication is intentionally NOT repeated here. Every protected API handler
+  // already calls requireApprovedUser(), which validates the Supabase JWT, approved
+  // email and Wani active session. Doing the same work in middleware first created a
+  // second, independent auth failure point and produced intermittent 401s before the
+  // request ever reached /api/chat. Keep middleware limited to routing/body-size only.
+  //
+  // /api/chat is still routed through reference-search because that gateway owns quota
+  // handling/sanitisation and then invokes chatHandler. The Authorization header is
+  // preserved by Vercel rewrite and is validated exactly once inside the gateway.
+  if (pathname === '/api/chat') {
+    const gatewayUrl = new URL(request.url)
+    gatewayUrl.pathname = '/api/reference-search'
+    gatewayUrl.searchParams.set('wani_gateway', '1')
+    return rewrite(gatewayUrl)
   }
 
-  try {
-    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${token}`,
-      },
-      signal: AbortSignal.timeout(7_000),
-    })
-
-    if (!userResponse.ok) return jsonError(401, 'Invalid or expired session')
-
-    const user = await userResponse.json()
-    const email = typeof user?.email === 'string' ? user.email.trim().toLowerCase() : ''
-    if (!user?.id || !email) return jsonError(401, 'Invalid or expired session')
-
-    const approvalResponse = await fetch(
-      `${supabaseUrl}/rest/v1/approved_emails?select=email&email=eq.${encodeURIComponent(email)}&limit=1`,
-      {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-        },
-        signal: AbortSignal.timeout(7_000),
-      },
-    )
-
-    if (!approvalResponse.ok) {
-      console.error('[api-auth-middleware] Approval lookup failed:', approvalResponse.status)
-      return jsonError(503, 'Unable to verify account approval')
-    }
-
-    const approvals = await approvalResponse.json()
-    if (!Array.isArray(approvals) || approvals.length === 0) {
-      return jsonError(403, 'Account is not approved')
-    }
-
-    // Reuse the currently disabled reference-search function as the internal
-    // gateway, keeping the deployment within Vercel Hobby's function limit.
-    if (pathname === '/api/chat') {
-      const gatewayUrl = new URL(request.url)
-      gatewayUrl.pathname = '/api/reference-search'
-      gatewayUrl.searchParams.set('wani_gateway', '1')
-      return rewrite(gatewayUrl)
-    }
-
-    return next()
-  } catch (error) {
-    console.error('[api-auth-middleware] Authentication check failed:', error.message)
-    return jsonError(503, 'Authentication service unavailable')
-  }
+  return next()
 }
