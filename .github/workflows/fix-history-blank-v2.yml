@@ -1,0 +1,34 @@
+name: Fix history blank v2
+on:
+  push:
+    paths:
+      - '.github/scripts/fix_history_blank_v2.py'
+      - '.github/workflows/fix-history-blank-v2.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply surgical history fix
+        run: python3 .github/scripts/fix_history_blank_v2.py
+      - name: Verify
+        run: |
+          grep -q "CONVERSATION_LIST_FIELDS = 'id,user_id,title,created_at,updated_at,deliverable_type,is_project,project_name,fs_title,fs_generated_at,module,topic,is_summarised'" src/supabaseClient.js
+          grep -q "loadConversation" src/supabaseClient.js
+          grep -q "admin_status" src/App.jsx
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit application change
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add src/supabaseClient.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Fix blank history metadata query'
+          for i in 1 2 3; do git push origin HEAD:main && break || sleep 5; done
