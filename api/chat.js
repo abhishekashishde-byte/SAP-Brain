@@ -792,7 +792,12 @@ async function rerankBookChunksWithMini(question, chunks) {
       .filter(item => !(item.duplicateOf != null && item.duplicateOf >= 0 && item.duplicateOf < chunks.length))
       .sort((a, b) => b.score - a.score || a.index - b.index)
 
+    // Keep all directly useful chunks (4/5), plus at most ONE score-3 context chunk
+    // when it is not a duplicate. This preserves useful adjacent book context without
+    // flooding Sonnet with tangential excerpts. Score 1/2 chunks remain excluded.
     let kept = ranked.filter(item => item.score >= 4).slice(0, 4)
+    const bestContext = ranked.find(item => item.score === 3)
+    if (bestContext && kept.length < 4) kept.push(bestContext)
     if (!kept.length && ranked[0]?.score === 3) kept = [ranked[0]]
     const selected = kept.map(item => item.chunk)
     const ratingsForDebug = chunks.map((chunk, index) => {
