@@ -1,0 +1,185 @@
+name: Enable OpenAI evidence pool
+
+on:
+  push:
+    paths:
+      - '.github/workflows/enable-openai-evidence-pool.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply dual-search evidence pool
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # 1) Tighten OpenAI web search to official SAP domains only.
+          p = Path('api/_shared.js')
+          s = p.read_text()
+          old = "tools: [{ type: 'web_search_preview' }],"
+          new = """tools: [{
+          type: 'web_search',
+          filters: {
+            allowed_domains: [
+              'help.sap.com',
+              'community.sap.com',
+              'blogs.sap.com',
+              'me.sap.com',
+              'support.sap.com',
+              'api.sap.com',
+              'learning.sap.com',
+              'fioriappslibrary.hana.ondemand.com',
+            ],
+          },
+          search_context_size: 'medium',
+        }],"""
+          if old not in s:
+              raise SystemExit('OpenAI web-search tool anchor not found')
+          s = s.replace(old, new, 1)
+          old_prompt = "Prioritize official SAP sources (help.sap.com, me.sap.com, community.sap.com) and well-regarded SAP consulting blogs."
+          new_prompt = "Use ONLY official SAP sources from the allowed-domain filter (SAP Help, SAP Community/Blogs, SAP Support, SAP API, SAP Learning, and the SAP Fiori Apps Library). Do not use third-party consulting or tutorial sites."
+          if old_prompt not in s:
+              raise SystemExit('OpenAI search prompt anchor not found')
+          s = s.replace(old_prompt, new_prompt, 1)
+          p.write_text(s)
+
+          # 2) Re-enable OpenAI search and merge it with Tavily before evidence scoring.
+          p = Path('api/chat.js')
+          s = p.read_text()
+
+          old = """      // OpenAI search lane DISABLED. Measured across real traffic: 0 of 23 returned links
+      // were ever cited, it was the most expensive lane, and it was the ONLY source of
+      // non-authentic domains (unogeeks.com, ageistechnova.com, myscmhelp.in) — which then
+      // got laundered into answers as \"solid resources\". Tavily lanes are domain-restricted
+      // to authentic SAP sources; those now stand alone. Re-enable only behind a domain
+      // allow-list if ever needed.
+      // openAIResultPromise = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)"""
+          new = """      // Independent second retrieval lane. callOpenAISearch is hard-restricted to
+      // approved SAP domains in _shared.js. It runs in parallel with Tavily and does not
+      // bypass evidence scoring; both engines feed the same candidate pool below.
+      openAIResultPromise = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)"""
+          if old not in s:
+              raise SystemExit('OpenAI disabled-lane anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = """    // Combine search sources — general Tavily, community Tavily (both filtered), and OpenAI.
+    const openAISourcesRaw = openAIResult?.sources || []
+    const openAISources = (openAISourcesRaw.length > 0)
+      ? await filterRelevantResults(openAISourcesRaw, lastMsg).catch(() => openAISourcesRaw)
+      : []
+    const openAISearchText = openAIResult?.text || ''
+
+    // Discovery and answer grounding are separate decisions. Tavily always discovers
+    // possible further-reading links for substantive SAP questions, but its content is
+    // only allowed into Sonnet when the dynamic evidence judge says internal RAG/KB is
+    // insufficient, or when the user is pushing back/re-verifying an earlier answer.
+    const tavilyCandidates = [...tavilyFiltered, ...tavilyNotesFiltered].filter((r, i, arr) =>
+      r?.url && arr.findIndex(x => x?.url === r.url) === i
+    )
+    const evidenceDecision = await assessEvidenceRouting({
+      question: lastMsg,
+      messages: allMessages,
+      bookChunks,
+      knowledgeEntries: relevantKnowledge,
+      tavilyResults: tavilyCandidates,
+      isCorrection,
+    })
+    const selectedTavily = attachSelectedTavilyResults(evidenceDecision, tavilyCandidates)
+    const knowledgeForPrompt = evidenceDecision.pushback?.detected ? [] : relevantKnowledge
+
+    // Two independent Tavily lanes:
+    // - DISPLAY: every result that already passed Wani's same-topic relevance filter
+    //   remains eligible for Verified Links. The second evidence judge must never make
+    //   authentic, relevant SAP findings disappear from the answer-level UI.
+    // - GROUNDING: only evidence-router-selected results may enter Sonnet's prompt.
+    // This preserves the product rule: low-rated Tavily findings stay visible but cannot
+    // influence the answer.
+    const referenceSearchResults = tavilyCandidates
+    const selectedGroundingResults = selectedTavily.map(x => x.result)
+    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? selectedGroundingResults : []
+    const allSearchResults = tavilyCandidates
+    const relatedLinks = openAISources"""
+
+          new = """    // OpenAI and Tavily are independent retrieval engines. Both are filtered for
+    // same-topic relevance, then merged into ONE approved-SAP evidence pool. Engine
+    // origin never grants authority: the downstream evidence judge still decides what
+    // may influence Sonnet. We additionally backstop OpenAI URLs here even though its
+    // web_search tool is already domain-restricted in _shared.js.
+    const openAISourcesRaw = (openAIResult?.sources || []).filter(r => r?.url && isApprovedUrl(r.url))
+    const openAISources = (openAISourcesRaw.length > 0)
+      ? await filterRelevantResults(openAISourcesRaw, lastMsg).catch(() => [])
+      : []
+    const openAISearchText = openAIResult?.text || ''
+
+    const tavilyCandidates = [...tavilyFiltered, ...tavilyNotesFiltered].filter((r, i, arr) =>
+      r?.url && arr.findIndex(x => x?.url === r.url) === i
+    )
+    const webCandidates = [...tavilyCandidates, ...openAISources]
+      .filter(r => r?.url && isApprovedUrl(r.url))
+      .filter((r, i, arr) => arr.findIndex(x => x.url === r.url) === i)
+
+    // The existing evidence router is source-agnostic despite its historical Tavily
+    // naming. It now scores the combined Tavily + OpenAI pool by relevance, authority,
+    // and direct support. No single engine gets an automatic win.
+    const evidenceDecision = await assessEvidenceRouting({
+      question: lastMsg,
+      messages: allMessages,
+      bookChunks,
+      knowledgeEntries: relevantKnowledge,
+      tavilyResults: webCandidates,
+      isCorrection,
+    })
+    const selectedWeb = attachSelectedTavilyResults(evidenceDecision, webCandidates)
+    const knowledgeForPrompt = evidenceDecision.pushback?.detected ? [] : relevantKnowledge
+
+    // DISPLAY and GROUNDING remain deliberately separate:
+    // - DISPLAY: every approved same-topic candidate from either engine may appear in
+    //   Verified Links (deduped, final UI still caps the list).
+    // - GROUNDING: only evidence-router-selected candidates may enter Sonnet's prompt.
+    const referenceSearchResults = webCandidates
+    const selectedGroundingResults = selectedWeb.map(x => x.result)
+    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? selectedGroundingResults : []
+    const allSearchResults = webCandidates
+    const relatedLinks = []"""
+          if old not in s:
+              raise SystemExit('Evidence-pool anchor not found')
+          s = s.replace(old, new, 1)
+
+          # Debug/pipeline should show the combined pool instead of hiding OpenAI candidates.
+          s = s.replace('debugLog.tavilyList     = tavilyCandidates', 'debugLog.tavilyList     = webCandidates', 1)
+          s = s.replace('const src = tavilyCandidates[r.index] || {}', 'const src = webCandidates[r.index] || {}', 1)
+          s = s.replace('(tavilyCandidates || []).map(r => ({', '(webCandidates || []).map(r => ({', 2)
+          s = s.replace('Tavily shown as Verified Links:', 'Web candidates shown as Verified Links:', 1)
+          s = s.replace('Tavily sent to Sonnet:', 'Web candidates sent to Sonnet:', 1)
+          s = s.replace('SAP COMMUNITY & BLOGS (selected Tavily evidence — SAP sources only):', 'SELECTED SAP WEB EVIDENCE (Tavily + OpenAI, evidence-rated):', 1)
+          s = s.replace('SELECTED WEB EVIDENCE — cite relevant ones with URL inline:', 'SELECTED WEB EVIDENCE (Tavily + OpenAI) — cite relevant ones with URL inline:', 1)
+          p.write_text(s)
+          PY
+
+      - name: Verify changes
+        run: |
+          node --check api/chat.js
+          node --check api/_shared.js
+          grep -q "openAIResultPromise = searchQueryPromise.then" api/chat.js
+          grep -q "const webCandidates" api/chat.js
+          grep -q "allowed_domains" api/_shared.js
+          grep -q "type: 'web_search'" api/_shared.js
+
+      - name: Build
+        run: npm ci && npm run build
+
+      - name: Commit runtime change
+        run: |
+          git config user.name "wani-maintenance"
+          git config user.email "wani-maintenance@users.noreply.github.com"
+          git add api/chat.js api/_shared.js
+          git commit -m "Add OpenAI to SAP evidence pool"
+          git push
