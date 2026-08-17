@@ -1882,8 +1882,8 @@ export default async function handler(req, res) {
     `RAG/KB reason: ${dl.evidenceDecision?.rag?.reason || '(not evaluated)'}`,
     `Pushback/re-verification detected: ${dl.evidenceDecision?.pushback?.detected ?? false}`,
     `Pushback reason: ${dl.evidenceDecision?.pushback?.reason || '(none)'}`,
-    `Tavily shown as Verified Links: ${dl.tavilySelected ?? 0}`,
-    `Tavily sent to Sonnet: ${dl.tavilySentToSonnet ?? 0}`,
+    `Web candidates shown as Verified Links: ${dl.tavilySelected ?? 0}`,
+    `Web candidates sent to Sonnet: ${dl.tavilySentToSonnet ?? 0}`,
     `Answer evidence: ${dl.evidenceDecision?.useTavilyForAnswer ? 'RAG/KB + SELECTED TAVILY' : 'RAG/KB ONLY'}`,
     `Routing reason: ${dl.evidenceDecision?.routingReason || '(not evaluated)'}`,
     ...((dl.evidenceDecision?.tavilyRatings || []).map(r => {
@@ -2100,7 +2100,7 @@ export default async function handler(req, res) {
       // got laundered into answers as "solid resources". Tavily lanes are domain-restricted
       // to authentic SAP sources; those now stand alone. Re-enable only behind a domain
       // allow-list if ever needed.
-      // openAIResultPromise = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)
+      openAIResultPromise = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)
     }
 
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
@@ -2165,7 +2165,7 @@ export default async function handler(req, res) {
       : []
 
     // Combine search sources — general Tavily, community Tavily (both filtered), and OpenAI.
-    const openAISourcesRaw = openAIResult?.sources || []
+    const openAISourcesRaw = (openAIResult?.sources || []).filter(r => r?.url && isApprovedUrl(r.url))
     const openAISources = (openAISourcesRaw.length > 0)
       ? await filterRelevantResults(openAISourcesRaw, lastMsg).catch(() => openAISourcesRaw)
       : []
@@ -2178,15 +2178,20 @@ export default async function handler(req, res) {
     const tavilyCandidates = [...tavilyFiltered, ...tavilyNotesFiltered].filter((r, i, arr) =>
       r?.url && arr.findIndex(x => x?.url === r.url) === i
     )
+    // Combine the two independently retrieved web pools only after each has passed
+    // same-topic filtering. Dedupe by URL and retain only Wani-approved SAP domains.
+    const webCandidates = [...tavilyCandidates, ...openAISources]
+      .filter(r => r?.url && isApprovedUrl(r.url))
+      .filter((r, i, arr) => arr.findIndex(x => x.url === r.url) === i)
     const evidenceDecision = await assessEvidenceRouting({
       question: lastMsg,
       messages: allMessages,
       bookChunks,
       knowledgeEntries: relevantKnowledge,
-      tavilyResults: tavilyCandidates,
+      tavilyResults: webCandidates,
       isCorrection,
     })
-    const selectedTavily = attachSelectedTavilyResults(evidenceDecision, tavilyCandidates)
+    const selectedTavily = attachSelectedTavilyResults(evidenceDecision, webCandidates)
     const knowledgeForPrompt = evidenceDecision.pushback?.detected ? [] : relevantKnowledge
 
     // Two independent Tavily lanes:
@@ -2196,11 +2201,11 @@ export default async function handler(req, res) {
     // - GROUNDING: only evidence-router-selected results may enter Sonnet's prompt.
     // This preserves the product rule: low-rated Tavily findings stay visible but cannot
     // influence the answer.
-    const referenceSearchResults = tavilyCandidates
+    const referenceSearchResults = webCandidates
     const selectedGroundingResults = selectedTavily.map(x => x.result)
     const answerSearchResults = evidenceDecision.useTavilyForAnswer ? selectedGroundingResults : []
-    const allSearchResults = tavilyCandidates
-    const relatedLinks = openAISources
+    const allSearchResults = webCandidates
+    const relatedLinks = []
 
     debugLog.tavilyRaw      = tavilyRaw.length
     debugLog.tavilyFiltered = tavilyFiltered.length
@@ -2218,7 +2223,7 @@ export default async function handler(req, res) {
     // List copies for the shared buildDebugDoc renderer (used by all answer paths)
     debugLog.bookChunkList  = bookChunks
     debugLog.knowledgeList  = relevantKnowledge
-    debugLog.tavilyList     = tavilyCandidates
+    debugLog.tavilyList     = webCandidates
 
     // Pill links always generated from context-aware query
     const googleLinks = buildPillLinks(searchQuery)
@@ -2481,7 +2486,7 @@ export default async function handler(req, res) {
         const tavilyText = answerSearchResults.map((r, i) =>
           `[Web ${i+1}] ${r.title}\nURL: ${r.url}\n${(r.snippet || '').slice(0, 1000)}`
         ).join('\n\n')
-        enrichedSystemPrompt += `\n\n🔍 SELECTED WEB EVIDENCE — cite relevant ones with URL inline:\n${tavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
+        enrichedSystemPrompt += `\n\n🔍 SELECTED WEB EVIDENCE (Tavily + OpenAI) — cite relevant ones with URL inline:\n${tavilyText}\n\nWhen using web content, cite it as: [Title](URL)`
       }
 
       // Unconditional — reaches Sonnet even when Tavily/OpenAI found nothing and only
@@ -2918,7 +2923,7 @@ export default async function handler(req, res) {
       `Answer evidence: ${evidenceDecision?.useTavilyForAnswer ? 'RAG/KB + SELECTED TAVILY' : 'RAG/KB ONLY'}`,
       `Routing reason: ${evidenceDecision?.routingReason || '(not evaluated)'}`,
       ...((evidenceDecision?.tavilyRatings || []).map(r => {
-        const src = tavilyCandidates[r.index] || {}
+        const src = webCandidates[r.index] || {}
         const selected = (evidenceDecision?.selectedTavily || []).some(x => x.index === r.index)
         const sent = selected && evidenceDecision?.useTavilyForAnswer
         return `    [T${r.index+1}] score ${r.score.toFixed(2)} | relevance ${r.relevance.toFixed(2)} | authority ${r.authority.toFixed(2)} | support ${r.support.toFixed(2)} — ${sent ? 'SENT TO SONNET' : selected ? 'REFERENCE ONLY' : 'DROPPED'} — ${src.source || 'Web'} — ${src.title || ''}\n        ${r.reason || ''}`
