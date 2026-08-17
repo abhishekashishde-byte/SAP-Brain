@@ -1,0 +1,35 @@
+name: Fix Tavily display and Sonnet verification
+on:
+  push:
+    paths:
+      - '.github/scripts/fix_tavily_sonnet_verification.py'
+      - '.github/workflows/fix-tavily-sonnet-verification.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply repair
+        run: python3 .github/scripts/fix_tavily_sonnet_verification.py
+      - name: Verify architecture
+        run: |
+          grep -q 'const referenceSearchResults = tavilyCandidates' api/chat.js
+          grep -q 'const selectedGroundingResults = selectedTavily.map' api/chat.js
+          grep -q 'forceSonnetVerification' api/chat.js
+          grep -q "body.tool_choice = { type: 'any' }" api/chat.js
+          grep -q 'Tavily shown as Verified Links' api/chat.js
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit runtime repair
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add api/chat.js
+          git commit -m 'Restore Tavily links and force Sonnet verification'
+          for i in 1 2 3; do git push origin HEAD:main && break || sleep 5; done
