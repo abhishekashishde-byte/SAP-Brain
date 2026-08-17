@@ -327,7 +327,7 @@ Question: "${question.slice(0, 500)}"
 function detectModule(question, intent) {
   const q = question.toUpperCase()
   const modulePatterns = [
-    { module: 'PM', patterns: ['PM', 'PLANT MAINT', 'MAINTENANCE ORDER', 'REQUEST MAINTENANCE', 'REPORT MALFUNCTION', 'F1511', 'F1511A', 'F2023', 'IW31', 'IW32', 'IW33', 'IA03', 'IA05', 'IA06', 'IA11', 'IA12', 'IP10', 'IP11', 'EQUI', 'IFLOT', 'MPLA', 'STRATEGY GROUP', 'MAINTENANCE PLAN', 'FUNCTIONAL LOCATION', 'EQUIPMENT MASTER', 'MEASUREM', 'MEASUR', 'MEASUREMENT POINT', 'COUNTER READING', 'IMRG', 'IMRC', 'IMPT', 'IK01', 'IK11', 'IK21', 'PYEAR'] },
+    { module: 'PM', patterns: ['PM', 'PLANT MAINT', 'MAINTENANCE ORDER', 'REQUEST MAINTENANCE', 'REPORT MALFUNCTION', 'F1511', 'F1511A', 'F2023', 'IW31', 'IW32', 'IW33', 'IP10', 'IP11', 'EQUI', 'IFLOT', 'MPLA', 'STRATEGY GROUP', 'MAINTENANCE PLAN', 'FUNCTIONAL LOCATION', 'EQUIPMENT MASTER', 'MEASUREM', 'MEASUR', 'MEASUREMENT POINT', 'COUNTER READING', 'IMRG', 'IMRC', 'IMPT', 'IK01', 'IK11', 'IK21', 'PYEAR'] },
     { module: 'PP', patterns: ['PP', 'PRODUCTION', 'CO01', 'CO02', 'CO03', 'MD01', 'MD04', 'PRODUCTION ORDER', 'PLANNED ORDER', 'BOM', 'ROUTING', 'WORK CENTER', 'MRP', 'MRP AREA', 'PRODUCTION VERSION'] },
     { module: 'MM', patterns: ['MM', 'MATERIAL', 'MM01', 'MM02', 'ME21N', 'ME51N', 'MIGO', 'PURCHASE ORDER', 'GOODS RECEIPT', 'MATERIAL MASTER', 'VENDOR', 'PURCHASING'] },
     { module: 'SD', patterns: ['SD', 'SALES', 'VA01', 'VA02', 'VF01', 'VL01N', 'SALES ORDER', 'DELIVERY', 'BILLING', 'CUSTOMER ORDER'] },
@@ -2065,19 +2065,8 @@ export default async function handler(req, res) {
       : Promise.resolve([])
 
     // 5b. Search query rewrite (context-aware, uses recent real messages)
-    // Preserve exact SAP-looking identifiers in search. A query rewriter may add
-    // useful context, but it must never search only for an inferred/related concept
-    // while dropping the exact object the consultant typed (e.g. C223_D).
-    const exactSearchIdentifiers = Array.from(new Set(
-      (lastMsg.match(/\b[A-Z][A-Z0-9_\/-]{2,}\b/g) || [])
-        .filter(x => !['SAP','ECC','S4HANA','HANA'].includes(x) && (/\d|_/.test(x) || x.length <= 8))
-    )).slice(0, 6)
     const searchQueryPromise = (!isDeliverable && needsSearch)
-      ? rewriteForSearch(lastMsg, recentContext)
-          .then(q => exactSearchIdentifiers.length
-            ? `${q} ${exactSearchIdentifiers.filter(id => !q.includes(id)).map(id => `\"${id}\"`).join(' ')}`.trim()
-            : q)
-          .catch(() => lastMsg)
+      ? rewriteForSearch(lastMsg, recentContext).catch(() => lastMsg)
       : Promise.resolve(lastMsg)
 
     // 5c. User knowledge + memories
@@ -2177,11 +2166,8 @@ export default async function handler(req, res) {
     // possible further-reading links for substantive SAP questions, but its content is
     // only allowed into Sonnet when the dynamic evidence judge says internal RAG/KB is
     // insufficient, or when the user is pushing back/re-verifying an earlier answer.
-    const tavilyCandidates = [...tavilyFiltered, ...tavilyNotesFiltered, ...tavilyRaw, ...tavilyNotesRaw].filter((r, i, arr) =>
-      r?.url && isApprovedUrl(r.url) && arr.findIndex(x => x?.url === r.url) === i
-    )
-    const tavilyDisplayCandidates = [...tavilyFiltered, ...tavilyNotesFiltered, ...tavilyRaw, ...tavilyNotesRaw].filter((r, i, arr) =>
-      r?.url && isApprovedUrl(r.url) && arr.findIndex(x => x?.url === r.url) === i
+    const tavilyCandidates = [...tavilyFiltered, ...tavilyNotesFiltered].filter((r, i, arr) =>
+      r?.url && arr.findIndex(x => x?.url === r.url) === i
     )
     const evidenceDecision = await assessEvidenceRouting({
       question: lastMsg,
@@ -2193,31 +2179,12 @@ export default async function handler(req, res) {
     })
     const selectedTavily = attachSelectedTavilyResults(evidenceDecision, tavilyCandidates)
     const knowledgeForPrompt = evidenceDecision.pushback?.detected ? [] : relevantKnowledge
-
-    // IMPORTANT: keep answer-grounding and user-facing Verified Links as two
-    // independent lanes. The evidence judge decides what Sonnet may see; it must
-    // never erase relevant authentic SAP pages from the answer UI.
-    const groundingSearchResults = selectedTavily.map(x => x.result)
-    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? groundingSearchResults : []
-
-    // Tavily candidates here have ALREADY passed the separate same-topic relevance
-    // filter and are restricted to approved SAP domains. They remain visible as
-    // Verified Links even when their evidence/support rating is too low for Sonnet.
-    // This restores Wani's original discovery value without weakening grounding.
-    const referenceSearchResults = tavilyDisplayCandidates.slice(0, 4)
-    const allSearchResults = tavilyDisplayCandidates
+    const referenceSearchResults = selectedTavily.map(x => x.result)
+    const answerSearchResults = evidenceDecision.useTavilyForAnswer ? referenceSearchResults : []
+    const allSearchResults = tavilyCandidates
     const relatedLinks = openAISources
 
-    // Direct-evidence gate for obscure/exact SAP identifiers. The evidence judge may
-    // correctly reject same-topic search results; when that happens, do NOT let model
-    // training fill the gap with a plausible-sounding mechanism. This is intentionally
-    // generic: it protects T-codes, fields, programs, BAdIs, Notes, etc., not one C223_D case.
-    const hasDirectGrounding = evidenceDecision.rag?.sufficient === true || answerSearchResults.length > 0
-    const exactSapIdentifiers = exactSearchIdentifiers
-    const strictGroundingMode = !hasDirectGrounding && needsSearch && exactSapIdentifiers.length > 0
-
     debugLog.tavilyRaw      = tavilyRaw.length
-    debugLog.tavilyRawCommunity = tavilyNotesRaw.length
     debugLog.tavilyFiltered = tavilyFiltered.length
     debugLog.tavilyNotes    = tavilyNotesFiltered.length
     debugLog.openAISources  = openAISources.length
@@ -2228,11 +2195,8 @@ export default async function handler(req, res) {
     debugLog.knowledgeCandidates = relevantKnowledge._allCandidates || []
     debugLog.searchQuery    = searchQuery
     debugLog.evidenceDecision = evidenceDecision
-    debugLog.tavilySelected = groundingSearchResults.length
-    debugLog.tavilyDisplayed = referenceSearchResults.length
+    debugLog.tavilySelected = referenceSearchResults.length
     debugLog.tavilySentToSonnet = answerSearchResults.length
-    debugLog.strictGroundingMode = strictGroundingMode
-    debugLog.exactSapIdentifiers = exactSapIdentifiers
     // List copies for the shared buildDebugDoc renderer (used by all answer paths)
     debugLog.bookChunkList  = bookChunks
     debugLog.knowledgeList  = relevantKnowledge
@@ -2325,22 +2289,8 @@ export default async function handler(req, res) {
       systemPrompt += `\n\nSOURCE REFERENCES:\n${sourceRef}\n\nCITATION RULES: Weave citations INLINE using [1] [2] notation. Do NOT add a Sources section at the end. This rule applies identically when you use your own web_search tool mid-answer — those results also get cited inline as [1] [2], never as a manually-typed list of raw URLs at the end of your answer. The UI renders a proper sources panel automatically from whatever you cite inline; a hand-typed link dump duplicates it and looks broken.`
     }
 
-    if (evidenceDecision.rag?.sufficient !== true && answerSearchResults.length===0) {
-      systemPrompt += `\n\n⚠️ INSUFFICIENT GROUNDING THIS TURN: the evidence router did not find sufficiently direct internal or selected-web evidence for the exact question. Related KB rows are context only, not proof. Do not convert them into a specific mechanism for a different T-code/object. If exact SAP behavior is needed, validate it first with your native web_search; if you still cannot verify it, say so explicitly instead of filling the gap from training.`
-    }
-
-    if (strictGroundingMode) {
-      systemPrompt += `\n\n🛑 STRICT DIRECT-EVIDENCE GATE — MANDATORY, HIGHER PRIORITY THAN NORMAL ANSWERING STYLE:
-The question contains exact SAP identifier(s): ${exactSapIdentifiers.join(', ')}. Wani retrieved NO direct book/KB/selected-web evidence that validates the behavior of those exact identifiers. Same-topic pages that merely mention a related object do NOT count.
-
-You MUST obey all of these rules:
-- Do NOT infer what an identifier does from its name, suffix, naming pattern, a similar transaction, or general SAP convention. In particular, a suffix such as _D is NOT evidence of display-only behavior.
-- Do NOT state a program name, transaction type, screen logic, implicit filter, table-field meaning, validity rule, lock rule, consistency rule, or causal mechanism for the exact identifier as fact unless direct evidence supports that exact claim.
-- BEFORE producing the final answer, you MUST use your native web_search at least once to verify the exact identifier and the exact behavior being asked about. Search for the exact identifier itself, not merely a similar transaction or generic process. Every factual claim learned from it must be accompanied by an inline citation to the source you actually found. A search having run is not proof by itself.
-- If direct verification still fails, say plainly: \"I couldn't verify the exact behavior of <identifier> from a reliable source.\" Then separate what the user has OBSERVED in their own system from clearly labeled HYPOTHESES / checks.
-- The user's observed system behavior is evidence about their system and must not be overridden by a generic naming assumption.
-- Never upgrade a hypothesis into \"the root cause\" without direct supporting evidence. Use \"possible cause\", \"worth checking\", or \"unverified\" instead.
-- It is better to give a shorter, explicit uncertainty than a detailed invented explanation.`
+    if (bookChunks.length===0 && knowledgeForPrompt.length===0 && openAISources.length===0 && answerSearchResults.length===0) {
+      systemPrompt += `\n\n⚠️ ZERO GROUNDING THIS TURN: no book chunks, no saved knowledge, no search sources — nothing was actually retrieved for this question. You are answering purely from your own training. If the answer requires stating a specific table field, TDOBJECT/TDID value, T-code, BAdI, or other named technical object, you must flag it as unverified ("verify in your system") rather than stating it with confidence — this is the exact situation the grounding rule above exists for.`
     }
 
     // ── Pushback / correction verification mode ─────────────────────────────
@@ -2931,8 +2881,7 @@ You MUST obey all of these rules:
       `RAG/KB reason: ${evidenceDecision?.rag?.reason || '(not evaluated)'}`,
       `Pushback/re-verification detected: ${evidenceDecision?.pushback?.detected ?? false}`,
       `Pushback reason: ${evidenceDecision?.pushback?.reason || '(none)'}`,
-      `Tavily selected for answer grounding: ${groundingSearchResults.length}`,
-      `Tavily shown as Verified Links: ${referenceSearchResults.length}`,
+      `Tavily selected for references: ${referenceSearchResults.length}`,
       `Tavily sent to Sonnet: ${answerSearchResults.length}`,
       `Answer evidence: ${evidenceDecision?.useTavilyForAnswer ? 'RAG/KB + SELECTED TAVILY' : 'RAG/KB ONLY'}`,
       `Routing reason: ${evidenceDecision?.routingReason || '(not evaluated)'}`,
@@ -2940,8 +2889,7 @@ You MUST obey all of these rules:
         const src = tavilyCandidates[r.index] || {}
         const selected = (evidenceDecision?.selectedTavily || []).some(x => x.index === r.index)
         const sent = selected && evidenceDecision?.useTavilyForAnswer
-        const displayed = referenceSearchResults.some(x => x.url === src.url)
-        return `    [T${r.index+1}] score ${r.score.toFixed(2)} | relevance ${r.relevance.toFixed(2)} | authority ${r.authority.toFixed(2)} | support ${r.support.toFixed(2)} — ${sent ? 'SENT TO SONNET + DISPLAYED' : displayed ? 'DISPLAY ONLY (NOT SENT TO SONNET)' : 'NOT DISPLAYED'} — ${src.source || 'Web'} — ${src.title || ''}\n        ${r.reason || ''}`
+        return `    [T${r.index+1}] score ${r.score.toFixed(2)} | relevance ${r.relevance.toFixed(2)} | authority ${r.authority.toFixed(2)} | support ${r.support.toFixed(2)} — ${sent ? 'SENT TO SONNET' : selected ? 'REFERENCE ONLY' : 'DROPPED'} — ${src.source || 'Web'} — ${src.title || ''}\n        ${r.reason || ''}`
       })),
       '',
       '4a. WEB SEARCH — TAVILY GENERAL (unrestricted)',
@@ -3071,7 +3019,6 @@ You MUST obey all of these rules:
         tavilyRaw:      debugLog.tavilyRaw    || 0,
         tavilyFiltered: debugLog.tavilyFiltered || 0,
         tavilyNotes:    debugLog.tavilyNotes  || 0,
-        tavilyDisplayed: debugLog.tavilyDisplayed || 0,
         openAISources:  debugLog.openAISources || 0,
         // Links found by OpenAI search but NOT shown to Sonnet. Render these under a
         // heading that clearly separates them from cited sources (e.g. "Related reading"),
