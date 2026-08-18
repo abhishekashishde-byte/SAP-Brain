@@ -1,4 +1,4 @@
-name: Enable OpenAI evidence pool
+name: Fix Wani visual art direction
 
 on:
   push:
@@ -14,16 +14,97 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Apply dual-search evidence pool
+      - name: Enforce white dense customer visuals
         run: |
-          echo 'CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aApwID0gUGF0aCgiYXBpL2NoYXQuanMiKQpzID0gcC5yZWFkX3RleHQoKQoKZGVmIG9uY2Uob2xkLCBuZXcsIGxhYmVsKToKICAgIGdsb2JhbCBzCiAgICBpZiBvbGQgbm90IGluIHM6CiAgICAgICAgcmFpc2UgU3lzdGVtRXhpdChmIm1pc3NpbmcgYW5jaG9yOiB7bGFiZWx9IikKICAgIHMgPSBzLnJlcGxhY2Uob2xkLCBuZXcsIDEpCgpvbmNlKAogICAgIiAgICAgIC8vIG9wZW5BSVJlc3VsdFByb21pc2UgPSBzZWFyY2hRdWVyeVByb21pc2UudGhlbihxID0+IGNhbGxPcGVuQUlTZWFyY2gocSkpLmNhdGNoKCgpID0+IG51bGwpIiwKICAgICIgICAgICBvcGVuQUlSZXN1bHRQcm9taXNlID0gc2VhcmNoUXVlcnlQcm9taXNlLnRoZW4ocSA9PiBjYWxsT3BlbkFJU2VhcmNoKHEpKS5jYXRjaCgoKSA9PiBudWxsKSIsCiAgICAiZW5hYmxlIE9wZW5BSSBsYW5lIiwKKQoKb25jZSgKICAgICIgICAgY29uc3Qgb3BlbkFJU291cmNlc1JhdyA9IG9wZW5BSVJlc3VsdD8uc291cmNlcyB8fCBbXSIsCiAgICAiICAgIGNvbnN0IG9wZW5BSVNvdXJjZXNSYXcgPSAob3BlbkFJUmVzdWx0Py5zb3VyY2VzIHx8IFtdKS5maWx0ZXIociA9PiByPy51cmwgJiYgaXNBcHByb3ZlZFVybChyLnVybCkpIiwKICAgICJPcGVuQUkgU0FQLWRvbWFpbiBiYWNrc3RvcCIsCikKCnRhdl9lbmQgPSAiIiIgICAgY29uc3QgdGF2aWx5Q2FuZGlkYXRlcyA9IFsuLi50YXZpbHlGaWx0ZXJlZCwgLi4udGF2aWx5Tm90ZXNGaWx0ZXJlZF0uZmlsdGVyKChyLCBpLCBhcnIpID0+CiAgICAgIHI/LnVybCAmJiBhcnIuZmluZEluZGV4KHggPT4geD8udXJsID09PSByLnVybCkgPT09IGkKICAgICkiIiIKd2ViX2luc2VydCA9IHRhdl9lbmQgKyAiIiIKICAgIC8vIENvbWJpbmUgdGhlIHR3byBpbmRlcGVuZGVudGx5IHJldHJpZXZlZCB3ZWIgcG9vbHMgb25seSBhZnRlciBlYWNoIGhhcyBwYXNzZWQKICAgIC8vIHNhbWUtdG9waWMgZmlsdGVyaW5nLiBEZWR1cGUgYnkgVVJMIGFuZCByZXRhaW4gb25seSBXYW5pLWFwcHJvdmVkIFNBUCBkb21haW5zLgogICAgY29uc3Qgd2ViQ2FuZGlkYXRlcyA9IFsuLi50YXZpbHlDYW5kaWRhdGVzLCAuLi5vcGVuQUlTb3VyY2VzXQogICAgICAuZmlsdGVyKHIgPT4gcj8udXJsICYmIGlzQXBwcm92ZWRVcmwoci51cmwpKQogICAgICAuZmlsdGVyKChyLCBpLCBhcnIpID0+IGFyci5maW5kSW5kZXgoeCA9PiB4LnVybCA9PT0gci51cmwpID09PSBpKSIiIgpvbmNlKHRhdl9lbmQsIHdlYl9pbnNlcnQsICJjb21iaW5lZCB3ZWIgcG9vbCIpCgpvbmNlKCIgICAgICB0YXZpbHlSZXN1bHRzOiB0YXZpbHlDYW5kaWRhdGVzLCIsICIgICAgICB0YXZpbHlSZXN1bHRzOiB3ZWJDYW5kaWRhdGVzLCIsICJldmlkZW5jZSByb3V0ZXIgaW5wdXQiKQpvbmNlKCIgICAgY29uc3Qgc2VsZWN0ZWRUYXZpbHkgPSBhdHRhY2hTZWxlY3RlZFRhdmlseVJlc3VsdHMoZXZpZGVuY2VEZWNpc2lvbiwgdGF2aWx5Q2FuZGlkYXRlcykiLAogICAgICIgICAgY29uc3Qgc2VsZWN0ZWRUYXZpbHkgPSBhdHRhY2hTZWxlY3RlZFRhdmlseVJlc3VsdHMoZXZpZGVuY2VEZWNpc2lvbiwgd2ViQ2FuZGlkYXRlcykiLAogICAgICJldmlkZW5jZSBzZWxlY3Rpb24gcG9vbCIpCm9uY2UoIiAgICBjb25zdCByZWZlcmVuY2VTZWFyY2hSZXN1bHRzID0gdGF2aWx5Q2FuZGlkYXRlcyIsCiAgICAgIiAgICBjb25zdCByZWZlcmVuY2VTZWFyY2hSZXN1bHRzID0gd2ViQ2FuZGlkYXRlcyIsCiAgICAgIlZlcmlmaWVkIExpbmtzIGNvbWJpbmVkIHBvb2wiKQpvbmNlKCIgICAgY29uc3QgYWxsU2VhcmNoUmVzdWx0cyA9IHRhdmlseUNhbmRpZGF0ZXMiLAogICAgICIgICAgY29uc3QgYWxsU2VhcmNoUmVzdWx0cyA9IHdlYkNhbmRpZGF0ZXMiLAogICAgICJhbGwgc2VhcmNoIHJlc3VsdHMgY29tYmluZWQiKQpvbmNlKCIgICAgY29uc3QgcmVsYXRlZExpbmtzID0gb3BlbkFJU291cmNlcyIsCiAgICAgIiAgICBjb25zdCByZWxhdGVkTGlua3MgPSBbXSIsCiAgICAgImF2b2lkIGR1cGxpY2F0ZSBPcGVuQUkgcmVsYXRlZCBsaW5rcyIpCm9uY2UoIiAgICBkZWJ1Z0xvZy50YXZpbHlMaXN0ICAgICA9IHRhdmlseUNhbmRpZGF0ZXMiLAogICAgICIgICAgZGVidWdMb2cudGF2aWx5TGlzdCAgICAgPSB3ZWJDYW5kaWRhdGVzIiwKICAgICJkZWJ1ZyBjb21iaW5lZCBwb29sIikKb25jZSgiICAgICAgICBjb25zdCBzcmMgPSB0YXZpbHlDYW5kaWRhdGVzW3IuaW5kZXhdIHx8IHt9IiwKICAgICIgICAgICAgIGNvbnN0IHNyYyA9IHdlYkNhbmRpZGF0ZXNbci5pbmRleF0gfHwge30iLAogICAgICJkZWJ1ZyByYXRpbmcgc291cmNlIGFsaWdubWVudCIpCgpzID0gcy5yZXBsYWNlKCJUYXZpbHkgc2hvd24gYXMgVmVyaWZpZWQgTGlua3M6IiwgIldlYiBjYW5kaWRhdGVzIHNob3duIGFzIFZlcmlmaWVkIExpbmtzOiIsIDEpCnMgPSBzLnJlcGxhY2UoIlRhdmlseSBzZW50IHRvIFNvbm5ldDoiLCAiV2ViIGNhbmRpZGF0ZXMgc2VudCB0byBTb25uZXQ6IiwgMSkKcyA9IHMucmVwbGFjZSgiU0FQIENPTU1VTklUWSAmIEJMT0dTIChzZWxlY3RlZCBUYXZpbHkgZXZpZGVuY2Ug4oCUIFNBQCBzb3VyY2VzIG9ubHkpOiIsCiAgICAgICAgICAgICAgIlNFTEVDVEVEIFNBUCBXRUIgRVZJREVOQ0UgKFRhdmlseSArIE9wZW5BSSwgZXZpZGVuY2UtcmF0ZWQpOiIsIDEpCnMgPSBzLnJlcGxhY2UoIlNFTEVDVEVEIFdFQiBFVklERU5DRSDigJQgY2l0ZSByZWxldmFudCBvbmVzIHdpdGggVVJMIGlubGluZToiLAogICAgICAgICAgICAgICJTRUxFQ1RFRCBXRUIgRVZJREVOQ0UgKFRhdmlseSArIE9wZW5BSSkg4oCUIGNpdGUgcmVsZXZhbnQgb25lcyB3aXRoIFVSTCBpbmxpbmU6IiwgMSkKCnAud3JpdGVfdGV4dChzKQo=' | base64 -d | python3
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('api/chat.js')
+          s = p.read_text()
+
+          start = s.index("MANDATORY WANI THEME — ${theme.name.toUpperCase()}:", s.index("async function generateHandoutOnDemand"))
+          end_marker = "- DO NOT draw any Wani logo, W mark, copyright symbol, website, or footer yourself."
+          end = s.index(end_marker, start) + len(end_marker)
+          handout = """MANDATORY ART DIRECTION — WHITE ENTERPRISE HANDOUT:
+- background/canvas MUST be clean white (#FFFFFF) or an almost-white neutral (#FAFBFC). This is a HARD RULE.
+- NEVER use a full-page purple, violet, red, orange, black, charcoal, navy, gradient, cosmic, neon, or dark background.
+- body text must be dark navy / charcoal for maximum readability.
+- decorative accents may use restrained SAP-like blue, green, yellow, or small muted purple only as local highlights; NEVER as the page background.
+- cards/panels must remain white or very pale gray/blue with thin subtle borders.
+
+STYLE:
+- professional SAP training handout / management-consulting infographic / technical explainer on WHITE PAPER.
+- hand-drawn/sketchnote elements may be used sparingly for arrows or annotations, but typography must remain clean, modern and highly legible; no chalkboard aesthetic and no neon/glow effects.
+- prioritize INFORMATION ARCHITECTURE over decoration: diagrams, trees, process arrows, comparison panels, legends, callouts, purpose boxes, key-points boxes and technical identifiers should teach the answer visually.
+- NEVER turn a detailed SAP answer into a sparse poster. Preserve useful technical substance, conditions, hierarchy, gotchas, practical details and distinctions.
+- aim for 5-8 clearly separated information sections when the verified answer supports them.
+- include roughly 75-90% of the substantive information from the verified answer, shortened into visual phrases rather than deleted.
+- if the answer compares several contexts/transactions, use side-by-side columns/panels and preserve each context distinctly.
+- include practical impact, purpose, key points, important behavior/gotchas, and relevant relationships whenever present in the verified answer.
+- for a short question, enrich ONLY from the VERIFIED ANSWER; never invent additional SAP facts.
+- make the page feel like a customer-ready SAP workshop handout, not an AI poster.
+- preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths).
+- never invent, alter, or autocorrect SAP technical identifiers.
+- if the answer contains uncertainty, preserve that uncertainty.
+- leave the bottom 7-8% COMPLETELY BLANK WHITE for exact Wani branding added later.
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, or footer yourself.
+
+HARD NEGATIVE RULES:
+- no purple/red/dark full-canvas backgrounds
+- no gradients as the page background
+- no cyberpunk, cosmic, neon, glowing, chalkboard, poster, or nightclub aesthetic
+- no huge decorative title that consumes the page
+- no large empty areas caused by aggressive summarization
+- no sparse 3-box summary when the source answer contains materially more information"""
+          s = s[:start] + handout + s[end:]
+
+          brief_fn = s.index("async function generateVisualOnDemand")
+          start = s.index("MANDATORY WANI THEME — ${theme.name.toUpperCase()}:", brief_fn)
+          end_marker = "- DO NOT draw any Wani logo, W mark, copyright symbol, website, footer, signature or watermark"
+          end = s.index(end_marker, start) + len(end_marker)
+          brief = """MANDATORY ART DIRECTION — WHITE ENTERPRISE CUSTOMER BRIEF:
+- background/canvas MUST be clean white (#FFFFFF) or an almost-white neutral (#FAFBFC). This HARD RULE overrides any user/profile theme.
+- NEVER use a full-page purple, violet, red, orange, black, charcoal, navy, gradient, cosmic, neon, or dark background.
+- body text must be deep navy / charcoal on white for excellent readability.
+- use restrained SAP-like blue as the primary accent; green, yellow, and small muted purple may distinguish concepts only where useful. Never flood the page with one accent color.
+- cards/panels must be white or very pale gray/blue with thin blue-gray borders and subtle separation.
+
+STYLE:
+- premium SAP training infographic + management consulting handout + technical architecture diagram.
+- polished, formal, client-facing; NOT handwritten, NOT playful, NOT futuristic.
+- prioritize INFORMATION ARCHITECTURE over decoration. Design the answer visually rather than placing a short summary on a background.
+- use comparison columns, object trees, process diagrams, arrows, legends, callout boxes, purpose boxes, key-point boxes, relationships and concise explanatory labels when supported by the answer.
+- NEVER reduce a detailed SAP answer into a sparse poster. Preserve major distinctions, transaction contexts, mechanisms, purpose, practical impact, caveats and technical relationships.
+- aim for 5-8 clearly separated information sections when the verified answer supports them.
+- include roughly 75-90% of the substantive verified answer, shortened into visual phrases rather than deleted.
+- when the answer compares 2-4 SAP contexts, dedicate a clear column/panel to each context and retain what differs between them.
+- include a compact legend/key-takeaways area if it adds information rather than repeating text.
+- preserve SAP technical identifiers EXACTLY as supplied; never invent or autocorrect T-codes, tables, fields, app IDs, BAdIs, notes or SPRO paths.
+- if uncertainty exists in the verified answer, preserve it visibly.
+- use readable professional typography with sensible title size; the title must not consume excessive vertical space.
+- no Wani branding at the top and no slogan/website anywhere.
+- leave the bottom 7-8% COMPLETELY BLANK WHITE for exact Wani branding added later.
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, footer, signature or watermark.
+
+HARD NEGATIVE RULES:
+- no purple/red/dark full-canvas backgrounds
+- no dark gradient or colored page background of any kind
+- no cyberpunk, cosmic, neon, glowing, chalkboard or generic AI-poster styling
+- no sparse 3-panel poster when the verified answer contains substantially more useful information
+- no excessive whitespace created by deleting technical content
+- no decorative graphics that replace useful SAP information"""
+          s = s[:start] + brief + s[end:]
+
+          s = s.replace(": 'aurora'\n  return { key, ...IMAGE_THEME_PROFILES[key] }", ": 'light'\n  return { key, ...IMAGE_THEME_PROFILES[key] }", 1)
+          p.write_text(s)
+          PY
 
       - name: Verify changes
         run: |
           node --check api/chat.js
-          grep -q "openAIResultPromise = searchQueryPromise.then" api/chat.js
-          grep -q "const webCandidates" api/chat.js
-          grep -q "tavilyResults: webCandidates" api/chat.js
+          grep -q "WHITE ENTERPRISE CUSTOMER BRIEF" api/chat.js
+          grep -q "75-90%" api/chat.js
+          grep -q "no purple/red/dark full-canvas backgrounds" api/chat.js
+          grep -q ": 'light'" api/chat.js
 
       - name: Build
         run: npm ci && npm run build
@@ -33,5 +114,5 @@ jobs:
           git config user.name "wani-maintenance"
           git config user.email "wani-maintenance@users.noreply.github.com"
           git add api/chat.js
-          git commit -m "Add OpenAI to SAP evidence pool"
+          git commit -m "Make Wani visuals white and information-dense"
           git push
