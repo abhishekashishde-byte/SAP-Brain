@@ -1,0 +1,164 @@
+name: Fix Wani visual art direction
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-white-dense-visuals.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce white dense customer visuals
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path('api/chat.js')
+          s = p.read_text()
+
+          old_handout = """MANDATORY WANI THEME — ${theme.name.toUpperCase()}:
+- page/canvas: ${theme.page}
+- body text: ${theme.text}
+- marker/accent colors: ${theme.accents}
+- boxes/cards: ${theme.cards}
+- the entire visual must unmistakably belong to this theme; do not revert to a generic white-paper or default blue/purple design
+
+STYLE:
+- hand-drawn/sketchnote look on the THEMED page/canvas specified above
+- theme-matched marker headings, boxes, arrows, checkmarks and small relevant doodles; keep strong text/background contrast
+- professional SAP consultant handout, not childish
+- do NOT over-compress the answer: preserve useful technical substance, conditions, hierarchy, gotchas, and practical details
+- aim for 3-4 clearly separated sections; keep it concise and visually breathable
+- include roughly 45-60% of the substantive information from the verified answer, prioritising the mechanism, key technical facts, practical action, and one important gotcha
+- for a short question, enrich only from the VERIFIED ANSWER: include hierarchy/process, gotchas, technical fields/t-codes, and implementation notes already present
+- make the page easy to scan in about 20-30 seconds while still feeling useful to an SAP consultant
+- avoid a separate Quick Comparison / Summary Comparison table if it repeats points already shown in the main sections
+- preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths)
+- never invent, alter, or autocorrect SAP technical identifiers
+- if the answer contains uncertainty, preserve that uncertainty
+- leave the bottom 8% of the page COMPLETELY BLANK using the SAME solid footer background specified by the theme: no text, borders, icons, drawings, logo, signature, watermark, copyright, or decoration there. This area is reserved for exact branding added later by Wani.
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, or footer yourself."""
+
+          new_handout = """MANDATORY ART DIRECTION — WHITE ENTERPRISE HANDOUT:
+- background/canvas MUST be clean white (#FFFFFF) or an almost-white neutral (#FAFBFC). This is a HARD RULE.
+- NEVER use a full-page purple, violet, red, orange, black, charcoal, navy, gradient, cosmic, neon, or dark background.
+- body text must be dark navy / charcoal for maximum readability.
+- decorative accents may use restrained SAP-like blue, green, yellow, or small muted purple only as local highlights; NEVER as the page background.
+- cards/panels must remain white or very pale gray/blue with thin subtle borders.
+
+STYLE:
+- professional SAP training handout / management-consulting infographic / technical explainer on WHITE PAPER.
+- hand-drawn/sketchnote elements may be used sparingly for arrows or annotations, but typography must remain clean, modern and highly legible; no chalkboard aesthetic and no neon/glow effects.
+- prioritize INFORMATION ARCHITECTURE over decoration: diagrams, trees, process arrows, comparison panels, legends, callouts, purpose boxes, key-points boxes and technical identifiers should teach the answer visually.
+- NEVER turn a detailed SAP answer into a sparse poster. Preserve the useful technical substance, conditions, hierarchy, gotchas, practical details and distinctions.
+- aim for 5-8 clearly separated information sections when the verified answer supports them.
+- include roughly 75-90% of the substantive information from the verified answer, shortened into visual phrases rather than deleted.
+- if the answer compares several contexts/transactions, use side-by-side columns/panels and preserve each context distinctly.
+- include practical impact, purpose, key points, important behavior/gotchas, and relevant relationships whenever they are present in the verified answer.
+- for a short question, enrich ONLY from the VERIFIED ANSWER; never invent additional SAP facts.
+- make the page feel like a customer-ready SAP workshop handout, not an AI poster.
+- preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths).
+- never invent, alter, or autocorrect SAP technical identifiers.
+- if the answer contains uncertainty, preserve that uncertainty.
+- leave the bottom 7-8% COMPLETELY BLANK WHITE: no text, borders, icons, drawings, logo, signature, watermark, copyright, or decoration. This area is reserved for exact Wani branding added later.
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, or footer yourself.
+
+HARD NEGATIVE RULES:
+- no purple/red/dark full-canvas backgrounds
+- no gradients as the page background
+- no cyberpunk, cosmic, neon, glowing, chalkboard, poster, or nightclub aesthetic
+- no huge decorative title that consumes the page
+- no large empty areas caused by aggressive summarization
+- no 3-box sparse summary when the source answer contains materially more information"""
+
+          if old_handout not in s:
+              raise SystemExit('Handout prompt anchor not found')
+          s = s.replace(old_handout, new_handout, 1)
+
+          old_brief = """MANDATORY WANI THEME — ${theme.name.toUpperCase()}:
+- page/canvas: ${theme.page}
+- body text: ${theme.text}
+- accent palette: ${theme.accents}
+- cards/panels: ${theme.cards}
+- the entire brief must unmistakably belong to this theme; do not revert to a generic white/blue consulting template
+
+STYLE:
+- clean corporate consulting infographic using the THEMED page/canvas specified above
+- polished, formal, client-facing; NOT handwritten and NOT playful
+- use ONLY the theme palette above for decorative colors; semantic warning/success colors may be used sparingly when genuinely needed
+- strong title, clean section headers, professional icons, simple diagrams and compact callout boxes
+- generous whitespace and balanced top/bottom margins; do not crowd the page edges
+- use approximately 55-70% of the substantive verified answer: meaningful, but not a wall of text
+- prefer 3-4 main sections; avoid repetitive summary/comparison sections when the same point is already clear above
+- preserve the core mechanism, key distinction, practical action, and important caveats
+- preserve SAP technical identifiers EXACTLY as supplied; never invent or autocorrect T-codes, tables, fields, app IDs, BAdIs, notes or SPRO paths
+- if uncertainty exists in the verified answer, preserve it
+- no Wani branding at the top and no slogan/website anywhere
+- leave the bottom 8% COMPLETELY BLANK using the SAME solid footer background specified by the theme, for exact Wani branding added later
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, footer, signature or watermark"""
+
+          new_brief = """MANDATORY ART DIRECTION — WHITE ENTERPRISE CUSTOMER BRIEF:
+- background/canvas MUST be clean white (#FFFFFF) or an almost-white neutral (#FAFBFC). This is a HARD RULE and overrides any user/profile theme.
+- NEVER use a full-page purple, violet, red, orange, black, charcoal, navy, gradient, cosmic, neon, or dark background.
+- body text must be deep navy / charcoal on white for excellent readability.
+- use restrained SAP-like blue as the primary accent; green, yellow, and small muted purple may distinguish concepts only where useful. Never flood the page with one accent color.
+- cards/panels must be white or very pale gray/blue with thin blue-gray borders and subtle separation.
+
+STYLE:
+- premium SAP training infographic + management consulting handout + technical architecture diagram.
+- polished, formal, client-facing; NOT handwritten, NOT playful, NOT futuristic.
+- prioritize INFORMATION ARCHITECTURE over decoration. Convert the answer into a structured visual explanation rather than simply placing a short summary on a background.
+- use comparison columns, object trees, process diagrams, arrows, legends, callout boxes, purpose boxes, key-point boxes, relationships and concise explanatory labels when supported by the answer.
+- NEVER reduce a detailed SAP answer into a sparse poster. Preserve major distinctions, transaction contexts, mechanisms, purpose, practical impact, caveats and technical relationships.
+- aim for 5-8 clearly separated information sections when the verified answer supports them.
+- include roughly 75-90% of the substantive verified answer, shortened into visual phrases rather than deleted.
+- when the answer compares 2-4 SAP contexts, dedicate a clear column/panel to each context and retain what differs between them.
+- include a compact legend/key-takeaways area if it adds information rather than repeating the same text.
+- preserve SAP technical identifiers EXACTLY as supplied; never invent or autocorrect T-codes, tables, fields, app IDs, BAdIs, notes or SPRO paths.
+- if uncertainty exists in the verified answer, preserve it visibly.
+- use readable professional typography with sensible title size; the title must not consume excessive vertical space.
+- no Wani branding at the top and no slogan/website anywhere.
+- leave the bottom 7-8% COMPLETELY BLANK WHITE for exact Wani branding added later.
+- DO NOT draw any Wani logo, W mark, copyright symbol, website, footer, signature or watermark.
+
+HARD NEGATIVE RULES:
+- no purple/red/dark full-canvas backgrounds
+- no dark gradient or colored page background of any kind
+- no cyberpunk, cosmic, neon, glowing, chalkboard or generic AI-poster styling
+- no sparse 3-panel poster when the verified answer contains substantially more useful information
+- no excessive whitespace created by deleting technical content
+- no decorative graphics that replace useful SAP information"""
+
+          if old_brief not in s:
+              raise SystemExit('Customer brief prompt anchor not found')
+          s = s.replace(old_brief, new_brief, 1)
+
+          # Light becomes the safe default for any future prompt path that still resolves a theme.
+          s = s.replace(": 'aurora'\n  return { key, ...IMAGE_THEME_PROFILES[key] }", ": 'light'\n  return { key, ...IMAGE_THEME_PROFILES[key] }", 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Verify hard visual rules
+        run: |
+          grep -q "WHITE ENTERPRISE CUSTOMER BRIEF" api/chat.js
+          grep -q "75-90%" api/chat.js
+          grep -q "no purple/red/dark full-canvas backgrounds" api/chat.js
+          grep -q ": 'light'" api/chat.js
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit runtime change
+        run: |
+          git config user.name "wani-maintenance"
+          git config user.email "wani-maintenance@users.noreply.github.com"
+          git add api/chat.js
+          git commit -m "Make Wani visuals white and information-dense"
+          git push
