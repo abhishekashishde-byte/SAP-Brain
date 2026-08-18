@@ -139,7 +139,6 @@ HARD NEGATIVE RULES:
               raise SystemExit('Customer brief prompt anchor not found')
           s = s.replace(old_brief, new_brief, 1)
 
-          # Light becomes the safe default for any future prompt path that still resolves a theme.
           s = s.replace(": 'aurora'\n  return { key, ...IMAGE_THEME_PROFILES[key] }", ": 'light'\n  return { key, ...IMAGE_THEME_PROFILES[key] }", 1)
 
           p.write_text(s)
