@@ -2936,7 +2936,7 @@ export default function Brain({ session }) {
     const ctx = canvas.getContext('2d')
     ctx.drawImage(generated, 0, 0, canvas.width, canvas.height)
 
-    const brandTheme = IMAGE_THEME_UI[themeKey] || IMAGE_THEME_UI.aurora
+    const brandTheme = IMAGE_THEME_UI.light
     const footerH = Math.round(canvas.height * 0.065)
     ctx.fillStyle = brandTheme.footerBg
     ctx.fillRect(0, canvas.height - footerH, canvas.width, footerH)
