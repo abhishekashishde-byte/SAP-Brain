@@ -24,6 +24,7 @@ jobs:
           grep -q "no purple/red/dark full-canvas backgrounds" api/chat.js
           grep -q "themeKey = 'light'" api/chat.js
           grep -q ": 'light'" api/chat.js
+          grep -q "const brandTheme = IMAGE_THEME_UI.light" src/pages/Brain.jsx
       - name: Build
         run: |
           npm install --no-audit --no-fund
@@ -32,7 +33,7 @@ jobs:
         run: |
           git config user.name 'wani-maintenance'
           git config user.email 'wani-maintenance@users.noreply.github.com'
-          git add api/chat.js
+          git add api/chat.js src/pages/Brain.jsx
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Make Wani visuals white and information-dense'
           for i in 1 2 3; do git push origin HEAD:main && break || sleep 5; done
