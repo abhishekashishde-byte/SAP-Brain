@@ -1,0 +1,35 @@
+name: Restore reference fallbacks v1
+on:
+  push:
+    paths:
+      - '.github/scripts/restore_reference_fallbacks_v1.py'
+      - '.github/workflows/restore-reference-fallbacks-v1.yml'
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply reference recovery patch
+        run: python3 .github/scripts/restore_reference_fallbacks_v1.py
+      - name: Verify patch
+        run: |
+          grep -q "web_search_call.action.sources" api/_shared.js
+          grep -q "buildSapSearchFallback" api/chat.js
+          grep -q "Search SAP" src/components/visuals/AnswerContainer.jsx
+          grep -q "isSearchFallback" src/components/visuals/AnswerContainer.jsx
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit application changes
+        run: |
+          git config user.name 'wani-maintenance'
+          git config user.email 'wani-maintenance@users.noreply.github.com'
+          git add api/_shared.js api/chat.js src/components/visuals/AnswerContainer.jsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Recover missing sources and add SAP search fallback'
+          for i in 1 2 3; do git push origin HEAD:main && break || sleep 5; done
