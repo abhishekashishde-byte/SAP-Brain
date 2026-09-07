@@ -219,6 +219,7 @@ export async function callOpenAISearch(question) {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         tools: [{ type: 'web_search_preview' }],
+        include: ['web_search_call.action.sources'],
         input: `Search the web for SAP documentation, SAP Notes/KBAs, SAP Community discussions, and SAP Help pages relevant to this question. Prioritize official SAP sources (help.sap.com, me.sap.com, community.sap.com) and well-regarded SAP consulting blogs. If the question is about a specific error, SAP Note, or "does a standard tool/report exist for X" — find and cite the actual specific note numbers, transaction codes, or app IDs if they exist, don't just describe the general topic. If you can't find a specific answer, say so plainly rather than describing generalities.\n\nQuestion: ${question}`,
       }),
     })
@@ -252,7 +253,40 @@ export async function callOpenAISearch(question) {
       }
     }
 
-    console.log(`OpenAI search OK — sources: ${sources.length}, text: ${text.length}`)
+    // Responses API can expose web-search sources in more than one place.
+    // Keep the url_citation annotations above, but also request/collect the
+    // explicit web_search_call.action.sources payload. This prevents a real SAP
+    // source from disappearing merely because one response shape omitted text
+    // annotations.
+    for (const output of data.output || []) {
+      if (output.type !== 'web_search_call') continue
+      const explicitSources = output.action?.sources || output.results || []
+      for (const src of explicitSources) {
+        const url = src?.url || src?.link || ''
+        if (!url) continue
+        sources.push({
+          title: src?.title || src?.name || url,
+          url,
+          snippet: src?.snippet || src?.text || '',
+          source: url.includes('sap.com') ? 'SAP' : 'Web',
+        })
+      }
+    }
+
+    // Final recovery path: some responses contain a cited SAP URL in the output
+    // text even when structured source metadata is absent. Recover those URLs so
+    // the downstream approved-domain gate can still decide whether to expose them.
+    const inlineUrls = text.match(/https?:\/\/[^\s)\]}>"']+/g) || []
+    for (const rawUrl of inlineUrls) {
+      const url = rawUrl.replace(/[.,;:!?]+$/, '')
+      sources.push({ title: url, url, snippet: '', source: url.includes('sap.com') ? 'SAP' : 'Web' })
+    }
+
+    const uniqueSources = sources.filter((src, i, arr) =>
+      src?.url && arr.findIndex(x => x?.url === src.url) === i
+    )
+
+    console.log(`OpenAI search OK — sources: ${uniqueSources.length}, text: ${text.length}`)
     console.log('OpenAI search text:', text.slice(0, 300))
 
     if (text.length === 0) {
@@ -260,7 +294,7 @@ export async function callOpenAISearch(question) {
       return []
     }
 
-    return { text, sources: sources.slice(0, 5) }
+    return { text, sources: uniqueSources.slice(0, 5) }
 
   } catch (err) {
     console.error('OpenAI search exception:', err.message)

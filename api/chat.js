@@ -109,6 +109,19 @@ function mergeVerifiedReferences(modelReferences = [], ...retrievedGroups) {
   return out.slice(0, 3)
 }
 
+function buildSapSearchFallback(query) {
+  const clean = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 220)
+  if (!clean) return []
+  const url = `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${encodeURIComponent(clean)}`
+  return [{
+    type: 'SAP Search',
+    title: `Search SAP Community: ${clean}`,
+    url,
+    note: 'Keyword search shortcut generated from this question because Wani did not retrieve a verified page. This is a search link, not supporting evidence for the answer.',
+    isSearchFallback: true,
+  }]
+}
+
 // ── SUPABASE CLIENT ───────────────────────────────────────────────────────────
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -2924,9 +2937,12 @@ export default async function handler(req, res) {
     // ── STEP 14: Send done ────────────────────────────────────────────────
     // Do not make public links depend on Sonnet remembering to populate its hidden
     // references JSON. If Wani found approved SAP pages, merge those real URLs in.
-    const finalVerifiedReferences = usedContainerFormat
+    const mergedVerifiedReferences = usedContainerFormat
       ? mergeVerifiedReferences(containerResult.references, referenceSearchResults, relatedLinks)
       : []
+    const finalVerifiedReferences = usedContainerFormat && mergedVerifiedReferences.length === 0
+      ? buildSapSearchFallback(searchQuery || lastMsg)
+      : mergedVerifiedReferences
 
     const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION','GENERAL_DOC'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'
@@ -3056,7 +3072,9 @@ export default async function handler(req, res) {
       usedContainerFormat ? `Container format used: true (parseOk: ${containerResult.parseOk})` : 'Container format used: false (short-answer/greeting path)',
       usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as the answer, quick_answer/references/follow_ups all empty for this answer' : null,
       usedContainerFormat ? `Quick answer: ${containerResult.quickAnswer ? containerResult.quickAnswer.slice(0, 200) : '(none)'}` : null,
-      usedContainerFormat ? `References: ${containerResult.references.length}` : null,
+      usedContainerFormat ? `References returned by Sonnet: ${containerResult.references.length}` : null,
+      usedContainerFormat ? `Final public links: ${finalVerifiedReferences.length}` : null,
+      usedContainerFormat ? `Fallback SAP search link used: ${finalVerifiedReferences.some(r => r.isSearchFallback)}` : null,
       usedContainerFormat ? `Follow-ups: ${containerResult.followUps.length}` : null,
       'Visual: no longer generated automatically — only on request via the "View as visual" button (see api "generate_visual" action).',
       '',

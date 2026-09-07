@@ -51,7 +51,9 @@ export default function AnswerContainer({
   quickAnswer, references, detailedExplanation, followUps, renderMarkdown,
 }) {
   const { dark } = useTheme()
-  const refsPresent = Array.isArray(references) && references.length > 0
+  const refs = Array.isArray(references) ? references : []
+  const verifiedRefs = refs.filter(r => !r?.isSearchFallback)
+  const searchRefs = refs.filter(r => r?.isSearchFallback)
   const followUpsPresent = Array.isArray(followUps) && followUps.length > 0
 
   return (
@@ -60,12 +62,21 @@ export default function AnswerContainer({
 
       {renderMarkdown(detailedExplanation || '')}
 
-      {refsPresent && (
+      {verifiedRefs.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: dark ? '#94A3B8' : '#666', textTransform: 'uppercase', marginBottom: 8 }}>
             Verified links
           </div>
-          <ReferencesList refs={references} dark={dark} />
+          <ReferencesList refs={verifiedRefs} dark={dark} />
+        </div>
+      )}
+
+      {searchRefs.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: dark ? '#94A3B8' : '#666', textTransform: 'uppercase', marginBottom: 8 }}>
+            Search SAP
+          </div>
+          <ReferencesList refs={searchRefs} dark={dark} />
         </div>
       )}
 
