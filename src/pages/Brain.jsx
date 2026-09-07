@@ -2146,7 +2146,10 @@ export default function Brain({ session }) {
   const findingKey = (f) => `${f.module || ''}|${f.topic || ''}|${f.object || ''}|${(f.finding || '').slice(0, 80)}`
 
   const checkForFindings = async (msgs) => {
-    if (msgs.length < 4) return
+    // A complete first Q&A already has two messages and can establish a valuable
+    // consultant insight. Waiting for four messages made the automatic save-understanding
+    // popup appear to be broken in short but meaningful conversations.
+    if (msgs.length < 2) return
     try {
       const res = await chatFetch({ action: 'suggest_finding', messages: msgs.slice(-10), module: activeConv?.module || browseModule })
       const data = await res.json()
