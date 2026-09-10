@@ -2609,10 +2609,18 @@ export default function Brain({ session }) {
               if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
               if (evt.sourceInfo) localSourceInfo = evt.sourceInfo
               if (evt.debugDoc)    localDebugDoc   = evt.debugDoc
+
+              // Terminal-event recovery is the source of truth for public links.
+              // `further_reading` remains useful for streaming, but links must survive
+              // even if that earlier SSE event is coalesced/dropped by a proxy.
+              localReferences = Array.isArray(evt.references) ? evt.references : []
+              if (furtherReadingLinks.length === 0 && localReferences.length > 0) {
+                furtherReadingLinks = localReferences
+              }
+
               if (evt.containerMode) {
                 localContainerMode = true
                 localQuickAnswer = evt.quickAnswer || null
-                localReferences = evt.references || []
                 localFollowUps = evt.followUps || []
               }
               if (isMine(convId)) setIsPreparingAnswer(false)

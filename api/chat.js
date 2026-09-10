@@ -3132,10 +3132,13 @@ export default async function handler(req, res) {
       isUnlimited: UNLIMITED_EMAILS.includes(userEmail || ''),
       ...(fsComplete  ? { fsComplete:  true, fsText:  cleanAnswer    } : {}),
       ...(pptComplete ? { pptComplete: true, pptText: cleanPPTAnswer } : {}),
+      // Always carry the final public references in the terminal event.
+      // The UI must not rely on an earlier transient `further_reading` SSE event;
+      // network/proxy chunking can make that event easy to lose while `done` still arrives.
+      references: finalVerifiedReferences,
       ...(usedContainerFormat ? {
         containerMode: true,
         quickAnswer: containerResult.quickAnswer || null,
-        references: finalVerifiedReferences,
         followUps: containerResult.followUps || [],
       } : { containerMode: false }),
       debugDoc,
