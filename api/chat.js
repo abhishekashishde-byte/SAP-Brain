@@ -2851,12 +2851,19 @@ export default async function handler(req, res) {
     debugLog.finalAnswer = chatAnswer
 
     // ── STEP 11: Send search links ────────────────────────────────────────
-    if (referenceSearchResults.length > 0) {
-      send({ type: 'search_results', results: referenceSearchResults })
+    // Link delivery must NOT depend on container-mode. CUSTOMIZING and other
+    // substantive SAP answer types can use the classic answer path, and previously
+    // that meant the user saw no links even when Wani had a useful fallback.
+    const isSubstantialAnswer = /\b(T-code|SPRO|table|BAdI|BAPI|transaction|configuration|SAP|S\/4HANA|ABAP|Fiori|order|material|routing|BOM|settlement|movement|notification|equipment|work center|capacity|CM25)\b/i.test(fullAnswer || '')
+    const publicSearchResults = referenceSearchResults.length > 0
+      ? referenceSearchResults
+      : (isSubstantialAnswer ? buildSapSearchFallback(searchQuery || lastMsg) : [])
+
+    if (publicSearchResults.length > 0) {
+      send({ type: 'search_results', results: publicSearchResults })
     }
 
-    const isSubstantialAnswer = /\b(T-code|SPRO|table|BAdI|BAPI|transaction|configuration|SAP|S\/4HANA|ABAP|Fiori|order|material|routing|BOM|settlement|movement|notification|equipment)\b/i.test(fullAnswer || '')
-    const allFurtherReading = isSubstantialAnswer ? referenceSearchResults.slice(0, 2) : []
+    const allFurtherReading = isSubstantialAnswer ? publicSearchResults.slice(0, 2) : []
     if (allFurtherReading.length > 0) {
       send({ type: 'further_reading', links: allFurtherReading })
     }
@@ -2940,9 +2947,9 @@ export default async function handler(req, res) {
     const mergedVerifiedReferences = usedContainerFormat
       ? mergeVerifiedReferences(containerResult.references, referenceSearchResults, relatedLinks)
       : []
-    const finalVerifiedReferences = usedContainerFormat && mergedVerifiedReferences.length === 0
-      ? buildSapSearchFallback(searchQuery || lastMsg)
-      : mergedVerifiedReferences
+    const finalVerifiedReferences = usedContainerFormat
+      ? (mergedVerifiedReferences.length === 0 ? buildSapSearchFallback(searchQuery || lastMsg) : mergedVerifiedReferences)
+      : publicSearchResults
 
     const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION','GENERAL_DOC'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'
@@ -3073,8 +3080,9 @@ export default async function handler(req, res) {
       usedContainerFormat && !containerResult.parseOk ? '⚠ Container JSON parse FAILED — raw text was used as the answer, quick_answer/references/follow_ups all empty for this answer' : null,
       usedContainerFormat ? `Quick answer: ${containerResult.quickAnswer ? containerResult.quickAnswer.slice(0, 200) : '(none)'}` : null,
       usedContainerFormat ? `References returned by Sonnet: ${containerResult.references.length}` : null,
-      usedContainerFormat ? `Final public links: ${finalVerifiedReferences.length}` : null,
-      usedContainerFormat ? `Fallback SAP search link used: ${finalVerifiedReferences.some(r => r.isSearchFallback)}` : null,
+      `Final public links: ${finalVerifiedReferences.length}`,
+      `Fallback SAP search link used: ${finalVerifiedReferences.some(r => r.isSearchFallback)}`,
+      `Link delivery path: ${usedContainerFormat ? 'container + SSE' : 'classic SSE'}`,
       usedContainerFormat ? `Follow-ups: ${containerResult.followUps.length}` : null,
       'Visual: no longer generated automatically — only on request via the "View as visual" button (see api "generate_visual" action).',
       '',
