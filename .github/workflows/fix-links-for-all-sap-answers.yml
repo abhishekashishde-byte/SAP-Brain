@@ -1,0 +1,51 @@
+name: Fix links for all SAP answers
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-links-for-all-sap-answers.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch link delivery for non-container SAP answers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('api/chat.js')
+          s = p.read_text()
+
+          old = """    // ── STEP 11: Send search links ────────────────────────────────────────\n    if (referenceSearchResults.length > 0) {\n      send({ type: 'search_results', results: referenceSearchResults })\n    }\n\n    const isSubstantialAnswer = /\\b(T-code|SPRO|table|BAdI|BAPI|transaction|configuration|SAP|S\\/4HANA|ABAP|Fiori|order|material|routing|BOM|settlement|movement|notification|equipment)\\b/i.test(fullAnswer || '')\n    const allFurtherReading = isSubstantialAnswer ? referenceSearchResults.slice(0, 2) : []\n    if (allFurtherReading.length > 0) {\n      send({ type: 'further_reading', links: allFurtherReading })\n    }\n"""
+
+          new = """    // ── STEP 11: Send search links ────────────────────────────────────────\n    // Link delivery must NOT depend on container-mode. CUSTOMIZING and other\n    // substantive SAP answer types can use the classic answer path, and previously\n    // that meant the user saw no links even when Wani had a useful fallback.\n    const isSubstantialAnswer = /\\b(T-code|SPRO|table|BAdI|BAPI|transaction|configuration|SAP|S\\/4HANA|ABAP|Fiori|order|material|routing|BOM|settlement|movement|notification|equipment|work center|capacity|CM25)\\b/i.test(fullAnswer || '')\n    const publicSearchResults = referenceSearchResults.length > 0\n      ? referenceSearchResults\n      : (isSubstantialAnswer ? buildSapSearchFallback(searchQuery || lastMsg) : [])\n\n    if (publicSearchResults.length > 0) {\n      send({ type: 'search_results', results: publicSearchResults })\n    }\n\n    const allFurtherReading = isSubstantialAnswer ? publicSearchResults.slice(0, 2) : []\n    if (allFurtherReading.length > 0) {\n      send({ type: 'further_reading', links: allFurtherReading })\n    }\n"""
+
+          if old not in s:
+              raise SystemExit('STEP 11 anchor not found')
+          s = s.replace(old, new, 1)
+
+          old2 = """    const mergedVerifiedReferences = usedContainerFormat\n      ? mergeVerifiedReferences(containerResult.references, referenceSearchResults, relatedLinks)\n      : []\n    const finalVerifiedReferences = usedContainerFormat && mergedVerifiedReferences.length === 0\n      ? buildSapSearchFallback(searchQuery || lastMsg)\n      : mergedVerifiedReferences\n"""
+          new2 = """    const mergedVerifiedReferences = usedContainerFormat\n      ? mergeVerifiedReferences(containerResult.references, referenceSearchResults, relatedLinks)\n      : []\n    const finalVerifiedReferences = usedContainerFormat\n      ? (mergedVerifiedReferences.length === 0 ? buildSapSearchFallback(searchQuery || lastMsg) : mergedVerifiedReferences)\n      : publicSearchResults\n"""
+          if old2 not in s:
+              raise SystemExit('STEP 14 anchor not found')
+          s = s.replace(old2, new2, 1)
+
+          old3 = """      usedContainerFormat ? `Final public links: ${finalVerifiedReferences.length}` : null,\n      usedContainerFormat ? `Fallback SAP search link used: ${finalVerifiedReferences.some(r => r.isSearchFallback)}` : null,\n"""
+          new3 = """      `Final public links: ${finalVerifiedReferences.length}`,\n      `Fallback SAP search link used: ${finalVerifiedReferences.some(r => r.isSearchFallback)}`,\n      `Link delivery path: ${usedContainerFormat ? 'container + SSE' : 'classic SSE'}`,\n"""
+          if old3 in s:
+              s = s.replace(old3, new3, 1)
+
+          p.write_text(s)
+          PY
+      - name: Syntax check
+        run: node --check api/chat.js && node --check api/_shared.js
+      - name: Build
+        run: npm ci && npm run build
+      - name: Commit application changes
+        run: |
+          git config user.name "wani-maintenance"
+          git config user.email "wani-maintenance@users.noreply.github.com"
+          git add api/chat.js
+          git commit -m "Show SAP links for all substantive answer paths"
+          git push
