@@ -96,6 +96,33 @@ async function verifyActiveWaniSession(serviceClient, userId, sessionId) {
   return { ok: true }
 }
 
+export async function requireAuthenticatedUser(req) {
+  const token = getBearerToken(req)
+  if (!token) return { ok: false, status: 401, error: 'Authentication required' }
+
+  try {
+    const { url, anonKey, serviceKey } = getConfig()
+    const authClient = createClient(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
+    const { data, error } = await authClient.auth.getUser(token)
+    const user = data?.user
+    if (error || !user?.id || !user?.email) {
+      return { ok: false, status: 401, error: 'Invalid or expired session' }
+    }
+    const sessionId = getJwtSessionId(token)
+    if (!sessionId) return { ok: false, status: 401, error: 'Session identifier is missing' }
+    const serviceClient = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    return { ok: true, user, token, sessionId, serviceClient }
+  } catch (error) {
+    console.error('[auth] identity guard failed:', error.message)
+    return { ok: false, status: 503, error: 'Authentication service unavailable' }
+  }
+}
+
 export async function requireApprovedUser(req) {
   const token = getBearerToken(req)
   if (!token) {

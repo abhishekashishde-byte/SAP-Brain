@@ -144,13 +144,22 @@ function SignUpForm({ onSwitch }) {
     if (password.length < 6) return setError('Password must be at least 6 characters.')
     if (password !== confirm) return setError('Passwords do not match.')
     setLoading(true); setError('')
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(), password,
       options: { data: { name: name.trim() } }
     })
     setLoading(false)
     if (error) setError(error.message)
-    else setSuccess('Account created! Check your email to confirm, then sign in.')
+    else {
+      setSuccess('Account created! Your Wani access request is now pending approval. Check your email to confirm your address.')
+      if (data?.user?.id) {
+        fetch('/api/recall', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'notify_signup', userId: data.user.id }),
+        }).catch(() => {})
+      }
+    }
   }
 
   return (

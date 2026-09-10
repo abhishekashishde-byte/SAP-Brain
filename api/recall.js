@@ -2,8 +2,10 @@
 // Authentication and account approval are enforced server-side. User identity
 // and administrator status always come from the verified Supabase session.
 
-import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import { createClient } from '@supabase/supabase-js'
+import { requireApprovedUser, requireAuthenticatedUser, requireJsonBody, sendAuthError } from './_auth.js'
 import { handleAdminDashboard } from '../lib/adminDashboard.js'
+import { notifySignup, notifyLogin, notifyApprovalToUser, emailNotificationsConfigured } from '../lib/emailNotifications.js'
 
 const MAX_TEXT = 12_000
 
@@ -11,10 +13,15 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!requireJsonBody(req, res, 40_000)) return
 
+  const action = typeof req.body.action === 'string' ? req.body.action : 'recall'
+
+  // These happen before approval. Signup resolves to a real Supabase Auth user;
+  // login requires a valid Supabase JWT. Neither grants access to Wani.
+  if (action === 'notify_signup') return await handleSignupNotification(req, res)
+  if (action === 'notify_login') return await handleLoginNotification(req, res)
+
   const auth = await requireApprovedUser(req)
   if (!auth.ok) return sendAuthError(res, auth)
-
-  const action = typeof req.body.action === 'string' ? req.body.action : 'recall'
   const adminEmails = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2]
     .filter(Boolean)
     .map(email => email.trim().toLowerCase())
@@ -24,6 +31,17 @@ export default async function handler(req, res) {
     if (action === 'admin_dashboard') {
       if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
       return await handleAdminDashboard(res, auth)
+    }
+
+    if (action === 'admin_approve_user') {
+      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      return await handleAdminApproveUsers(req, res, auth, [req.body.userId])
+    }
+
+    if (action === 'admin_approve_users') {
+      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      const ids = Array.isArray(req.body.userIds) ? req.body.userIds.slice(0, 50) : []
+      return await handleAdminApproveUsers(req, res, auth, ids)
     }
 
     if (action === 'knowledge_snapshot') {
@@ -63,6 +81,83 @@ export default async function handler(req, res) {
     console.error(`[recall] ${action} error:`, error.message)
     return res.status(500).json({ error: safeError(error) })
   }
+}
+
+function serviceClientForAuthEvents() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+  if (!url || !key) return null
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+}
+
+async function handleSignupNotification(req, res) {
+  const userId = parseUuid(req.body.userId)
+  if (!userId) return res.status(400).json({ error: 'Invalid user' })
+  const client = serviceClientForAuthEvents()
+  if (!client) return res.status(503).json({ error: 'Notification service unavailable' })
+  const { data, error } = await client.auth.admin.getUserById(userId)
+  if (error || !data?.user?.email) return res.status(404).json({ error: 'User not found' })
+  const notification = await notifySignup(client, data.user)
+  return res.status(200).json({ ok: true, notification, emailConfigured: emailNotificationsConfigured() })
+}
+
+async function handleLoginNotification(req, res) {
+  const identity = await requireAuthenticatedUser(req)
+  if (!identity.ok) return sendAuthError(res, identity)
+
+  const loginNotification = await notifyLogin(identity.serviceClient, identity.user, identity.sessionId)
+
+  // Google OAuth creates the user and signs in in one step. If still unapproved,
+  // make sure the signup/approval notification is generated too.
+  const email = String(identity.user.email || '').trim().toLowerCase()
+  const { data: approval } = await identity.serviceClient
+    .from('approved_emails').select('email').eq('email', email).maybeSingle()
+  const signupNotification = approval ? null : await notifySignup(identity.serviceClient, identity.user)
+
+  return res.status(200).json({
+    ok: true,
+    loginNotification,
+    signupNotification,
+    emailConfigured: emailNotificationsConfigured(),
+  })
+}
+
+async function handleAdminApproveUsers(req, res, auth, rawIds) {
+  const ids = [...new Set((rawIds || []).map(parseUuid).filter(Boolean))]
+  if (ids.length === 0) return res.status(400).json({ error: 'No valid users selected' })
+
+  const approved = []
+  const failed = []
+  for (const id of ids) {
+    const { data, error } = await auth.serviceClient.auth.admin.getUserById(id)
+    const user = data?.user
+    if (error || !user?.email) {
+      failed.push({ id, error: 'User not found' })
+      continue
+    }
+
+    const email = String(user.email).trim().toLowerCase()
+    const fullName = user.user_metadata?.full_name || user.user_metadata?.name || email.split('@')[0]
+    const { error: approveError } = await auth.serviceClient.from('approved_emails').upsert({
+      email,
+      full_name: fullName,
+      approved_at: new Date().toISOString(),
+    }, { onConflict: 'email' })
+
+    if (approveError) {
+      failed.push({ id, error: approveError.message })
+      continue
+    }
+
+    approved.push({ id, email })
+    await notifyApprovalToUser(auth.serviceClient, user)
+  }
+
+  return res.status(failed.length && !approved.length ? 500 : 200).json({
+    approved,
+    failed,
+    emailConfigured: emailNotificationsConfigured(),
+  })
 }
 
 async function handleKnowledgeSnapshot(res, auth) {

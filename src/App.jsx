@@ -8,6 +8,16 @@ import AdminDashboard from './pages/AdminDashboard.jsx'
 export const ThemeContext = createContext({ dark: false, toggle: () => {} })
 export const useTheme = () => useContext(ThemeContext)
 
+function jwtSessionId(token) {
+  try {
+    const payload = token?.split('.')?.[1]
+    if (!payload) return null
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')))
+    return decoded?.session_id || null
+  } catch { return null }
+}
+
 function PendingApproval({ dark, email, onSignOut }) {
   return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: dark ? '#0A0A12' : '#FAFAF8', padding: 24 }}>
@@ -47,6 +57,30 @@ export default function App() {
   const sessionUserId = session?.user?.id || null
   const sessionEmail = session?.user?.email?.trim().toLowerCase() || ''
 
+  // Notify once per real Supabase session. TOKEN_REFRESHED keeps the same
+  // session_id, so background refreshes do not generate duplicate login emails.
+  useEffect(() => {
+    if (!session?.access_token || !sessionUserId) return
+    const sid = jwtSessionId(session.access_token)
+    if (!sid) return
+    const key = `wani-login-notified:${sid}`
+    try { if (localStorage.getItem(key) === '1') return } catch {}
+
+    fetch('/api/recall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action: 'notify_login' }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('login notification failed')))
+      .then(result => {
+        const n = result?.loginNotification
+        if (n?.sent || n?.skipped === 'duplicate') {
+          try { localStorage.setItem(key, '1') } catch {}
+        }
+      })
+      .catch(() => {})
+  }, [sessionUserId, session?.access_token])
+
   useEffect(() => {
     if (!sessionEmail) {
       setApproved(null)
@@ -74,6 +108,16 @@ export default function App() {
         setApproved(Boolean(data))
       })
   }, [sessionUserId, sessionEmail])
+
+  // Pending users re-check approval while the page is open, so they do not need
+  // to keep signing out/in after the administrator approves them.
+  useEffect(() => {
+    if (!sessionEmail || approved !== false) return
+    const check = () => supabase.from('approved_emails').select('email').eq('email', sessionEmail).maybeSingle()
+      .then(({ data }) => { if (data) setApproved(true) }).catch(() => {})
+    const id = setInterval(check, 15000)
+    return () => clearInterval(id)
+  }, [sessionEmail, approved])
 
   // Ask the server whether this verified user is an administrator. Do NOT load
   // the full admin dashboard just to answer this boolean; that made the Admin control
@@ -103,6 +147,12 @@ export default function App() {
     return () => { cancelled = true }
   }, [sessionUserId, approved])
 
+  useEffect(() => {
+    if (!adminAvailable) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('admin') === 'users') setAdminView(true)
+  }, [adminAvailable])
+
   const handleSignOut = async () => {
     await signOut()
     setApproved(null)
@@ -127,7 +177,7 @@ export default function App() {
         ? <Login/>
         : approved
           ? adminView
-            ? <AdminDashboard onClose={() => setAdminView(false)} />
+            ? <AdminDashboard session={session} onClose={() => setAdminView(false)} />
             : <>
                 <Brain session={session}/>
                 {adminAvailable && (

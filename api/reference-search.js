@@ -12,6 +12,7 @@ import {
   getWaniCreditUsage,
   shouldConsumeCredit,
 } from './_quota.js'
+import { notifyQuotaReached } from '../lib/emailNotifications.js'
 
 function getAdminEmails() {
   return [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2]
@@ -259,7 +260,12 @@ export default async function handler(req, res) {
       return sendQuotaStream(res, null, true)
     }
 
-    if (!quota.allowed) return sendQuotaStream(res, quota)
+    if (!quota.allowed) {
+      await notifyQuotaReached(auth.serviceClient, auth.user, quota).catch(error => {
+        console.error('[email] quota notification failed:', error.message)
+      })
+      return sendQuotaStream(res, quota)
+    }
   }
 
   return chatHandler(req, isAdmin ? res : createSanitizingResponse(res, quota))

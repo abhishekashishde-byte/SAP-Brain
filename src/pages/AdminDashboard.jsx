@@ -29,18 +29,24 @@ function Metric({ label, value, hint }) {
   )
 }
 
-export default function AdminDashboard({ onClose }) {
+export default function AdminDashboard({ onClose, session }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('pending') || '')
+  const [approving, setApproving] = useState(null)
+
+  const authHeaders = () => ({
+    'Content-Type': 'application/json',
+    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+  })
 
   const load = async () => {
     setLoading(true); setError('')
     try {
       const res = await fetch('/api/recall', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ action: 'admin_dashboard' }),
       })
       const body = await res.json().catch(() => ({}))
@@ -57,13 +63,32 @@ export default function AdminDashboard({ onClose }) {
     load()
     const id = setInterval(load, 60_000)
     return () => clearInterval(id)
-  }, [])
+  }, [session?.access_token])
+
+  const approveUser = async (user) => {
+    if (!user?.id || approving) return
+    setApproving(user.id); setError('')
+    try {
+      const res = await fetch('/api/recall', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ action: 'admin_approve_user', userId: user.id }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error || body.failed?.[0]?.error || 'Could not approve user')
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setApproving(null)
+    }
+  }
 
   const users = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return data?.users || []
     return (data?.users || []).filter(u =>
-      u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+      u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.id?.toLowerCase().includes(q)
     )
   }, [data, query])
 
@@ -90,6 +115,7 @@ export default function AdminDashboard({ onClose }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
               <Metric label="Total users" value={data.summary.totalUsers} />
               <Metric label="Approved" value={data.summary.approvedUsers} />
+              <Metric label="Pending approval" value={data.summary.pendingUsers || 0} />
               <Metric label="Online now" value={data.summary.onlineNow} hint="Activity in last 90 seconds" />
               <Metric label="Active today" value={data.summary.activeToday} />
               <Metric label="Questions today" value={data.summary.questionsToday} hint="Metered non-admin questions" />
@@ -114,7 +140,7 @@ export default function AdminDashboard({ onClose }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
                   <thead>
                     <tr style={{ background: '#171522' }}>
-                      {['User','Status','Last online','Today','Month','Customer briefs','Consultant notes','Images','Credits left','Joined'].map(h => (
+                      {['User','Access status','Last online','Today','Month','Customer briefs','Consultant notes','Images','Credits left','Joined','Action'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, textTransform: 'uppercase', letterSpacing: .6, color: '#8A849E', borderBottom: '1px solid #2A2736' }}>{h}</th>
                       ))}
                     </tr>
@@ -125,11 +151,15 @@ export default function AdminDashboard({ onClose }) {
                         <td style={{ padding: '13px 14px' }}>
                           <div style={{ fontSize: 13, fontWeight: 650 }}>{u.name}</div>
                           <div style={{ fontSize: 11, color: '#77718B', marginTop: 2 }}>{u.email}</div>
+                          <div style={{ fontSize: 9, color: '#555064', marginTop: 2 }}>{u.id}</div>
                         </td>
                         <td style={{ padding: '13px 14px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: u.online ? '#22C55E' : '#4B5563', boxShadow: u.online ? '0 0 0 3px rgba(34,197,94,.12)' : 'none' }}/>
-                            {u.online ? 'Online' : (u.approved ? 'Approved' : 'Pending')}
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: u.approved ? '#22C55E' : '#F59E0B', boxShadow: u.online ? '0 0 0 3px rgba(34,197,94,.12)' : 'none' }}/>
+                            <div>
+                              <div style={{ color: u.approved ? '#86EFAC' : '#FCD34D', fontWeight: 650 }}>{u.approved ? 'Approved' : 'Pending approval'}</div>
+                              <div style={{ color:'#77718B', fontSize:10, marginTop:2 }}>{u.emailConfirmed ? 'Email confirmed' : 'Email not confirmed'} · {u.provider || 'email'}{u.online ? ' · Online' : ''}</div>
+                            </div>
                           </div>
                         </td>
                         <td style={{ padding: '13px 14px', fontSize: 12 }} title={u.lastOnlineAt ? new Date(u.lastOnlineAt).toLocaleString() : ''}>
@@ -146,10 +176,15 @@ export default function AdminDashboard({ onClose }) {
                         <td style={{ padding: '13px 14px', fontSize: 12, color: '#A9A4BA' }}>
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
                         </td>
+                        <td style={{ padding: '13px 14px' }}>
+                          {u.approved
+                            ? <span style={{ color:'#6B7280', fontSize:11 }}>Approved</span>
+                            : <button onClick={() => approveUser(u)} disabled={approving === u.id} style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #4F46E5', background:'#4F46E5', color:'#fff', cursor:approving === u.id ? 'wait' : 'pointer', fontWeight:650, fontSize:11, opacity:approving === u.id ? .65 : 1 }}>{approving === u.id ? 'Approving…' : 'Approve'}</button>}
+                        </td>
                       </tr>
                     ))}
                     {users.length === 0 && (
-                      <tr><td colSpan="10" style={{ padding: 24, textAlign: 'center', color: '#77718B' }}>No users found.</td></tr>
+                      <tr><td colSpan="11" style={{ padding: 24, textAlign: 'center', color: '#77718B' }}>No users found.</td></tr>
                     )}
                   </tbody>
                 </table>
