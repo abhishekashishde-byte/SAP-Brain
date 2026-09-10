@@ -1,0 +1,48 @@
+name: Make links end-to-end durable
+on:
+  push:
+    paths:
+      - '.github/workflows/make-links-end-to-end-durable.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make references durable in final SSE event and UI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Backend: ALWAYS include final public references in the terminal done event.
+          p = Path('api/chat.js')
+          s = p.read_text()
+          old = """      ...(usedContainerFormat ? {\n        containerMode: true,\n        quickAnswer: containerResult.quickAnswer || null,\n        references: finalVerifiedReferences,\n        followUps: containerResult.followUps || [],\n      } : { containerMode: false }),\n      debugDoc,\n"""
+          new = """      // Always carry the final public references in the terminal event.\n      // The UI must not rely on an earlier transient `further_reading` SSE event;\n      // network/proxy chunking can make that event easy to lose while `done` still arrives.\n      references: finalVerifiedReferences,\n      ...(usedContainerFormat ? {\n        containerMode: true,\n        quickAnswer: containerResult.quickAnswer || null,\n        followUps: containerResult.followUps || [],\n      } : { containerMode: false }),\n      debugDoc,\n"""
+          if old not in s:
+              raise SystemExit('Backend done-event anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # Frontend: recover/display links from terminal event for EVERY answer path.
+          p = Path('src/pages/Brain.jsx')
+          s = p.read_text()
+          old = """              if (evt.sourceInfo) localSourceInfo = evt.sourceInfo\n              if (evt.debugDoc)    localDebugDoc   = evt.debugDoc\n              if (evt.containerMode) {\n                localContainerMode = true\n                localQuickAnswer = evt.quickAnswer || null\n                localReferences = evt.references || []\n                localFollowUps = evt.followUps || []\n              }\n"""
+          new = """              if (evt.sourceInfo) localSourceInfo = evt.sourceInfo\n              if (evt.debugDoc)    localDebugDoc   = evt.debugDoc\n\n              // Terminal-event recovery is the source of truth for public links.\n              // `further_reading` remains useful for streaming, but links must survive\n              // even if that earlier SSE event is coalesced/dropped by a proxy.\n              localReferences = Array.isArray(evt.references) ? evt.references : []\n              if (furtherReadingLinks.length === 0 && localReferences.length > 0) {\n                furtherReadingLinks = localReferences\n              }\n\n              if (evt.containerMode) {\n                localContainerMode = true\n                localQuickAnswer = evt.quickAnswer || null\n                localFollowUps = evt.followUps || []\n              }\n"""
+          if old not in s:
+              raise SystemExit('Frontend done-event anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Syntax check
+        run: node --check api/chat.js && node --check api/_shared.js
+      - name: Build
+        run: npm ci && npm run build
+      - name: Commit application changes
+        run: |
+          git config user.name "wani-maintenance"
+          git config user.email "wani-maintenance@users.noreply.github.com"
+          git add api/chat.js src/pages/Brain.jsx
+          git commit -m "Make SAP links survive to the rendered answer"
+          git push
