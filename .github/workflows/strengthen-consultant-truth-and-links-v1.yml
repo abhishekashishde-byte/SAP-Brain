@@ -1,5 +1,6 @@
 name: Strengthen Wani consultant truth and links
 
+# v2: rerun after fixing literal JavaScript regex replacement handling
 on:
   push:
     paths:
