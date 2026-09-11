@@ -90,6 +90,26 @@ function serviceClientForAuthEvents() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
 }
 
+function decodeGeoHeader(value) {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (!raw) return ''
+  try { return decodeURIComponent(String(raw)) } catch { return String(raw) }
+}
+
+function requestLocation(req) {
+  const city = decodeGeoHeader(req.headers?.['x-vercel-ip-city'])
+  const region = decodeGeoHeader(req.headers?.['x-vercel-ip-country-region'])
+  const countryCode = decodeGeoHeader(req.headers?.['x-vercel-ip-country']).toUpperCase()
+  let country = countryCode
+  if (countryCode) {
+    try {
+      country = new Intl.DisplayNames(['en'], { type: 'region' }).of(countryCode) || countryCode
+    } catch {}
+  }
+  const display = [city, region, country].filter(Boolean).join(', ')
+  return { display: display || 'Unavailable' }
+}
+
 async function handleSignupNotification(req, res) {
   const userId = parseUuid(req.body.userId)
   if (!userId) return res.status(400).json({ error: 'Invalid user' })
@@ -97,7 +117,7 @@ async function handleSignupNotification(req, res) {
   if (!client) return res.status(503).json({ error: 'Notification service unavailable' })
   const { data, error } = await client.auth.admin.getUserById(userId)
   if (error || !data?.user?.email) return res.status(404).json({ error: 'User not found' })
-  const notification = await notifySignup(client, data.user)
+  const notification = await notifySignup(client, data.user, requestLocation(req))
   return res.status(200).json({ ok: true, notification, emailConfigured: emailNotificationsConfigured() })
 }
 
@@ -105,14 +125,15 @@ async function handleLoginNotification(req, res) {
   const identity = await requireAuthenticatedUser(req)
   if (!identity.ok) return sendAuthError(res, identity)
 
-  const loginNotification = await notifyLogin(identity.serviceClient, identity.user, identity.sessionId)
+  const location = requestLocation(req)
+  const loginNotification = await notifyLogin(identity.serviceClient, identity.user, identity.sessionId, location)
 
   // Google OAuth creates the user and signs in in one step. If still unapproved,
   // make sure the signup/approval notification is generated too.
   const email = String(identity.user.email || '').trim().toLowerCase()
   const { data: approval } = await identity.serviceClient
     .from('approved_emails').select('email').eq('email', email).maybeSingle()
-  const signupNotification = approval ? null : await notifySignup(identity.serviceClient, identity.user)
+  const signupNotification = approval ? null : await notifySignup(identity.serviceClient, identity.user, location)
 
   return res.status(200).json({
     ok: true,
