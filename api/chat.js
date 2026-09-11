@@ -82,24 +82,26 @@ function referenceTypeFromSource(source = '', url = '') {
   return 'SAP'
 }
 
-function mergeVerifiedReferences(modelReferences = [], ...retrievedGroups) {
+function mergeVerifiedReferences(_modelReferences = [], ...retrievedGroups) {
   const out = []
   const seen = new Set()
   const add = (ref, fallbackNote = '') => {
     const url = typeof ref?.url === 'string' ? ref.url.trim() : ''
     if (!url || !isApprovedUrl(url) || seen.has(url)) return
     seen.add(url)
+    const type = ref.type || referenceTypeFromSource(ref.source, url)
     out.push({
-      type: ref.type || referenceTypeFromSource(ref.source, url),
+      type,
+      source: ref.source || type,
       title: ref.title || url,
       url,
       note: ref.note || fallbackNote,
     })
   }
 
-  // Keep valid model references first (often produced from Sonnet's own
-  // self-verification search), then fill any gaps from Wani's real search lanes.
-  for (const ref of Array.isArray(modelReferences) ? modelReferences : []) add(ref)
+  // Reliability rule: only URLs returned by Wani's actual retrieval lanes become
+  // clickable "verified" pages. A model-written URL, even on an SAP domain, can
+  // still be a plausible-looking but nonexistent path, so it is not accepted here.
   for (const group of retrievedGroups) {
     for (const ref of Array.isArray(group) ? group : []) {
       add(ref, 'SAP source retrieved by Wani for this question.')
@@ -109,17 +111,69 @@ function mergeVerifiedReferences(modelReferences = [], ...retrievedGroups) {
   return out.slice(0, 3)
 }
 
+const SEARCH_STOPWORDS = new Set(`
+a an and are as at be because been but by can could did do does for from had has have how i if in into is it its me my no not of on or our please should so than that the their them then there these they this to us was we were what when where which who why will with would you your
+actually answer correct correction explain give tell show think sure wrong right question user still really maybe just about more using use used possible standard way need want wants asking asked
+aber als am an auf aus bei bitte das dass dein deine dem den der die ein eine einem einen einer es für hat haben ich im in ist kann können mit noch oder sein sind so über um und von war was welche welcher welches wenn wer wie warum wo zu zum zur
+`.trim().split(/\s+/))
+
+function compactSapSearchKeywords(query) {
+  const normalized = String(query || '')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/[“”"'`?,.!:;()[\]{}]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!normalized) return ''
+
+  const kept = []
+  const seen = new Set()
+  for (const part of normalized.split(' ')) {
+    const token = part.replace(/^[^A-Za-z0-9_\/-]+|[^A-Za-z0-9_\/-]+$/g, '')
+    if (!token) continue
+    const lower = token.toLowerCase()
+    if (lower === 'sap') continue
+    const technical = /[0-9_\/-]/.test(token) || /^[A-Z][A-Z0-9_-]{1,11}$/.test(token)
+    if (!technical && (SEARCH_STOPWORDS.has(lower) || lower.length < 3)) continue
+    if (seen.has(lower)) continue
+    seen.add(lower)
+    kept.push(token)
+    if (kept.length >= 10) break
+  }
+
+  const result = kept.join(' ').trim()
+  return (result || normalized.split(' ').slice(0, 8).join(' ')).slice(0, 140)
+}
+
+function buildSearchShortcuts(query) {
+  const keywords = compactSapSearchKeywords(query)
+  if (!keywords) return []
+  const googleQuery = /^SAP\b/i.test(keywords) ? keywords : `SAP ${keywords}`
+  const enc = encodeURIComponent(keywords)
+  const googleEnc = encodeURIComponent(googleQuery)
+  return [
+    {
+      type: 'Google', source: 'Google', title: `Google: ${keywords.slice(0, 70)}`,
+      url: `https://www.google.com/search?q=${googleEnc}`,
+      note: 'Keyword search shortcut. This is not supporting evidence for the answer.',
+      isSearchFallback: true,
+    },
+    {
+      type: 'SAP Community', source: 'SAP Community', title: `SAP Community: ${keywords.slice(0, 70)}`,
+      url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${enc}`,
+      note: 'Keyword search shortcut on SAP Community. This is not supporting evidence for the answer.',
+      isSearchFallback: true,
+    },
+    {
+      type: 'SAP Help', source: 'SAP Help', title: `SAP Help: ${keywords.slice(0, 70)}`,
+      url: `https://help.sap.com/docs/search?q=${enc}`,
+      note: 'Keyword search shortcut on SAP Help. This is not supporting evidence for the answer.',
+      isSearchFallback: true,
+    },
+  ]
+}
+
 function buildSapSearchFallback(query) {
-  const clean = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 220)
-  if (!clean) return []
-  const url = `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${encodeURIComponent(clean)}`
-  return [{
-    type: 'SAP Search',
-    title: `Search SAP Community: ${clean}`,
-    url,
-    note: 'Keyword search shortcut generated from this question because Wani did not retrieve a verified page. This is a search link, not supporting evidence for the answer.',
-    isSearchFallback: true,
-  }]
+  return buildSearchShortcuts(query)
 }
 
 // ── SUPABASE CLIENT ───────────────────────────────────────────────────────────
@@ -1583,14 +1637,7 @@ async function getAuthenticatedUser(req) {
 
 // ── 13. SUPPLEMENTAL PILL LINKS from clean query ─────────────────────────────
 function buildPillLinks(searchQuery) {
-  const raw = searchQuery.replace(/^SAP\s+S\/4HANA\s+|^SAP\s+/i, '').trim()
-  const enc = encodeURIComponent(raw)
-  return [
-    { title: `SAP Community: ${raw.slice(0, 55)}`, url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&q=${enc}`, snippet: 'Questions and answers from SAP consultants worldwide', source: 'SAP Community' },
-    { title: `SAP Help: ${raw.slice(0, 60)}`, url: `https://help.sap.com/docs/search?q=${enc}`, snippet: 'Official SAP documentation', source: 'SAP Help' },
-    { title: `SAP Blogs: ${raw.slice(0, 60)}`, url: `https://community.sap.com/t5/forums/searchpage/tab/message?advanced=false&allow_punctuation=false&filter=location&location=category%3Aall-blogs&q=${enc}`, snippet: 'Expert blog posts from the SAP community', source: 'SAP Blog' },
-    { title: `Google: ${raw.slice(0, 60)}`, url: `https://www.google.com/search?q=${encodeURIComponent('SAP ' + raw)}`, snippet: 'Google search for this SAP topic', source: 'Google' },
-  ]
+  return buildSearchShortcuts(searchQuery)
 }
 
 function extractNoteNumbers(results) {
@@ -2303,7 +2350,7 @@ export default async function handler(req, res) {
     debugLog.knowledgeList  = relevantKnowledge
     debugLog.tavilyList     = webCandidates
 
-    // Pill links always generated from context-aware query
+    // Search shortcuts are always generated from a compact, context-aware keyword query
     const googleLinks = buildPillLinks(searchQuery)
     const noteRefs    = answerSearchResults.length > 0 ? extractNoteNumbers(answerSearchResults) : []
 
@@ -2407,7 +2454,25 @@ export default async function handler(req, res) {
     // ── Pushback / correction verification mode ─────────────────────────────
     if (evidenceDecision.pushback?.detected) {
       const disputed = (evidenceDecision.pushback.disputedClaims || []).map((c, i) => `${i+1}. ${c}`).join('\n') || 'The previous answer is being challenged; identify the disputed claim from the conversation.'
-      systemPrompt += `\n\n🚨 PUSHBACK / RE-VERIFICATION MODE — MANDATORY:\nThe user has challenged the previous answer. Treat the previous answer and any matching saved KB finding as UNTRUSTED for this turn. Do not defend or repeat it merely because it appears in conversation history or KB.\n\nDISPUTED CLAIMS:\n${disputed}\n\nVERIFICATION RULES:\n- Re-evaluate the claim from independent evidence only: book evidence, directly supporting selected web evidence, or your native web_search.\n- Same-topic evidence is not enough. It must directly support or contradict the disputed mechanism.\n- Before stating an exact SAP technical identifier (table-field, T-code, BAdI, SAP Note, Fiori app ID, SPRO path), verify that exact identifier in independent evidence.\n- If the exact identifier cannot be verified, DO NOT guess another one. Give the functional/mechanism answer you can support and explicitly say the technical identifier remains unverified.\n- If the user's correction itself is not independently verified, acknowledge it as a lead, not as established fact.\n- Correct the earlier answer plainly when evidence supports a correction.`
+      systemPrompt += `
+
+🚨 PUSHBACK / RE-VERIFICATION MODE — MANDATORY:
+The user has challenged the previous answer. Treat the previous answer and any matching saved KB finding as UNTRUSTED for this turn. Re-evaluate the claim from evidence; do not defend it merely because you said it before, but equally do not abandon it merely because the user disagrees.
+
+DISPUTED CLAIMS:
+${disputed}
+
+EVIDENCE HIERARCHY AND RESPONSE RULES:
+- USER DISAGREEMENT IS NOT EVIDENCE. "You're wrong", "are you sure?", or repeated insistence cannot by itself lower a technically supported conclusion.
+- Re-evaluate from independent evidence only: book evidence, directly supporting selected web evidence, or your native web_search. Same-topic evidence is not enough; it must support or contradict the disputed mechanism.
+- Before stating an exact SAP technical identifier (table-field, T-code, BAdI, SAP Note, Fiori app ID, SPRO path), verify that exact identifier. If it cannot be verified, do not guess another one.
+- If independent evidence still supports the previous conclusion, PUSH BACK clearly. Say that you do not think the proposed correction is right for the stated scope/standard SAP, then explain why. Do not say "you may be right" merely to be agreeable.
+- If this is a SECOND OR LATER challenge to the same claim and the user has added no new evidence, hold the verified position more firmly. Repetition is not evidence. State what concrete observation/source would change your conclusion.
+- If the user supplies a REAL SYSTEM OBSERVATION — e.g. "I tried it", plus the transaction/app, screenshot, field/value, table result, error, configuration, or reproducible steps — treat that as strong system-specific evidence. Investigate whether release/version, customizing, business function, enhancement/custom code, or UI differences explain the mismatch. Do not dismiss observed system behaviour just because generic documentation says otherwise.
+- If the user's concrete observation is credible but differs from standard behaviour, say both: what standard SAP does and what their system is demonstrably doing.
+- A Note/KBA/table/T-code/source cited by the user is a claim to verify, not automatic proof.
+- Change your conclusion only when new evidence warrants it. If the evidence supports a correction, correct the earlier answer plainly and say exactly what changed your mind.
+- If evidence remains genuinely mixed, do not capitulate and do not bluff. State the uncertainty and ask for the single concrete system check that would resolve it.`
     }
 
     // ── Document context ───────────────────────────────────────────────────
@@ -2863,7 +2928,11 @@ export default async function handler(req, res) {
       send({ type: 'search_results', results: publicSearchResults })
     }
 
-    const allFurtherReading = isSubstantialAnswer ? publicSearchResults.slice(0, 2) : []
+    const allFurtherReading = isSubstantialAnswer
+      ? [...publicSearchResults.slice(0, 3), ...googleLinks]
+          .filter((ref, index, arr) => ref?.url && arr.findIndex(x => x?.url === ref.url) === index)
+          .slice(0, 6)
+      : []
     if (allFurtherReading.length > 0) {
       send({ type: 'further_reading', links: allFurtherReading })
     }
@@ -2947,9 +3016,14 @@ export default async function handler(req, res) {
     const mergedVerifiedReferences = usedContainerFormat
       ? mergeVerifiedReferences(containerResult.references, referenceSearchResults, relatedLinks)
       : []
-    const finalVerifiedReferences = usedContainerFormat
+    const basePublicReferences = usedContainerFormat
       ? (mergedVerifiedReferences.length === 0 ? buildSapSearchFallback(searchQuery || lastMsg) : mergedVerifiedReferences)
       : publicSearchResults
+    const finalVerifiedReferences = isSubstantialAnswer
+      ? [...basePublicReferences, ...googleLinks]
+          .filter((ref, index, arr) => ref?.url && arr.findIndex(x => x?.url === ref.url) === index)
+          .slice(0, 6)
+      : basePublicReferences
 
     const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION','GENERAL_DOC'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'

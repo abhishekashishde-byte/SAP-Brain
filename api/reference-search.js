@@ -31,11 +31,7 @@ function isQuotaAnswerText(value) {
     || /^Wani is temporarily unable to verify your free credits\./i.test(text)
 }
 
-const ADMIN_ONLY_EVENT_TYPES = new Set([
-  'debug_info',
-  'search_results',
-  'further_reading',
-])
+const ADMIN_ONLY_EVENT_TYPES = new Set(['debug_info'])
 
 function toNumber(value) {
   const parsed = Number(value)
@@ -71,14 +67,13 @@ export function sanitizeChatEvent(eventText, quota = null) {
     return eventText
   }
 
-  // Raw diagnostics and all source/result panels are administrator-only.
-  // The normal answer stream is left unchanged.
+  // Raw diagnostics remain administrator-only. Curated search results and further-reading
+  // links are product output and must remain visible to normal users.
   if (ADMIN_ONLY_EVENT_TYPES.has(payload?.type)) return ''
 
   if (payload?.type === 'done') {
     delete payload.debugDoc
     delete payload.sourceInfo
-    delete payload.references
     payload.isCorrection = false
     payload.isUnlimited = false
 
