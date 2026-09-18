@@ -1703,6 +1703,7 @@ export default async function handler(req, res) {
   // ── ACTION: improve_prompt — lightweight preflight only. No RAG/search/quota. ──
   if (body.action === 'improve_prompt') {
     const original = String(body.prompt || '').trim()
+    console.log('[PROMPT_IMPROVER] received', { chars: original.length, contextMessages: Array.isArray(body.messages) ? body.messages.length : 0 })
     const simpleContinuation = /^(yes|no|ok|okay|sure|thanks|thank you|correct|right|continue|go ahead|do it|ja|nein|danke)[.! ]*$/i.test(original)
     if (!original || original.length < 8 || simpleContinuation) {
       return res.status(200).json({ suggest:false, reason:'clear_or_continuation' })
@@ -1738,18 +1739,20 @@ Set suggest=true only when confidence >= 0.92.` },
         })
       } finally { clearTimeout(timer) }
 
-      if (!groqRes.ok) return res.status(200).json({ suggest:false, reason:'improver_unavailable' })
+      if (!groqRes.ok) { console.error('[PROMPT_IMPROVER] groq_http', groqRes.status); return res.status(200).json({ suggest:false, reason:'improver_unavailable' }) }
       const data = await groqRes.json()
       let parsed
       try { parsed = JSON.parse(data?.choices?.[0]?.message?.content || '{}') }
-      catch { return res.status(200).json({ suggest:false, reason:'invalid_result' }) }
+      catch { console.error('[PROMPT_IMPROVER] invalid_json'); return res.status(200).json({ suggest:false, reason:'invalid_result' }) }
       const suggestion = typeof parsed.suggestion === 'string' ? parsed.suggestion.trim() : ''
       const confidence = Number(parsed.confidence || 0)
+      console.log('[PROMPT_IMPROVER] decision', { modelSuggest: parsed.suggest === true, confidence, changed: !!suggestion && suggestion.toLowerCase() !== original.toLowerCase(), suggestionChars: suggestion.length, reason: parsed.reason || null })
       if (parsed.suggest !== true || confidence < 0.92 || !suggestion || suggestion.toLowerCase() === original.toLowerCase() || suggestion.length > 700) {
         return res.status(200).json({ suggest:false, reason:parsed.reason || 'not_needed' })
       }
       return res.status(200).json({ suggest:true, suggestion, confidence, reason:parsed.reason || 'clarity' })
     } catch (err) {
+      console.error('[PROMPT_IMPROVER] exception', err?.name, err?.message)
       return res.status(200).json({ suggest:false, reason:err?.name === 'AbortError' ? 'timeout' : 'unavailable' })
     }
   }
