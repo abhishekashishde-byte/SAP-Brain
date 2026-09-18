@@ -1909,6 +1909,9 @@ export default function Brain({ session }) {
   const [pendingCorrection, setPendingCorrection] = useState(null)
   const [pendingMemorySave, setPendingMemorySave] = useState(null) // {summary, triggerMsgIndex}
   const [knowledgeToast, setKnowledgeToast]       = useState(null)
+  const [pendingPromptSuggestion, setPendingPromptSuggestion] = useState(null) // { original, suggestion }
+  const [isImprovingPrompt, setIsImprovingPrompt] = useState(false)
+  const [showUpdateNotice, setShowUpdateNotice] = useState(false)
   const docInputRef = useRef(null)
   const chatScrollRef = useRef(null)
   const [scrollProgress, setScrollProgress] = useState(0) // 0..1 reading position in the chat
@@ -1920,6 +1923,22 @@ export default function Brain({ session }) {
   }
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+
+  // Show this release note exactly once per signed-in user on this browser.
+  // Version the key for each future release that needs its own one-time notice.
+  useEffect(() => {
+    const userId = session?.user?.id
+    if (!userId) return
+    const key = `wani_release_seen_prompt_suggestions_v1_${userId}`
+    try {
+      if (!window.localStorage.getItem(key)) {
+        window.localStorage.setItem(key, '1')
+        setShowUpdateNotice(true)
+      }
+    } catch {
+      // Storage being unavailable must never block Wani.
+    }
+  }, [session?.user?.id])
 
   // ── AUTHENTICATED FETCH — always sends JWT, backend derives userId from token ──
   const chatFetch = async (body) => {
@@ -2424,6 +2443,47 @@ export default function Brain({ session }) {
   }
 
   const handleSend = async (overrideText) => {
+    const safeOverride = (typeof overrideText === 'string') ? overrideText : null
+    const original = (safeOverride || input).trim()
+    if (!original && !attachedCode) return
+    if (activeConvId && busyConvIds[activeConvId]) return
+
+    // Code attachments and programmatic override sends bypass prompt editing:
+    // the improver is only for a user's natural-language question before submission.
+    if (attachedCode || safeOverride !== null) return submitQuestion(safeOverride)
+
+    setPendingPromptSuggestion(null)
+    setIsImprovingPrompt(true)
+    try {
+      const token = session?.access_token
+      const recentMessages = (messages || []).slice(-4).map(m => ({ role:m.role, content:m.content }))
+      const res = await fetch('/api/improve-prompt', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          ...(token ? { Authorization:`Bearer ${token}` } : {})
+        },
+        body:JSON.stringify({
+          prompt:original,
+          messages:recentMessages,
+          module:activeConv?.module || browseModule || null,
+          topic:activeConv?.topic || browseTopic || null,
+        })
+      })
+      const result = res.ok ? await res.json() : { suggest:false }
+      if (result?.suggest === true && result?.suggestion) {
+        setPendingPromptSuggestion({ original, suggestion:result.suggestion })
+        return
+      }
+    } catch {
+      // Improvement is optional. Any error falls through to the original question.
+    } finally {
+      setIsImprovingPrompt(false)
+    }
+    return submitQuestion(original)
+  }
+
+  const submitQuestion = async (overrideText) => {
     // Guard: overrideText must be a plain string — never a DOM event or object
     const safeOverride = (typeof overrideText === 'string') ? overrideText : null
     const baseText = (safeOverride || input).trim()
@@ -3543,6 +3603,40 @@ export default function Brain({ session }) {
           </>
         )}
       </div>
+
+      {/* One-time release notice — shown once per signed-in user/browser for this release */}
+      {showUpdateNotice && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ width:'min(460px,94vw)', background:t.surface, border:`1px solid ${t.border}`, borderRadius:18, padding:22, boxShadow:'0 20px 60px rgba(0,0,0,0.35)' }}>
+            <div style={{ fontSize:18, fontWeight:750, color:t.text, marginBottom:6 }}>Wani has been updated</div>
+            <div style={{ fontSize:13, color:t.text3, lineHeight:1.6, marginBottom:14 }}>Questions are now checked for clarity before Wani searches for an answer.</div>
+            <div style={{ fontSize:13, color:t.text2, lineHeight:1.7, marginBottom:18 }}>
+              <div>• If your question is already clear, nothing changes.</div>
+              <div>• If a clearer SAP-specific version would help, Wani shows it as an optional suggestion.</div>
+              <div>• You always choose <b>Use suggestion</b> or <b>Use my original</b>.</div>
+              <div>• Follow-up questions use recent conversation context more carefully.</div>
+              <div>• Improving a prompt does not use one of your Wani questions.</div>
+            </div>
+            <button onClick={()=>setShowUpdateNotice(false)} style={{ width:'100%', padding:'10px 14px', border:0, borderRadius:10, background:'#4F46E5', color:'#fff', fontWeight:650, cursor:'pointer' }}>Got it</button>
+          </div>
+        </div>
+      )}
+
+      {/* Optional prompt suggestion — the original is never silently replaced */}
+      {pendingPromptSuggestion && (
+        <div style={{ position:'fixed', left:'50%', bottom:isMobile?82:92, transform:'translateX(-50%)', zIndex:260, width:'min(620px,92vw)', background:t.surface, border:'1px solid rgba(79,70,229,0.38)', borderRadius:14, padding:'14px 16px', boxShadow:'0 10px 36px rgba(0,0,0,0.28)' }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'#6366F1', marginBottom:6 }}>Improve your question?</div>
+          <div style={{ fontSize:13, color:t.text, lineHeight:1.55, marginBottom:12 }}>{pendingPromptSuggestion.suggestion}</div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={()=>{ const q=pendingPromptSuggestion.original; setPendingPromptSuggestion(null); submitQuestion(q) }} style={{ flex:1, padding:'8px 10px', borderRadius:9, border:`1px solid ${t.border}`, background:'transparent', color:t.text2, cursor:'pointer', fontWeight:600 }}>Use my original</button>
+            <button onClick={()=>{ const q=pendingPromptSuggestion.suggestion; setPendingPromptSuggestion(null); submitQuestion(q) }} style={{ flex:1, padding:'8px 10px', borderRadius:9, border:0, background:'#4F46E5', color:'#fff', cursor:'pointer', fontWeight:650 }}>Use suggestion</button>
+          </div>
+        </div>
+      )}
+
+      {isImprovingPrompt && (
+        <div style={{ position:'fixed', bottom:isMobile?82:92, left:'50%', transform:'translateX(-50%)', zIndex:250, fontSize:11, color:t.text3, background:t.surface, border:`1px solid ${t.border}`, borderRadius:20, padding:'5px 10px' }}>Checking question clarity…</div>
+      )}
 
       {showProfile&&<ProfileModal session={session} profile={profile} t={t} onClose={()=>setShowProfile(false)} onSave={async(u)=>{await upsertProfile(session.user.id,u);setProfile(p=>({...p,...u}))}} onSignOut={signOut}/>}
       {showSaveFinding&&<SaveFindingModal t={t} dark={dark} onClose={()=>setShowSaveFinding(false)} onSave={saveManualFinding}/>}
