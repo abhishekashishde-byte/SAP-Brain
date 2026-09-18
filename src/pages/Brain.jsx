@@ -1970,6 +1970,63 @@ export default function Brain({ session }) {
 
   const activeConv = conversations.find(c=>c.id===activeConvId)
   const messages   = activeConv?.messages || []
+
+  // Live prompt suggestion: after the user pauses typing, check clarity BEFORE they
+  // press Send. This matches the product intent: the suggestion is visible while
+  // composing, and the user explicitly chooses whether to use it.
+  useEffect(() => {
+    const original = input.trim()
+    if (view !== 'chat' || attachedCode || original.length < 8) {
+      setPendingPromptSuggestion(null)
+      return
+    }
+
+    // Don't repeatedly check the same text if its suggestion is already visible.
+    if (pendingPromptSuggestion?.original === original) return
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      setIsImprovingPrompt(true)
+      try {
+        const token = session?.access_token
+        const recentMessages = (messages || []).slice(-4).map(m => ({ role:m.role, content:m.content }))
+        const res = await fetch('/api/chat', {
+          method:'POST',
+          signal:controller.signal,
+          headers:{
+            'Content-Type':'application/json',
+            ...(token ? { Authorization:`Bearer ${token}` } : {})
+          },
+          body:JSON.stringify({
+            action:'improve_prompt',
+            prompt:original,
+            messages:recentMessages,
+            module:activeConv?.module || browseModule || null,
+            topic:activeConv?.topic || browseTopic || null,
+          })
+        })
+        if (!res.ok) return
+        const result = await res.json()
+        // Ignore stale responses if the user continued typing while the request ran.
+        if (inputRef.current?.value?.trim() !== original) return
+        if (result?.suggest === true && result?.suggestion) {
+          setPendingPromptSuggestion({ original, suggestion:result.suggestion })
+        } else {
+          setPendingPromptSuggestion(null)
+        }
+      } catch (e) {
+        if (e?.name !== 'AbortError') setPendingPromptSuggestion(null)
+      } finally {
+        if (!controller.signal.aborted) setIsImprovingPrompt(false)
+      }
+    }, 700)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+      setIsImprovingPrompt(false)
+    }
+  }, [input, view, attachedCode, activeConvId, browseModule, browseTopic])
   const isHeroLanding = view==='chat' && messages.length===0 && quickLaunchMessages.length===0
   const [heroBoxHeight, setHeroBoxHeight] = useState(0)
   const [heroBoxWidth, setHeroBoxWidth] = useState(0)
@@ -2451,6 +2508,10 @@ export default function Brain({ session }) {
     // Code attachments and programmatic override sends bypass prompt editing:
     // the improver is only for a user's natural-language question before submission.
     if (attachedCode || safeOverride !== null) return submitQuestion(safeOverride)
+
+    // A live suggestion is already on screen for this exact text. Keep it visible:
+    // pressing Send must not silently choose on the user's behalf.
+    if (pendingPromptSuggestion?.original === original) return
 
     setPendingPromptSuggestion(null)
     setIsImprovingPrompt(true)
