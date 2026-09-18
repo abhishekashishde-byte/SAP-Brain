@@ -1723,8 +1723,10 @@ export default async function handler(req, res) {
           method:'POST', signal:controller.signal,
           headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.GROQ_API_KEY}` },
           body:JSON.stringify({
-            model:'openai/gpt-oss-20b', temperature:0, max_tokens:180,
-            response_format:{ type:'json_object' },
+            // Use the same Groq model/config shape already proven in Wani's
+            // production classifier. The previous 20B + response_format request
+            // was rejected by Groq with HTTP 400.
+            model:'openai/gpt-oss-120b', temperature:0, max_tokens:180,
             messages:[
               { role:'system', content:`You are Wani's conservative SAP QUESTION ENRICHMENT layer — NOT a grammar corrector.
 Return JSON only: {"suggest":boolean,"suggestion":string,"confidence":number,"reason":string}.
