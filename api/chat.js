@@ -1762,7 +1762,18 @@ If any answer is no, suggest=false.` },
       if (!groqRes.ok) { console.error('[PROMPT_IMPROVER] groq_http', groqRes.status); return res.status(200).json({ suggest:false, reason:'improver_unavailable' }) }
       const data = await groqRes.json()
       let parsed
-      try { parsed = JSON.parse(data?.choices?.[0]?.message?.content || '{}') }
+      try {
+        // GPT-OSS may wrap valid JSON in markdown fences or brief surrounding text.
+        // Extract the JSON object defensively instead of rejecting the whole result.
+        const raw = String(data?.choices?.[0]?.message?.content || '')
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim()
+        const start = raw.indexOf('{')
+        const end = raw.lastIndexOf('}')
+        if (start < 0 || end <= start) throw new Error('no_json_object')
+        parsed = JSON.parse(raw.slice(start, end + 1))
+      }
       catch { console.error('[PROMPT_IMPROVER] invalid_json'); return res.status(200).json({ suggest:false, reason:'invalid_result' }) }
       const suggestion = typeof parsed.suggestion === 'string' ? parsed.suggestion.trim() : ''
       const confidence = Number(parsed.confidence || 0)
