@@ -2457,13 +2457,14 @@ export default function Brain({ session }) {
     try {
       const token = session?.access_token
       const recentMessages = (messages || []).slice(-4).map(m => ({ role:m.role, content:m.content }))
-      const res = await fetch('/api/improve-prompt', {
+      const res = await fetch('/api/chat', {
         method:'POST',
         headers:{
           'Content-Type':'application/json',
           ...(token ? { Authorization:`Bearer ${token}` } : {})
         },
         body:JSON.stringify({
+          action:'improve_prompt',
           prompt:original,
           messages:recentMessages,
           module:activeConv?.module || browseModule || null,

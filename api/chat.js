@@ -1700,6 +1700,60 @@ export default async function handler(req, res) {
     return res.status(200).json({ isAdmin })
   }
 
+  // ── ACTION: improve_prompt — lightweight preflight only. No RAG/search/quota. ──
+  if (body.action === 'improve_prompt') {
+    const original = String(body.prompt || '').trim()
+    const simpleContinuation = /^(yes|no|ok|okay|sure|thanks|thank you|correct|right|continue|go ahead|do it|ja|nein|danke)[.! ]*$/i.test(original)
+    if (!original || original.length < 8 || simpleContinuation) {
+      return res.status(200).json({ suggest:false, reason:'clear_or_continuation' })
+    }
+    try {
+      const context = (Array.isArray(body.messages) ? body.messages : [])
+        .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .slice(-4)
+        .map(m => `${m.role.toUpperCase()}: ${m.content.slice(0, 900)}`)
+        .join('\n')
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 1800)
+      let groqRes
+      try {
+        groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method:'POST', signal:controller.signal,
+          headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.GROQ_API_KEY}` },
+          body:JSON.stringify({
+            model:'openai/gpt-oss-20b', temperature:0, max_tokens:180,
+            response_format:{ type:'json_object' },
+            messages:[
+              { role:'system', content:`You are a conservative SAP prompt editor for Wani.
+Return JSON only: {"suggest":boolean,"suggestion":string,"confidence":number,"reason":string}.
+Never answer the SAP question. Preserve exact user intent and all SAP objects, transaction codes, tables, fields, modules, versions, quantities, dates and error text. Never invent missing facts.
+Use recent context only when a follow-up reference is unambiguous. If two interpretations are plausible, suggest=false.
+If the prompt is already clear enough for an SAP consultant, suggest=false.
+Only suggest when the rewrite materially improves clarity or retrieval. Keep it concise.
+Set suggest=true only when confidence >= 0.92.` },
+              { role:'user', content:`Module hint: ${body.module || 'none'}\nTopic hint: ${body.topic || 'none'}\n\nRECENT CONTEXT:\n${context || '(new conversation)'}\n\nCURRENT PROMPT:\n${original}` }
+            ]
+          })
+        })
+      } finally { clearTimeout(timer) }
+
+      if (!groqRes.ok) return res.status(200).json({ suggest:false, reason:'improver_unavailable' })
+      const data = await groqRes.json()
+      let parsed
+      try { parsed = JSON.parse(data?.choices?.[0]?.message?.content || '{}') }
+      catch { return res.status(200).json({ suggest:false, reason:'invalid_result' }) }
+      const suggestion = typeof parsed.suggestion === 'string' ? parsed.suggestion.trim() : ''
+      const confidence = Number(parsed.confidence || 0)
+      if (parsed.suggest !== true || confidence < 0.92 || !suggestion || suggestion.toLowerCase() === original.toLowerCase() || suggestion.length > 700) {
+        return res.status(200).json({ suggest:false, reason:parsed.reason || 'not_needed' })
+      }
+      return res.status(200).json({ suggest:true, suggestion, confidence, reason:parsed.reason || 'clarity' })
+    } catch (err) {
+      return res.status(200).json({ suggest:false, reason:err?.name === 'AbortError' ? 'timeout' : 'unavailable' })
+    }
+  }
+
   // ── ACTION: generate_handout — optional handwritten image made from the
   // already-completed verified answer. No RAG/search/Sonnet rerun. ────────────
   if (body.action === 'generate_handout') {
