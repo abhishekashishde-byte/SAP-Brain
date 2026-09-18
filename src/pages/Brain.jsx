@@ -1988,22 +1988,15 @@ export default function Brain({ session }) {
     const timer = setTimeout(async () => {
       setIsImprovingPrompt(true)
       try {
-        const token = session?.access_token
         const recentMessages = (messages || []).slice(-4).map(m => ({ role:m.role, content:m.content }))
-        const res = await fetch('/api/chat', {
-          method:'POST',
-          signal:controller.signal,
-          headers:{
-            'Content-Type':'application/json',
-            ...(token ? { Authorization:`Bearer ${token}` } : {})
-          },
-          body:JSON.stringify({
-            action:'improve_prompt',
-            prompt:original,
-            messages:recentMessages,
-            module:activeConv?.module || browseModule || null,
-            topic:activeConv?.topic || browseTopic || null,
-          })
+        // Use the exact same authenticated/gateway-aware request helper as normal Wani chat.
+        // This avoids the raw /api/chat preflight being rejected with 401 by the gateway.
+        const res = await chatFetch({
+          action:'improve_prompt',
+          prompt:original,
+          messages:recentMessages,
+          module:activeConv?.module || browseModule || null,
+          topic:activeConv?.topic || browseTopic || null,
         })
         if (!res.ok) return
         const result = await res.json()
@@ -2516,21 +2509,13 @@ export default function Brain({ session }) {
     setPendingPromptSuggestion(null)
     setIsImprovingPrompt(true)
     try {
-      const token = session?.access_token
       const recentMessages = (messages || []).slice(-4).map(m => ({ role:m.role, content:m.content }))
-      const res = await fetch('/api/chat', {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          ...(token ? { Authorization:`Bearer ${token}` } : {})
-        },
-        body:JSON.stringify({
-          action:'improve_prompt',
-          prompt:original,
-          messages:recentMessages,
-          module:activeConv?.module || browseModule || null,
-          topic:activeConv?.topic || browseTopic || null,
-        })
+      const res = await chatFetch({
+        action:'improve_prompt',
+        prompt:original,
+        messages:recentMessages,
+        module:activeConv?.module || browseModule || null,
+        topic:activeConv?.topic || browseTopic || null,
       })
       const result = res.ok ? await res.json() : { suggest:false }
       if (result?.suggest === true && result?.suggestion) {
