@@ -1716,51 +1716,48 @@ export default async function handler(req, res) {
         .join('\n')
 
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 1800)
-      let groqRes
+      const timer = setTimeout(() => controller.abort(), 3500)
+      let modelRes
       try {
-        groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        modelRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method:'POST', signal:controller.signal,
-          headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.GROQ_API_KEY}` },
+          headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.OPENAI_API_KEY}` },
           body:JSON.stringify({
-            // Use the same Groq model/config shape already proven in Wani's
-            // production classifier. The previous 20B + response_format request
-            // was rejected by Groq with HTTP 400.
-            model:'openai/gpt-oss-120b', temperature:0, max_tokens:180,
+            model:'gpt-4o-mini', temperature:0, max_tokens:220,
+            response_format:{ type:'json_object' },
             messages:[
-              { role:'system', content:`You are Wani's conservative SAP QUESTION ENRICHMENT layer — NOT a grammar corrector.
+              { role:'system', content:`You are Wani's SAP question improver, not a grammar checker.
 Return JSON only: {"suggest":boolean,"suggestion":string,"confidence":number,"reason":string}.
 
-PURPOSE:
-Improve the usefulness of an underspecified SAP question before retrieval/answering, while preserving the user's intent. The suggestion should help an SAP expert understand what the user actually wants to know.
+Your job is to turn a vague or underspecified SAP question into a more useful SAP question BEFORE Wani answers it.
 
-STRICT RULES:
-- Never answer the SAP question.
-- NEVER trigger merely to fix grammar, spelling, capitalization, punctuation, fluency, or wording. If that is the only improvement, suggest=false.
-- Preserve all explicit SAP objects, transaction codes, tables, fields, modules, versions, quantities, dates, errors and desired outcomes.
-- You may expand an unambiguous SAP shorthand into the question's practical intent. Example: "Maintenance order use?" may become "What is a maintenance order used for in SAP PM, and what are its main functions in the maintenance process?"
-- Do NOT invent a module, transaction, field, system version, business scenario, symptom, or goal that is not explicit or safely implied by standard SAP terminology/context.
-- For an error/problem question, retain the exact error meaning and enrich toward diagnosis/troubleshooting only when that intent is explicit.
-- Use recent conversation context for follow-ups only when the reference is unambiguous.
-- If two plausible interpretations exist, suggest=false rather than guessing.
-- If the question is already sufficiently specific for an SAP expert, suggest=false.
-- A suggestion must add MATERIAL SAP clarity/context or make the information need materially more explicit. Rephrasing alone is not enough.
-- Keep suggestions concise; do not turn them into consultant briefs or add multiple new questions.
-- Set suggest=true only when confidence >= 0.90.
+Suggest ONLY when the rewrite adds meaningful SAP clarity, scope, troubleshooting intent, process context, or retrieval value. Never suggest merely to improve English, grammar, spelling, punctuation, tone, or fluency.
 
-SELF-CHECK BEFORE suggest=true:
-1. Did I add useful SAP/question context rather than just better English?
-2. Can every added concept be justified by the user's words, recent context, or unambiguous SAP terminology?
-3. Is the user's original intent unchanged?
-If any answer is no, suggest=false.` },
+Preserve the user's intent. Never answer the question. Never invent a T-code, table, field, release, configuration, root cause, business scenario, or requirement not supported by the user's words or unambiguous recent context. If two interpretations are plausible, suggest=false.
+
+Examples:
+User: "Maintenance order use?"
+Return: {"suggest":true,"suggestion":"What is a maintenance order used for in SAP, and what role does it play in the maintenance process?","confidence":0.98,"reason":"Adds useful SAP process scope rather than only correcting grammar."}
+
+User: "How can I checking production version?"
+Return: {"suggest":false,"suggestion":"","confidence":0.98,"reason":"The SAP question is already clear; only grammar could be improved."}
+
+User: "I m not sure why i m getting routing not available while creation of a production version"
+Return: {"suggest":true,"suggestion":"Why do I get the \"routing not available\" error when creating a production version in SAP, and what should I check in the routing and production-version setup?","confidence":0.97,"reason":"Makes the implied troubleshooting goal explicit."}
+
+Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
               { role:'user', content:`Module hint: ${body.module || 'none'}\nTopic hint: ${body.topic || 'none'}\n\nRECENT CONTEXT:\n${context || '(new conversation)'}\n\nCURRENT PROMPT:\n${original}` }
             ]
           })
         })
       } finally { clearTimeout(timer) }
 
-      if (!groqRes.ok) { console.error('[PROMPT_IMPROVER] groq_http', groqRes.status); return res.status(200).json({ suggest:false, reason:'improver_unavailable' }) }
-      const data = await groqRes.json()
+      if (!modelRes.ok) {
+        const providerError = await modelRes.text().catch(() => '')
+        console.error('[PROMPT_IMPROVER] openai_http', modelRes.status, providerError.slice(0, 300))
+        return res.status(200).json({ suggest:false, reason:'improver_unavailable' })
+      }
+      const data = await modelRes.json()
       let parsed
       try {
         // GPT-OSS may wrap valid JSON in markdown fences or brief surrounding text.
