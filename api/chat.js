@@ -1289,10 +1289,72 @@ function resolveImageTheme(themeKey) {
 // ── ON-DEMAND HANDOUT — image generation from the already-verified answer.
 // This never re-runs RAG, Tavily, or Sonnet. The image model only turns the
 // existing answer into a concise handwritten one-page consultant handout.
-async function generateHandoutOnDemand(question, answerText, themeKey) {
+async function formulateConversationNote(messages, audience = 'consultant') {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+
+  const clean = (Array.isArray(messages) ? messages : [])
+    .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    .slice(-40)
+
+  if (!clean.length) return ''
+
+  // Keep the complete recent conversation within a bounded request. Later turns remain
+  // intact and therefore receive the strongest evidence/priority.
+  let budget = 28000
+  const selected = []
+  for (let i = clean.length - 1; i >= 0 && budget > 0; i--) {
+    const text = clean[i].content.trim()
+    const take = Math.min(text.length, budget)
+    selected.unshift({ role: clean[i].role, content: text.slice(0, take) })
+    budget -= take
+  }
+  const transcript = selected.map((m, i) =>
+    `TURN ${i + 1} — ${m.role.toUpperCase()}:\n${m.content}`
+  ).join('\n\n')
+
+  const audienceRule = audience === 'customer'
+    ? 'Write a client-facing Customer Brief: business-readable, polished and concise. Keep SAP technical identifiers when they matter, but explain them in customer-appropriate language.'
+    : 'Write a Consultant Note: technically precise, implementation-useful, and compact. Preserve SAP terminology, identifiers, conditions, caveats, transactions, tables, fields, configuration and troubleshooting details that matter.'
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
+    body:JSON.stringify({
+      model:'gpt-4o',
+      temperature:0,
+      max_tokens:1800,
+      messages:[
+        { role:'system', content:`You formulate the FINAL source text for a one-page Wani SAP note from an entire conversation. The image model will receive your finalized text, so YOU—not the image model—must decide what information matters.
+
+${audienceRule}
+
+NON-NEGOTIABLE CONSOLIDATION RULES:
+- Read the whole supplied conversation, not just one question/answer.
+- The LATEST assistant answer has the highest authority because later turns often refine or correct earlier answers.
+- When later information corrects or supersedes earlier information, use the later version and do not repeat the obsolete version as if still true.
+- Preserve every UNIQUE, still-valid, materially useful point from earlier answers. Do not lose an earlier point merely because it is old.
+- Remove repetition, conversational filler, apologies, meta-commentary and duplicated explanations.
+- Be extremely precise. Prefer compact bullets, short sections, relationships, conditions and distinctions over prose.
+- Never invent SAP facts. Use only information present in the conversation.
+- Preserve exact T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths, quantities and explicit uncertainty.
+- If the conversation contains unresolved disagreement or uncertainty, state it rather than silently choosing.
+- Do not mention that you summarized a conversation.
+- Output ONLY the finalized note content. No JSON, no markdown fences.` },
+        { role:'user', content:transcript }
+      ]
+    })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error?.message || 'Conversation note formulation failed')
+  return String(data?.choices?.[0]?.message?.content || '').trim()
+}
+
+async function generateHandoutOnDemand(question, answerText, themeKey, messages = []) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
   const theme = resolveImageTheme('light')
+  const finalizedNote = await formulateConversationNote(messages, 'consultant') || answerText
 
   const prompt = `Create a single-page portrait handwritten consultant cheat-sheet from the verified SAP answer below.
 
@@ -1309,10 +1371,10 @@ STYLE AND INFORMATION DENSITY:
 - prioritize INFORMATION ARCHITECTURE over decoration: diagrams, object trees, process arrows, comparison panels, legends, callout boxes, purpose boxes, key-point boxes, gotchas, and technical relationships should teach the answer visually.
 - NEVER turn a detailed SAP answer into a sparse poster. Preserve the useful technical substance, conditions, hierarchy, practical impact, caveats, exceptions, and distinctions.
 - aim for 5-8 clearly separated information sections when the verified answer supports them.
-- include roughly 75-90% of the substantive information from the VERIFIED ANSWER, shortened into visual phrases rather than deleted.
+- include roughly 90-100% of the substantive information from the FINALIZED CONVERSATION NOTE, shortened into visual phrases rather than deleted.
 - if the answer compares multiple transactions/contexts, use side-by-side columns or panels and preserve what is different in each context.
 - include purpose, practical impact, key points, important behavior/gotchas, and relationships whenever they exist in the verified answer.
-- for a short answer, enrich ONLY from the VERIFIED ANSWER. Never add new SAP facts from the image model's own knowledge.
+- for a short note, use ONLY the FINALIZED CONVERSATION NOTE. Never add new SAP facts from the image model's own knowledge.
 - preserve technical identifiers EXACTLY as supplied (T-codes, app IDs, SAP Notes, tables, fields, BAdIs, SPRO paths). Never invent, alter, or autocorrect them.
 - if the verified answer contains uncertainty, preserve that uncertainty visibly.
 - use a sensible title size; the title must not consume excessive page space.
@@ -1325,11 +1387,8 @@ HARD NEGATIVE RULES:
 - no huge decorative headline or excessive empty space
 - no decorative graphics that replace useful SAP information
 
-QUESTION:
-${(question || '').slice(0, 700)}
-
-VERIFIED ANSWER:
-${(answerText || '').slice(0, 9000)}`
+FINALIZED CONVERSATION NOTE — use this as the sole factual source:
+${(finalizedNote || '').slice(0, 12000)}`
 
   const imageRes = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
@@ -1355,10 +1414,11 @@ ${(answerText || '').slice(0, 9000)}`
 
 // ── ON-DEMAND CUSTOMER BRIEF — image generation from an already-verified answer.
 // Never part of the main RAG/search/Sonnet pipeline.
-async function generateVisualOnDemand(question, answerText, themeKey) {
+async function generateVisualOnDemand(question, answerText, themeKey, messages = []) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
   const theme = resolveImageTheme('light')
+  const finalizedNote = await formulateConversationNote(messages, 'customer') || answerText
   const prompt = `Create a single-page portrait CUSTOMER BRIEF from the verified SAP answer below.
 
 MANDATORY ART DIRECTION — WHITE ENTERPRISE CUSTOMER BRIEF:
@@ -1379,7 +1439,7 @@ STYLE AND INFORMATION DENSITY:
 - when the answer compares 2-4 SAP contexts, dedicate a clear column/panel to each and retain the differences between them.
 - include a compact legend and/or key-takeaways section when it ADDS information rather than merely repeating the panels.
 - for detailed answers, prefer a dense but readable customer-workshop handout over a minimalist poster.
-- never add facts that are not in the VERIFIED ANSWER.
+- never add facts that are not in the FINALIZED CONVERSATION NOTE.
 - preserve SAP technical identifiers EXACTLY as supplied; never invent or autocorrect T-codes, tables, fields, app IDs, BAdIs, SAP Notes, or SPRO paths.
 - if uncertainty exists in the verified answer, preserve it visibly.
 - use clean professional typography with a sensible title size; the title must not consume excessive vertical space.
@@ -1392,11 +1452,8 @@ HARD NEGATIVE RULES:
 - no excessive whitespace created by deleting technical content
 - no decorative graphics that replace useful SAP information
 
-QUESTION:
-${(question || '').slice(0, 700)}
-
-VERIFIED ANSWER:
-${(answerText || '').slice(0, 9000)}`
+FINALIZED CONVERSATION NOTE — use this as the sole factual source:
+${(finalizedNote || '').slice(0, 12000)}`
   const imageRes = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -1789,9 +1846,9 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
   // already-completed verified answer. No RAG/search/Sonnet rerun. ────────────
   if (body.action === 'generate_handout') {
     try {
-      const { question = '', answerText = '', themeKey = 'light' } = body
-      if (!answerText.trim()) return res.status(400).json({ error: 'Missing answerText' })
-      const result = await generateHandoutOnDemand(question, answerText, themeKey)
+      const { question = '', answerText = '', messages = [], themeKey = 'light' } = body
+      if (!answerText.trim() && !messages.length) return res.status(400).json({ error: 'Missing conversation content' })
+      const result = await generateHandoutOnDemand(question, answerText, themeKey, messages)
       return res.status(200).json(result)
     } catch (err) {
       console.error('[HANDOUT]', err)
@@ -1803,9 +1860,9 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
   // completed verified answer; never part of the main answer pipeline. ─────────
   if (body.action === 'generate_visual') {
     try {
-      const { question = '', answerText = '', themeKey = 'light' } = body
-      if (!answerText.trim()) return res.status(400).json({ error: 'Missing answerText' })
-      const result = await generateVisualOnDemand(question, answerText, themeKey)
+      const { question = '', answerText = '', messages = [], themeKey = 'light' } = body
+      if (!answerText.trim() && !messages.length) return res.status(400).json({ error: 'Missing conversation content' })
+      const result = await generateVisualOnDemand(question, answerText, themeKey, messages)
       return res.status(200).json(result)
     } catch (err) {
       return res.status(500).json({ error: err.message })
