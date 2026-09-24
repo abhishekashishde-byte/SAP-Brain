@@ -3091,7 +3091,11 @@ export default function Brain({ session }) {
                     disabled={!input.trim() || !!attachedCode || isImprovingPrompt}
                     title="Improve this SAP question"
                     style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:input.trim()&&!attachedCode?'#6366F1':t.text4,cursor:input.trim()&&!attachedCode?'pointer':'not-allowed',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                    ✨
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                      <path d="m15 5 3 3" />
+                    </svg>
                   </button>
 
                   <textarea ref={inputRef} value={input}
