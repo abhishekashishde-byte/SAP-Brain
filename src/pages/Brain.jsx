@@ -1972,52 +1972,6 @@ export default function Brain({ session }) {
   const messages   = activeConv?.messages || []
 
 
-  useEffect(() => {
-    const original = input.trim()
-    if (view !== 'chat' || attachedCode || original.length < 8) {
-      setPendingPromptSuggestion(null)
-      return
-    }
-
-    // Don't repeatedly check the same text if its suggestion is already visible.
-    if (pendingPromptSuggestion?.original === original) return
-
-    const controller = new AbortController()
-    const timer = setTimeout(async () => {
-      setIsImprovingPrompt(true)
-      try {
-        const recentMessages = (messages || []).slice(-4).map(m => ({ role:m.role, content:m.content }))
-        // Use the exact same authenticated/gateway-aware request helper as normal Wani chat.
-        // This avoids the raw /api/chat preflight being rejected with 401 by the gateway.
-        const res = await chatFetch({
-          action:'improve_prompt',
-          prompt:original,
-          messages:recentMessages,
-          module:activeConv?.module || browseModule || null,
-          topic:activeConv?.topic || browseTopic || null,
-        })
-        if (!res.ok) return
-        const result = await res.json()
-        // Ignore stale responses if the user continued typing while the request ran.
-        if (inputRef.current?.value?.trim() !== original) return
-        if (result?.suggest === true && result?.suggestion) {
-          setPendingPromptSuggestion({ original, suggestion:result.suggestion })
-        } else {
-          setPendingPromptSuggestion(null)
-        }
-      } catch (e) {
-        if (e?.name !== 'AbortError') setPendingPromptSuggestion(null)
-      } finally {
-        if (!controller.signal.aborted) setIsImprovingPrompt(false)
-      }
-    }, 700)
-
-    return () => {
-      clearTimeout(timer)
-      controller.abort()
-      setIsImprovingPrompt(false)
-    }
-  }, [input, view, attachedCode, activeConvId, browseModule, browseTopic])
   const isHeroLanding = view==='chat' && messages.length===0 && quickLaunchMessages.length===0
   const [heroBoxHeight, setHeroBoxHeight] = useState(0)
   const [heroBoxWidth, setHeroBoxWidth] = useState(0)
