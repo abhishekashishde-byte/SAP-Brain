@@ -1942,11 +1942,21 @@ export default function Brain({ session }) {
 
   // ── AUTHENTICATED FETCH — always sends JWT, backend derives userId from token ──
   const chatFetch = async (body) => {
-    const token = session?.access_token
-    // Strip heavy client-only fields from the message history before sending. The model
-    // only needs role + content; debug docs, source pipelines, and any large attachments
-    // must never be echoed back up — they bloat the request body and caused 413
-    // FUNCTION_PAYLOAD_TOO_LARGE on long conversations. This runs for every request.
+    // Never call the protected chat route without a JWT. The session prop can briefly
+    // be stale/empty while Supabase restores or refreshes auth (especially Safari), so
+    // resolve the current session directly before every protected request.
+    let token = session?.access_token
+    if (!token) {
+      const { data } = await supabase.auth.getSession()
+      token = data?.session?.access_token
+    }
+    if (!token) {
+      const err = new Error('AUTH_SESSION_NOT_READY')
+      err.code = 'AUTH_SESSION_NOT_READY'
+      throw err
+    }
+
+    // Strip heavy client-only fields from the message history before sending.
     let safeBody = body
     if (Array.isArray(body?.messages)) {
       safeBody = {
@@ -1958,14 +1968,25 @@ export default function Brain({ session }) {
         })),
       }
     }
-    return fetch('/api/chat', {
+
+    const request = (jwt) => fetch('/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
+        Authorization: `Bearer ${jwt}`
       },
       body: JSON.stringify(safeBody)
     })
+
+    let res = await request(token)
+    // A token can expire between render and request. Refresh once and retry; never
+    // loop and never send an unauthenticated request.
+    if (res.status === 401) {
+      const { data } = await supabase.auth.refreshSession()
+      const freshToken = data?.session?.access_token
+      if (freshToken && freshToken !== token) res = await request(freshToken)
+    }
+    return res
   }
 
   const activeConv = conversations.find(c=>c.id===activeConvId)
