@@ -2465,6 +2465,450 @@ export default function Brain({ session }) {
     }
   }
 
+  const submitQuestion = async (overrideText) => {
+    // Guard: overrideText must be a plain string — never a DOM event or object
+    const safeOverride = (typeof overrideText === 'string') ? overrideText : null
+    const baseText = (safeOverride || input).trim()
+    if (baseText === '' && !attachedCode) return
+    if (activeConvId && busyConvIds[activeConvId]) return
+
+    // Build the actual content sent to the API
+    const msgText = attachedCode
+      ? `${baseText ? baseText + '\n\n' : ''}[ATTACHED_CODE lang=${attachedCode.language} lines=${attachedCode.lines}]\n${attachedCode.content}\n[/ATTACHED_CODE]`
+      : baseText
+
+    // Store display metadata alongside content for UI rendering
+    const userMsg = {
+      role: 'user',
+      content: msgText,
+      _display: baseText || `Analyse this ${attachedCode?.language || 'code'}`,
+      _code: attachedCode ? { language: attachedCode.language, lines: attachedCode.lines } : null,
+    }
+
+    setInput('')
+    setAttachedCode(null)
+    if (inputRef.current) inputRef.current.style.height = '24px'
+    setIsLoading(true)
+    setDualText('')
+    setDualLabel('')
+    setPrimaryLabel('')
+    setStreamingQuickAnswer('')
+    setIsFinalizing(false)
+    let localDualText = ''
+    let localDualLabel = ''
+    let localPrimaryLabel = ''
+    let localSourceInfo = null
+    let localDebugDoc = null
+    let localQuickAnswer = null
+    let localReferences = []
+    let localFollowUps = []
+
+    let convId = activeConvId
+    let currentMod = activeConv?.module||browseModule
+    let currentTopic = activeConv?.topic||browseTopic
+    let currentMsgs = [...messages, userMsg]
+
+    if (!convId) {
+      const cleanTitle = msgText.replace(/\b[A-Z]{2,4}\d{2,3}N?\b/g,'').replace(/\s+/g,' ').trim().slice(0,50)||'New Conversation'
+      const newConv = await createConversation(session.user.id,{ title:cleanTitle,module:currentMod,topic:currentTopic,messages:[userMsg] })
+      convId = newConv.id; currentMsgs = [userMsg]
+      setConversations(prev=>[newConv,...prev])
+      setActiveConvId(newConv.id)
+    } else {
+      // Guarded: this sits outside the streaming try/catch below, so an unguarded
+      // throw here would surface as an unhandled rejection and abort the send
+      // silently. Local state is authoritative for the turn; a failed pre-save
+      // must not block the user's question from being answered.
+      try {
+        await updateConversation(convId,{ messages:currentMsgs })
+      } catch (e) {
+        console.error('Pre-stream conversation save failed (continuing):', e)
+      }
+      setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:currentMsgs}:c))
+    }
+
+    markBusy(convId, true)
+    const abortController = new AbortController()
+    abortControllersRef.current[convId] = abortController
+    let accumulated = ''
+    // Hoisted out of the try block so the catch handler can recover a fully
+    // streamed answer when a POST-stream step (e.g. the Supabase save) fails.
+    let streamedFinal = ''
+
+    try {
+      const docChunks = uploadedDoc ? await getDocChunks(msgText) : []
+      // Send only role + content for history; chatFetch guarantees a valid JWT.
+      const leanMsgs = (currentMsgs || []).map(m => ({ role: m.role, content: m.content }))
+      const res = await chatFetch({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent })
+
+      if (!res.ok) throw new Error('Network error')
+
+      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true); setIsPreparingAnswer(false); setIsFinalizing(false) }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = '', fullReply = '', modelUsed = '', deliverableType = 'NONE'
+      let searchResults = []
+      let furtherReadingLinks = []
+      let localContainerMode = false
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value,{ stream:true })
+        const lines = buf.split('\n')
+        buf = lines.pop()
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const raw = line.slice(5).trim()
+          try {
+            const evt = JSON.parse(raw)
+            if (evt.type === 'chunk') {
+              accumulated += evt.text
+              if (isMine(convId)) setStreamingText(accumulated)
+            } else if (evt.type === 'quick_answer') {
+              // Increments, same pattern as 'chunk' — the quick answer now
+              // streams in live, word by word, not as one lump dropped in
+              // once the closing marker is found server-side.
+              localQuickAnswer = (localQuickAnswer || '') + (evt.text || '')
+              if (isMine(convId)) setStreamingQuickAnswer(localQuickAnswer)
+            } else if (evt.type === 'finalizing') {
+              // Visible answer text just finished streaming, but Sonnet is
+              // still writing the trailing references/follow-ups JSON —
+              // without this signal the cursor just sits there looking
+              // stalled for a moment.
+              if (isMine(convId)) setIsFinalizing(true)
+            } else if (evt.type === 'save_to_memory_confirm') {
+              // User said "save this" — show popup with summary for confirmation
+              // Delete the trigger message from chat (last user message)
+              const msgsWithoutTrigger = currentMsgs.slice(0, -1)
+              await updateConversation(convId, { messages: msgsWithoutTrigger })
+              setConversations(prev => prev.map(c => c.id === convId
+                ? { ...c, messages: msgsWithoutTrigger, updated_at: new Date().toISOString() }
+                : c
+              ))
+              markBusy(convId, false)
+              delete abortControllersRef.current[convId]
+              if (isMine(convId)) {
+                setPendingMemorySave({ summary: evt.summary })
+                setIsLoading(false)
+                setIsStreaming(false)
+                setIsPreparingAnswer(false)
+                setIsFinalizing(false)
+                setStreamingText('')
+              }
+              return
+            } else if (evt.type === 'model_label') {
+              localPrimaryLabel = evt.label || ''
+              if (isMine(convId)) setPrimaryLabel(localPrimaryLabel)
+            } else if (evt.type === 'dual_start') {
+              localDualLabel = evt.label || ''
+              localDualText = ''
+              if (isMine(convId)) { setDualLabel(localDualLabel); setDualStreaming(true); setDualText('') }
+            } else if (evt.type === 'dual_chunk') {
+              localDualText += evt.text
+              if (isMine(convId)) setDualText(prev => prev + evt.text)
+            } else if (evt.type === 'dual_done') {
+              if (isMine(convId)) setDualStreaming(false)
+            } else if (evt.type === 'start') {
+              if (isMine(convId)) setStreamingIntent(evt.intent || 'SAP_QA')
+            } else if (evt.type === 'search_results') {
+              searchResults = evt.results || []
+            } else if (evt.type === 'further_reading') {
+              furtherReadingLinks = evt.links || []
+            } else if (evt.type === 'done') {
+                              // Handle doc wizard stage transitions
+                              if (evt.docWizardStage) {
+                                setDocWizardStage(evt.docWizardStage)
+                                if (evt.docIntent) setDocWizardIntent(evt.docIntent)
+                              } else if (evt.docWizardStage === null) {
+                                setDocWizardStage(null)
+                                setDocWizardIntent(null)
+                              }
+                              // If user confirmed doc wizard → move to gathering stage
+                              if (docWizardStage === 'awaiting_confirm') setDocWizardStage('confirmed')
+                              if (docWizardStage === 'gathering') setDocWizardStage('generate')
+              // For FS/PPT: always use evt.full (the clean card) — never accumulated raw content
+              fullReply = evt.full || (
+                (evt.fsComplete || evt.pptComplete) ? '' : accumulated
+              )
+              streamedFinal = fullReply
+              modelUsed = evt.model
+              deliverableType = evt.deliverableType || 'NONE'
+              if (typeof evt.messageCount === 'number') setMessageCount(evt.messageCount)
+              if (typeof evt.isUnlimited === 'boolean') setIsUnlimited(evt.isUnlimited)
+              if (evt.sourceInfo) localSourceInfo = evt.sourceInfo
+              if (evt.debugDoc)    localDebugDoc   = evt.debugDoc
+
+              // Terminal-event recovery is the source of truth for public links.
+              // `further_reading` remains useful for streaming, but links must survive
+              // even if that earlier SSE event is coalesced/dropped by a proxy.
+              localReferences = Array.isArray(evt.references) ? evt.references : []
+              if (furtherReadingLinks.length === 0 && localReferences.length > 0) {
+                furtherReadingLinks = localReferences
+              }
+
+              if (evt.containerMode) {
+                localContainerMode = true
+                localQuickAnswer = evt.quickAnswer || null
+                localFollowUps = evt.followUps || []
+              }
+              if (isMine(convId)) setIsPreparingAnswer(false)
+              if (evt.isCorrection) {
+                setPendingCorrection({
+                  userMsg: currentMsgs[currentMsgs.length - 1]?.content || '',
+                  assistantMsg: prevAssistantMsg,
+                })
+              }
+
+              // FS Complete — auto-trigger Word document download
+              if (evt.fsComplete && evt.fsText) {
+                // Store fsText on the message for fallback button
+                window.__lastFsText = evt.fsText
+                try {
+                  const fsRes = await fetch('/api/generate-fs-doc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      fsText: evt.fsText,
+                      fileName: `Wani_FS_${new Date().toISOString().slice(0,10)}`
+                    })
+                  })
+                  if (fsRes.ok) {
+                    const blob = await fsRes.blob()
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `Wani_FS_${new Date().toISOString().slice(0,10)}.docx`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+
+                    // Auto-mark this conversation as a project
+                    const fsTitleMatch = evt.fsText.match(/FS_TITLE:\s*(.+)/i)
+                    const fsTitle = fsTitleMatch?.[1]?.trim() || activeConv?.title || 'Functional Specification'
+                    markAsProject(convId, fsTitle).then(() => {
+                      const projectConv = { ...conversations.find(c=>c.id===convId), is_project: true, project_name: fsTitle, fs_title: fsTitle, fs_generated_at: new Date().toISOString() }
+                      setProjects(prev => [projectConv, ...prev.filter(p=>p.id!==convId)])
+                      setConversations(prev => prev.map(c => c.id===convId ? {...c, is_project:true, project_name:fsTitle} : c))
+                    }).catch(()=>{})
+                  }
+                } catch (e) { console.error('FS doc generation failed:', e) }
+              }
+
+              // PPT Complete — auto-trigger PowerPoint download
+              if (evt.pptComplete && evt.pptText) {
+                // Store pptText on the message for fallback button
+                window.__lastPptText = evt.pptText
+                try {
+                  const pptRes = await fetch('/api/generate-ppt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      pptText: evt.pptText,
+                      fileName: `Wani_Workshop_${new Date().toISOString().slice(0,10)}`
+                    })
+                  })
+                  if (pptRes.ok) {
+                    const blob = await pptRes.blob()
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `Wani_Workshop_${new Date().toISOString().slice(0,10)}.pptx`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                  }
+                } catch (e) { console.error('PPT generation failed:', e) }
+              }
+            } else if (evt.type === 'debug_info') {
+                              if (isAdmin) setDebugData(evt.data)
+                            } else if (evt.type === 'error') {
+              throw new Error(evt.error)
+            }
+          } catch {}
+        }
+      }
+
+      const finalReply = fullReply || accumulated
+
+      if (isMine(convId)) { setIsStreaming(false); setIsPreparingAnswer(false); setIsFinalizing(false); setStreamingText(''); setStreamingQuickAnswer(''); setStreamingIntent('SAP_QA') }
+
+      // No separate links section — sources are now cited inline in the answer
+      const replyContent = finalReply
+
+      // Attach deliverable text to message for fallback download button
+      const assistantMsg = {
+        role: 'assistant',
+        content: replyContent,
+        _model: modelUsed,
+        ...(furtherReadingLinks.length > 0 ? { _links: furtherReadingLinks } : {}),
+        ...(deliverableType === 'FS_SPEC' && window.__lastFsText
+          ? { _fsText: window.__lastFsText, _deliverable: 'FS_SPEC' } : {}),
+        ...(deliverableType === 'WORKSHOP_PPT' && window.__lastPptText
+          ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
+        ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
+        ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
+        ...(localContainerMode ? {
+          _containerMode: true,
+          _quickAnswer: localQuickAnswer,
+          _references: localReferences,
+          _followUps: localFollowUps,
+        } : {}),
+      }
+
+      const finalMsgs = [...currentMsgs, assistantMsg]
+
+      // Debug doc + full pipeline are attached to EVERY answer and persisted, so they
+      // survive reload on every message with no exceptions. The original crash came from
+      // the row growing without bound, so the ONLY thing guarded here is total size: if
+      // the serialized messages would exceed the row budget, the oldest debug-doc blobs
+      // (the largest, most redundant part) are shed oldest-first until it fits — pipeline
+      // and sourceInfo are always kept. In practice this never triggers until a
+      // conversation is very long; short and normal conversations keep everything.
+      const ROW_BUDGET = 3_000_000 // ~3MB, well under Postgres/Supabase row limits
+      let persistMsgs = finalMsgs
+      const size = arr => JSON.stringify(arr).length
+      if (size(persistMsgs) > ROW_BUDGET) {
+        // Shed oldest _debugDoc blobs first (keep pipeline + sourceInfo intact everywhere)
+        persistMsgs = finalMsgs.map(m => ({ ...m }))
+        for (let i = 0; i < persistMsgs.length && size(persistMsgs) > ROW_BUDGET; i++) {
+          if (persistMsgs[i]._debugDoc) {
+            persistMsgs[i] = { ...persistMsgs[i], _debugDoc: '[debug doc trimmed — conversation exceeded row size budget]' }
+          }
+        }
+      }
+
+      const convUpdate = { messages: persistMsgs }
+      if (deliverableType !== 'NONE') convUpdate.deliverable_type = deliverableType
+
+      // Update the VISIBLE conversation state — and therefore `messages`,
+      // which the next send() reads to build its own history — IMMEDIATELY,
+      // before awaiting the DB save. This ordering matters specifically for
+      // backgrounded mobile tabs: browsers can suspend/throttle a
+      // backgrounded tab's fetch calls for a long time (sometimes
+      // indefinitely until the user returns). If the save were awaited
+      // FIRST, the streaming bubble would already be gone (isStreaming was
+      // already set false right after the SSE stream finished) with nothing
+      // visibly replacing it until the save call finally resolves — reading
+      // as "the answer vanished, only the question is left". Worse, if the
+      // user asked a follow-up during that gap, `messages` locally would
+      // still be missing this assistant reply, so the next send would carry
+      // two consecutive user turns with no assistant reply between them —
+      // which is exactly what api/chat.js's validMessages would forward to
+      // Sonnet as-is (see the mergeConsecutiveRoles guard added there as a
+      // second line of defense). Local state always keeps full-fidelity
+      // messages (incl. debug doc) regardless of what gets trimmed for the
+      // save below.
+      setConversations(prev=>prev.map(c=>c.id===convId?{...c,...convUpdate,messages:finalMsgs,updated_at:new Date().toISOString()}:c))
+      markBusy(convId, false)
+      delete abortControllersRef.current[convId]
+      // Clear live dual bubble now that saved message has _dualText — prevents duplicate
+      if (isMine(convId)) { setDualText(''); setDualLabel('') }
+
+      try {
+        await updateConversation(convId, convUpdate)
+      } catch (e) {
+        // Last-resort fallback: if the save still fails (size or otherwise), retry once
+        // with debug docs stripped so the ANSWER is never lost — pipeline/sourceInfo kept.
+        console.error('Conversation save failed, retrying without debug docs:', e)
+        const lean = finalMsgs.map(m => { const { _debugDoc, ...rest } = m; return rest })
+        try { await updateConversation(convId, { ...convUpdate, messages: lean }) } catch (e2) { console.error('Lean retry also failed:', e2) }
+      }
+
+      if (currentMsgs.length===1) {
+        fetch('/api/categorise',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:msgText, answer:(finalReply||'').slice(0,800) }) })
+          .then(r=>r.json()).then(({ module,topic,title })=>{ if(module){ updateConversation(convId,{ module,topic,title });setConversations(prev=>prev.map(c=>c.id===convId?{...c,module,topic,title}:c)) } }).catch(()=>{})
+      }
+
+      fetch('/api/extract',{ method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ userId:session.user.id,convId,module:currentMod||null,topic:currentTopic||null,userMsg:msgText,assistantMsg:finalReply }) }).catch(()=>{})
+
+      // Check for consultant findings worth saving (fire and forget)
+      checkForFindings(finalMsgs).catch(() => {})
+
+    } catch(err) {
+      markBusy(convId, false)
+      delete abortControllersRef.current[convId]
+
+      if (err.name === 'AbortError') {
+        // User clicked Stop — save whatever was streamed so far as the message, marked as stopped
+        if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsFinalizing(false);setStreamingText('');setStreamingQuickAnswer('');setStreamingIntent('SAP_QA');setDualStreaming(false) }
+        const partialText = (accumulated || '').trim()
+        const stoppedMsgs = partialText
+          ? [...currentMsgs,{ role:'assistant',content:partialText,_stopped:true }]
+          : currentMsgs
+        if (partialText) await updateConversation(convId,{ messages:stoppedMsgs }).catch(()=>{})
+        setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:stoppedMsgs}:c))
+        return
+      }
+
+      if (isMine(convId)) { setIsLoading(false);setIsStreaming(false);setIsPreparingAnswer(false);setIsFinalizing(false);setStreamingText('');setStreamingQuickAnswer('');setStreamingIntent('SAP_QA');setDualStreaming(false);setPrimaryLabel('') }
+      // Note: dualText and dualLabel intentionally NOT cleared here
+      // They persist until next dual_start event so Claude answer stays visible
+
+      // A complete answer may already have streamed — most failures here come from
+      // the SAVE that follows streaming, not from the model. Never discard text the
+      // user has already seen; keep it and flag that persistence failed.
+      const recovered = (streamedFinal || accumulated || '').trim()
+      if (recovered) {
+        const recoveredMsgs = [...currentMsgs, { role:'assistant', content: recovered, _saveFailed: true }]
+        setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:recoveredMsgs}:c))
+        // Retry the save with the lean payload; if it still fails the answer at
+        // least stays on screen rather than being replaced by an error.
+        updateConversation(convId, { messages: recoveredMsgs }).catch(()=>{})
+        return
+      }
+
+      const errMsgs=[...currentMsgs,{ role:'assistant',content:'Error reaching AI. Please try again.' }]
+      setConversations(prev=>prev.map(c=>c.id===convId?{...c,messages:errMsgs}:c))
+    }
+  }
+
+  // Send a specific text programmatically — used by code analysis buttons
+  // ── CODE DETECTION — detects ABAP, SQL, JS, XML, JSON pastes ────────────────
+  const detectCode = (text) => {
+    const lines = text.split('\n')
+    if (lines.length < 4) return null // too short to be code
+
+    const abapSignals = [
+      /^REPORT\s+/im, /^FUNCTION\s+/im, /^CLASS\s+/im, /^METHOD\s+/im,
+      /^DATA\s*:/im, /^TYPES\s*:/im, /^CONSTANTS\s*:/im, /^TABLES\s*:/im,
+      /^SELECT\s+(\*|\w+\s+FROM)/im, /^LOOP\s+AT\s+/im, /^IF\s+(sy-|l_|lv_|lt_|ls_|\w+\s*(=|<>|IS))/im, /^ENDLOOP\./im,
+      /^ENDIF\./im, /^ENDFUNCTION\./im, /^ENDCLASS\./im,
+      /CALL\s+FUNCTION/im, /PERFORM\s+/im, /^WRITE\s*:/im,
+    ]
+    const xmlSignals = [/^<\?xml/i, /^<[A-Z_]+>/i]
+    const jsonSignals = [/^\{[\s\S]*\}$/, /^\[[\s\S]*\]$/]
+    const sqlSignals = [/^SELECT\s+.*FROM\s+/im, /^INSERT\s+INTO\s+/im]
+
+    const abapScore = abapSignals.filter(r => r.test(text)).length
+    if (abapScore >= 2) return { content: text, lines: lines.length, language: 'ABAP' }
+    if (xmlSignals.some(r => r.test(text.trim()))) return { content: text, lines: lines.length, language: 'XML' }
+    if (jsonSignals.some(r => r.test(text.trim()))) return { content: text, lines: lines.length, language: 'JSON' }
+    if (sqlSignals.some(r => r.test(text))) return { content: text, lines: lines.length, language: 'SQL' }
+    // Only treat as generic code if it has code-like structure — short lines, symbols, indentation
+    // Avoid treating pasted SAP replies, emails, or documents as code
+    const avgLineLen = text.length / lines.length
+    const hasCodeStructure = avgLineLen < 60 && lines.filter(l => /^\s{2,}|[{};()=>]/.test(l)).length > lines.length * 0.3
+    if (lines.length >= 20 && hasCodeStructure) return { content: text, lines: lines.length, language: 'Code' }
+    return null
+  }
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData?.getData('text') || ''
+    const detected = detectCode(pasted)
+    if (detected) {
+      e.preventDefault()
+      setAttachedCode(detected)
+      // Clear any existing code from input
+      setInput(prev => prev.replace(pasted, '').trim())
+    }
+    // If not code — let normal paste happen
+  }
+
+
   const handleImprovePrompt = async () => {
     const original = input.trim()
     if (!original || attachedCode || isImprovingPrompt) return
