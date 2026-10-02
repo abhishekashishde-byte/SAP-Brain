@@ -111,6 +111,51 @@ function mergeVerifiedReferences(_modelReferences = [], ...retrievedGroups) {
   return out.slice(0, 3)
 }
 
+// SAP Note/KBA references are special: their canonical SAP for Me URL is
+// deterministic from the numeric identifier. If the final answer names a Note/KBA,
+// always expose a clickable reference for that exact identifier. Prefer metadata from
+// a retrieved source when available; otherwise construct only the canonical official
+// me.sap.com/notes/<number> route. We never construct arbitrary SAP documentation URLs.
+function extractMentionedSapNoteNumbers(text = '') {
+  const numbers = []
+  const seen = new Set()
+  const pattern = /\b(?:SAP\s+)?(?:Note|KBA)\s*(?:No\.?\s*)?#?\s*(\d{5,10})\b/gi
+  let match
+  while ((match = pattern.exec(String(text || ''))) !== null) {
+    const number = match[1]
+    if (!seen.has(number)) {
+      seen.add(number)
+      numbers.push(number)
+    }
+  }
+  return numbers
+}
+
+function sapNoteNumberFromReference(ref = {}) {
+  const haystack = `${ref?.url || ''} ${ref?.title || ''} ${ref?.note || ''}`
+  const pathMatch = haystack.match(/(?:\/notes\/|\b(?:SAP\s+)?(?:Note|KBA)\s*(?:No\.?\s*)?#?\s*)(\d{5,10})\b/i)
+  return pathMatch?.[1] || null
+}
+
+function buildMentionedSapNoteReferences(answerText, ...retrievedGroups) {
+  const mentioned = extractMentionedSapNoteNumbers(answerText)
+  if (!mentioned.length) return []
+
+  const retrieved = retrievedGroups.flatMap(group => Array.isArray(group) ? group : [])
+  return mentioned.map(number => {
+    const exact = retrieved.find(ref => sapNoteNumberFromReference(ref) === number)
+    const canonicalUrl = `https://me.sap.com/notes/${number}`
+    return {
+      type: 'SAP Note / KBA',
+      source: 'SAP Support',
+      title: exact?.title && exact.title !== exact.url ? exact.title : `SAP Note / KBA ${number}`,
+      url: exact?.url && isApprovedUrl(exact.url) ? exact.url : canonicalUrl,
+      note: exact?.note || 'Open this exact Note/KBA in SAP for Me. SAP authentication may be required.',
+      sapNoteNumber: number,
+    }
+  })
+}
+
 const SEARCH_STOPWORDS = new Set(`
 a an and are as at be because been but by can could did do does for from had has have how i if in into is it its me my no not of on or our please should so than that the their them then there these they this to us was we were what when where which who why will with would you your
 actually answer correct correction explain give tell show think sure wrong right question user still really maybe just about more using use used possible standard way need want wants asking asked
@@ -3161,11 +3206,24 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     const basePublicReferences = usedContainerFormat
       ? (mergedVerifiedReferences.length === 0 ? buildSapSearchFallback(searchQuery || lastMsg) : mergedVerifiedReferences)
       : publicSearchResults
+    // A Note/KBA explicitly named in the answer must never be stranded as plain text.
+    // Join it back to retrieved evidence when possible, otherwise use only SAP's
+    // deterministic canonical Note route (me.sap.com/notes/<number>).
+    const mentionedSapNoteReferences = buildMentionedSapNoteReferences(
+      chatAnswer || fullAnswer || '',
+      referenceSearchResults,
+      relatedLinks,
+      openAISources,
+      tavilyFiltered,
+      tavilyNotesFiltered,
+    )
     const finalVerifiedReferences = isSubstantialAnswer
-      ? [...basePublicReferences, ...googleLinks]
+      ? [...mentionedSapNoteReferences, ...basePublicReferences, ...googleLinks]
           .filter((ref, index, arr) => ref?.url && arr.findIndex(x => x?.url === ref.url) === index)
           .slice(0, 6)
-      : basePublicReferences
+      : [...mentionedSapNoteReferences, ...basePublicReferences]
+          .filter((ref, index, arr) => ref?.url && arr.findIndex(x => x?.url === ref.url) === index)
+          .slice(0, 6)
 
     const DELIVERABLE_TYPES_FINAL = new Set(['FS_SPEC','TECH_SPEC','TEST_CASES','GAP_ANALYSIS','WORKSHOP_PLAN','WORKSHOP_TOPICS','FORMS_SPEC','SLIDE_CONTENT','FIORI_REC','WORKSHOP_PPT','CUSTOMIZING','BEST_PRACTICES','EXCEL_VALIDATION','GENERAL_DOC'])
     const deliverableType = DELIVERABLE_TYPES_FINAL.has(intent) ? intent : 'NONE'
