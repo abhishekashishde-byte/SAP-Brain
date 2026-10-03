@@ -19,6 +19,13 @@ function formatRelative(iso) {
   return new Date(iso).toLocaleDateString()
 }
 
+function formatTokens(value) {
+  const n = Number(value || 0)
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toLocaleString()
+}
+
 function Metric({ label, value, hint }) {
   return (
     <div style={cardStyle}>
@@ -120,6 +127,8 @@ export default function AdminDashboard({ onClose, session }) {
               <Metric label="Active today" value={data.summary.activeToday} />
               <Metric label="Questions today" value={data.summary.questionsToday} hint="Metered non-admin questions" />
               <Metric label="Questions this month" value={data.summary.questionsMonth} />
+              <Metric label="Tokens today" value={formatTokens(data.summary.tokensToday)} hint="Actual provider-reported usage" />
+              <Metric label="Tokens this month" value={formatTokens(data.summary.tokensMonth)} />
               <Metric label="Images generated" value={data.summary.imagesTotal || 0} hint={`${data.summary.customerBriefs || 0} briefs · ${data.summary.consultantNotes || 0} notes`} />
             </div>
 
@@ -137,10 +146,10 @@ export default function AdminDashboard({ onClose, session }) {
 
             <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1380 }}>
                   <thead>
                     <tr style={{ background: '#171522' }}>
-                      {['User','Access status','Last online','Today','Month','Customer briefs','Consultant notes','Images','Credits left','Joined','Action'].map(h => (
+                      {['User','Access status','Last online','Today','Month','Tokens today','Tokens month','Customer briefs','Consultant notes','Images','Credits left','Joined','Action'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, textTransform: 'uppercase', letterSpacing: .6, color: '#8A849E', borderBottom: '1px solid #2A2736' }}>{h}</th>
                       ))}
                     </tr>
@@ -167,6 +176,12 @@ export default function AdminDashboard({ onClose, session }) {
                         </td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.questionsToday}</td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.questionsMonth}</td>
+                        <td style={{ padding: '13px 14px', fontSize: 12 }} title={`Input: ${formatTokens(u.inputTokensToday)} · Output: ${formatTokens(u.outputTokensToday)}`}>
+                          {formatTokens(u.tokensToday)}
+                        </td>
+                        <td style={{ padding: '13px 14px', fontSize: 12 }} title={`Input: ${formatTokens(u.inputTokensMonth)} · Output: ${formatTokens(u.outputTokensMonth)}`}>
+                          {formatTokens(u.tokensMonth)}
+                        </td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.customerBriefs || 0}</td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.consultantNotes || 0}</td>
                         <td style={{ padding: '13px 14px', fontSize: 13, fontWeight: 700, color: '#C4B5FD' }}>{u.imagesTotal || 0}</td>
@@ -184,7 +199,7 @@ export default function AdminDashboard({ onClose, session }) {
                       </tr>
                     ))}
                     {users.length === 0 && (
-                      <tr><td colSpan="11" style={{ padding: 24, textAlign: 'center', color: '#77718B' }}>No users found.</td></tr>
+                      <tr><td colSpan="13" style={{ padding: 24, textAlign: 'center', color: '#77718B' }}>No users found.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -192,7 +207,7 @@ export default function AdminDashboard({ onClose, session }) {
             </div>
 
             <div style={{ marginTop: 14, fontSize: 11, color: '#5E596C', lineHeight: 1.5 }}>
-              Cost, model usage, failures and average response time are intentionally not shown yet because the main chat does not persist reliable per-request telemetry. The dashboard will not invent those values.
+              Token totals use provider-reported usage captured by Wani. Hover a token total to see its input/output split. Historical questions from before token tracking was enabled are not backfilled.
             </div>
           </>
         )}
