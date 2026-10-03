@@ -1170,6 +1170,7 @@ async function streamGPT(systemPrompt, messages, onChunk, model = 'gpt-4o', maxT
       max_tokens: maxTokens,
       temperature: 0.1,
       stream: true,
+      stream_options: { include_usage: true },
       messages: [{ role: 'system', content: systemPrompt }, ...messages]
     })
   })
@@ -1180,6 +1181,7 @@ async function streamGPT(systemPrompt, messages, onChunk, model = 'gpt-4o', maxT
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = '', fullText = ''
+  let inputTokens = 0, outputTokens = 0
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -1191,12 +1193,17 @@ async function streamGPT(systemPrompt, messages, onChunk, model = 'gpt-4o', maxT
       const data = line.slice(6).trim()
       if (data === '[DONE]') continue
       try {
-        const text = JSON.parse(data)?.choices?.[0]?.delta?.content || ''
+        const json = JSON.parse(data)
+        const text = json?.choices?.[0]?.delta?.content || ''
+        if (json?.usage) {
+          inputTokens = json.usage.prompt_tokens || 0
+          outputTokens = json.usage.completion_tokens || 0
+        }
         if (text) { fullText += text; onChunk && onChunk(text) }
       } catch {}
     }
   }
-  return fullText
+  return { text: fullText, usage: { inputTokens, outputTokens } }
 }
 
 // ── 11. Claude streaming ──────────────────────────────────────────────────────
@@ -1568,6 +1575,27 @@ async function saveMemory(userId, fact) {
 // Named anthropic_cost_usd (not "total cost") deliberately — this is only
 // the Sonnet call. Wani also spends on Groq/Tavily/OpenAI per answer; this
 // table doesn't claim to cover those.
+async function logUserTokenUsage(userId, provider, model, usage) {
+  if (!userId || !usage) return
+  const inputTokens = Math.max(0, Number(usage.inputTokens ?? usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0)
+  const outputTokens = Math.max(0, Number(usage.outputTokens ?? usage.completion_tokens ?? usage.output_tokens ?? 0) || 0)
+  if (!inputTokens && !outputTokens) return
+  try {
+    const supabase = getSupabase()
+    const { error } = await supabase.from('wani_token_usage').insert({
+      user_id: userId,
+      provider,
+      model,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+    })
+    if (error) console.error('[TOKEN_USAGE] Persist failed:', error.message)
+  } catch (e) {
+    // Telemetry must never break a successful Wani answer.
+    console.error('[TOKEN_USAGE] Persist exception:', e.message)
+  }
+}
+
 async function logCostMetric({ requestId, intent, visualMode, model, usage, hiddenJsonChars, visualDataChars }) {
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
@@ -2767,6 +2795,8 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       const codeResult = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
       fullAnswer = codeResult.text
       debugLog.tokenUsage = codeResult.usage
+      debugLog.tokenProvider = 'anthropic'
+      debugLog.tokenModel = 'claude-sonnet-4-5'
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (code)'
       debugLog.rawClaudeAnswer = fullAnswer
@@ -2775,7 +2805,11 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     } else if (intent === 'EXCEL_VALIDATION' && shouldGenerateDoc) {
       // Excel/macro/VBA generation → GPT-4o only (better at formulas, VBA syntax, tabular logic)
       send({ type: 'model_label', label: 'by GPT-4o' })
-      fullAnswer = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 'gpt-4o', 16000)
+      const gptResult = await streamGPT(systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 'gpt-4o', 16000)
+      fullAnswer = gptResult.text
+      debugLog.tokenUsage = gptResult.usage
+      debugLog.tokenProvider = 'openai'
+      debugLog.tokenModel = 'gpt-4o'
       modelUsed = 'gpt4o'
       debugLog.routing = 'gpt4o (excel/macro)'
 
@@ -2785,6 +2819,8 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       const deliverableResult = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
       fullAnswer = deliverableResult.text
       debugLog.tokenUsage = deliverableResult.usage
+      debugLog.tokenProvider = 'anthropic'
+      debugLog.tokenModel = 'claude-sonnet-4-5'
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (deliverable)'
       debugLog.rawClaudeAnswer = fullAnswer
@@ -2947,6 +2983,8 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       fullAnswer = sonnetResult.text
       debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
       debugLog.tokenUsage = sonnetResult.usage
+      debugLog.tokenProvider = 'anthropic'
+      debugLog.tokenModel = 'claude-sonnet-4-5'
 
       // Final flush: send whatever text was held back mid-stream and never
       // flushed — covers "no marker at all" and "a marker arrived in the
@@ -3380,6 +3418,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     ]).join('\n')
 
     if (debugLog.tokenUsage) {
+      await logUserTokenUsage(userId, debugLog.tokenProvider || 'anthropic', debugLog.tokenModel || 'claude-sonnet-4-5', debugLog.tokenUsage)
       try {
         await logCostMetric({
           requestId, intent, visualMode: 'on_demand', model: 'claude-sonnet-4-5',
