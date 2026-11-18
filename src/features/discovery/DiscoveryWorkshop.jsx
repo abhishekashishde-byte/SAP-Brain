@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { discoveryCatalog, discoveryCounts } from './catalog.js'
-import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue } from './data.js'
+import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveMinutes,loadMinutes } from './data.js'
 import './DiscoveryWorkshop.css'
 import {exportCSV,exportJSON,exportMarkdown,exportXLSX,printReport} from './exports.js'
 
@@ -58,6 +58,12 @@ export default function DiscoveryWorkshop({session}) {
  const [customQuestion,setCustomQuestion]=useState('')
  const [quickText,setQuickText]=useState('')
  const [quickOpen,setQuickOpen]=useState(false)
+ const [aiBusy,setAiBusy]=useState('')
+ const [aiQuestion,setAiQuestion]=useState('')
+ const [aiAnswer,setAiAnswer]=useState('')
+ const [followups,setFollowups]=useState([])
+ const [minutes,setMinutes]=useState('')
+ const [minutesAudience,setMinutesAudience]=useState('client')
  const queue=useRef(null)
  const userId=session?.user?.id
  const scoped=useMemo(()=>discoveryCatalog.objects.filter(o=>workshop?.scope_areas?.length?workshop.scope_areas.includes(o.area):true),[workshop])
@@ -87,7 +93,7 @@ export default function DiscoveryWorkshop({session}) {
    const map={};for(const row of rows)map[eKey(row.object_id,row.item_type,row.item_id)]=row
    for(const row of q.pending.values())map[eKey(row.object_id,row.item_type,row.item_id)]=row
    setEntries(map);setTodos(taskRows);queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
-   setMode('workshop');setShowSummary(false);setScope('all');setSearch('')
+   setMode('workshop');setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
   }catch(e){setError(e.message)}finally{setLoading(false)}
  }
  async function create(e) {
@@ -122,7 +128,7 @@ export default function DiscoveryWorkshop({session}) {
  async function editTodo(id,values){setTodos(x=>x.map(t=>t.id===id?{...t,...values}:t));try{await updateTodo(id,values)}catch(e){setError(e.message)}}
  async function deleteTodo(id){try{await removeTodo(id);setTodos(x=>x.filter(t=>t.id!==id))}catch(e){setError(e.message)}}
  async function deleteWorkshop(w){if(!window.confirm('Delete workshop and all its notes and decisions permanently?'))return;try{await removeWorkshop(w.id);await refresh()}catch(e){setError(e.message)}}
- function selectObject(id){setSelectedId(id);setShowOptional(false);setMobileNav(false);setCustomLabel('');setCustomQuestion('')}
+ function selectObject(id){setSelectedId(id);setShowOptional(false);setMobileNav(false);setCustomLabel('');setCustomQuestion('');setFollowups([]);setAiAnswer('')}
  function addCustom(type,label) {
   if(!label.trim()||!selected)return
   const id=crypto.randomUUID()
@@ -147,6 +153,26 @@ export default function DiscoveryWorkshop({session}) {
    if(e.key==='p'){e.preventDefault();setPresenter(v=>!v)}
   };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)
  },[mode,presenter,showSummary,objects,selectedIndex])
+ async function askAI(action,extra={}) {
+  if(!workshop||aiBusy)return
+  setAiBusy(action);setError('')
+  try {
+   const labels=Object.fromEntries(discoveryCatalog.objects.flatMap(o=>[
+    [o.id,{title:o.title,area:o.area,tcodes:o.tcodes}],
+    ...o.fields.map(x=>[x.id,x.label]),...o.questions.map(x=>[x.id,x.text]),...o.decisions.map(x=>[x.id,x.text])
+   ]))
+   const res=await fetch('/api/discovery-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},
+    body:JSON.stringify({workshopId:workshop.id,action,payload:{audience:minutesAudience,objectId:selected?.id,objectTitle:selected?.title,tcodes:selected?.tcodes,question:aiQuestion,catalogLookup:labels,...extra}})})
+   const data=await res.json();if(!res.ok)throw new Error(data.error||'AI request failed')
+   if(action==='minutes'){setMinutes(data.content_md||'');setMinutesAudience(extra.audience||minutesAudience)}
+   if(action==='followups')setFollowups(data.questions||[])
+   if(action==='ask')setAiAnswer(data.reply||'')
+  }catch(e){setError(e.message)}finally{setAiBusy('')}
+ }
+ async function storeMinutes(){
+  if(!minutes.trim())return
+  try{await saveMinutes({workshop_id:workshop.id,content_md:minutes,audience:minutesAudience,model:'claude'});setError('');alert('Minutes saved.')}catch(e){setError(e.message)}
+ }
  function goBack(){queue.current?.flush();queue.current?.close();queue.current=null;setWorkshop(null);setMode('list');setShowSummary(false);refresh()}
  const covered={objects:scoped.length,fields:scoped.reduce((n,o)=>n+o.fields.length,0),questions:scoped.reduce((n,o)=>n+o.questions.length,0),decisions:scoped.reduce((n,o)=>n+o.decisions.length,0)}
  return <main className={`dw ${presenter?'dw-presenter':''}`}>
@@ -170,7 +196,9 @@ export default function DiscoveryWorkshop({session}) {
     <div className="dw-stats"><span>Fields marked: {counts.fields}/{covered.fields}</span><span>Questions answered: {counts.questions}/{covered.questions}</span><span>Decisions made: {counts.decisions}/{covered.decisions}</span><span>Need clarification: {counts.clarify}</span><span>Open tasks: {todos.filter(t=>!t.done).length}</span></div>
     <NoteInput label="General workshop notes" value={val('workshop','workshop_note','main').text} onChange={v=>writeNote('workshop','workshop_note','main',v)} internal={entry('workshop','workshop_note','main')?.is_internal} onInternal={v=>writeNote('workshop','workshop_note','main',val('workshop','workshop_note','main').text||'',v)}/>
    </section>
-   {showSummary?<div className="dw-card"><h2>Workshop summary</h2><p className="dw-caption">All catalog items, including unanswered items, are part of the export dataset. Documents are only generated on request.</p><p>{counts.fields} fields marked · {counts.questions} questions answered · {counts.decisions} decisions made · {todos.filter(t=>!t.done).length} open to-dos</p><label>Export audience <select value={audience} onChange={e=>setAudience(e.target.value)}><option value="client">Client — hide internal notes</option><option value="internal">Internal — include all notes</option></select></label><div className="dw-export-actions"><button className="dw-button dw-primary" onClick={()=>exportXLSX(workshop,entries,todos,audience)}>Download Excel (.xlsx)</button><button className="dw-button" onClick={()=>printReport(workshop,entries,todos,audience)}>Print / Save PDF</button><button className="dw-button" onClick={()=>exportCSV(workshop,entries,todos,audience)}>CSV</button><button className="dw-button" onClick={()=>exportMarkdown(workshop,entries,todos,audience)}>Markdown</button><button className="dw-button" onClick={()=>exportJSON(workshop,entries,todos,audience)}>JSON</button></div>
+   {showSummary?<div className="dw-card"><h2>Workshop summary</h2><p className="dw-caption">All catalog items, including unanswered items, are part of the export dataset. Documents are only generated on request.</p><p>{counts.fields} fields marked · {counts.questions} questions answered · {counts.decisions} decisions made · {todos.filter(t=>!t.done).length} open to-dos</p><label>Export audience <select value={audience} onChange={e=>setAudience(e.target.value)}><option value="client">Client — hide internal notes</option><option value="internal">Internal — include all notes</option></select></label><div className="dw-ai-box"><h3>AI meeting minutes (optional)</h3><p className="dw-caption">Generated only when requested. Review and edit before sharing. Internal notes stay out of client minutes.</p><div className="dw-inline"><label>Minutes audience <select value={minutesAudience} onChange={e=>setMinutesAudience(e.target.value)}><option value="client">Client</option><option value="internal">Internal</option></select></label><button className="dw-button" disabled={!!aiBusy||!!pending} onClick={()=>askAI('minutes',{audience:minutesAudience})}>{aiBusy==='minutes'?'Generating…':'Generate minutes'}</button></div>
+ {minutes&&<><textarea rows="14" aria-label="Editable meeting minutes" value={minutes} onChange={e=>setMinutes(e.target.value)}/><button className="dw-button" onClick={storeMinutes}>Save reviewed minutes</button></>}</div>
+ <div className="dw-export-actions"><button className="dw-button dw-primary" onClick={()=>exportXLSX(workshop,entries,todos,audience)}>Download Excel (.xlsx)</button><button className="dw-button" onClick={()=>printReport(workshop,entries,todos,audience)}>Print / Save PDF</button><button className="dw-button" onClick={()=>exportCSV(workshop,entries,todos,audience)}>CSV</button><button className="dw-button" onClick={()=>exportMarkdown(workshop,entries,todos,audience)}>Markdown</button><button className="dw-button" onClick={()=>exportJSON(workshop,entries,todos,audience)}>JSON</button></div>
  <div className="dw-stats"><strong>Completeness check</strong><span>{covered.fields-counts.fields} unmarked fields</span><span>{covered.questions-counts.questions} unanswered questions</span><span>{covered.decisions-counts.decisions} undecided decisions</span><span>{counts.clarify} clarifications</span></div>
  <div className="dw-inline"><label>Show <select value={summaryFilter} onChange={e=>setSummaryFilter(e.target.value)}><option value="all">All objects</option><option value="open">With unresolved points</option><option value="decisions">With decisions</option><option value="todos">With action items</option></select></label></div>
  {scoped.filter(o=>summaryFilter==='all'||summaryFilter==='open'&&(o.fields.some(f=>!val(o.id,'field',f.id).mark||val(o.id,'field',f.id).mark==='clarify')||o.questions.some(q=>val(o.id,'question',q.id).answer===undefined)||o.decisions.some(d=>val(o.id,'decision',d.id).status!=='decided'))||summaryFilter==='decisions'&&o.decisions.some(d=>val(o.id,'decision',d.id).status==='decided')||summaryFilter==='todos'&&todos.some(t=>t.object_id===o.id)).map(o=><div key={o.id} className="dw-summary-object"><h3>{o.title}</h3><p>Fields marked: {o.fields.filter(f=>val(o.id,'field',f.id).mark).length}/{o.fields.length} · Answers: {o.questions.filter(q=>val(o.id,'question',q.id).answer!==undefined).length}/{o.questions.length} · Decisions: {o.decisions.filter(d=>val(o.id,'decision',d.id).status==='decided').length}/{o.decisions.length}</p><button className="dw-inline-button" onClick={()=>{selectObject(o.id);setShowSummary(false)}}>Review object →</button></div>)}</div>:
@@ -186,6 +214,7 @@ export default function DiscoveryWorkshop({session}) {
  {Object.values(entries).filter(x=>x.object_id===selected.id&&x.item_type==='custom_question').map(x=><QuestionEditor key={x.item_id} item={{text:x.value?.text,type:'text'}} value={{answer:x.value?.answer||''}} onChange={v=>writeEntry(selected.id,'custom_question',x.item_id,{...x.value,answer:v.answer})}/>)}
  <div className="dw-inline"><input className="dw-input" placeholder="Add custom question" aria-label="New custom question" value={customQuestion} onChange={e=>setCustomQuestion(e.target.value)}/><button className="dw-button" onClick={()=>addCustom('custom_question',customQuestion)}>+ Question</button></div></Section>
     <Section title="Decisions" count={selected.decisions.length}>{selected.decisions.map(d=><DecisionEditor key={d.id} item={d} value={val(selected.id,'decision',d.id)} onChange={v=>writeEntry(selected.id,'decision',d.id,v)}/>)}</Section>
+    {!presenter&&<Section title="Ask Wani & follow-ups" count="AI" open={false}><div className="dw-ai-box"><p className="dw-caption">Suggestions only. Nothing is added to your notes unless you select Save.</p><div className="dw-inline"><button className="dw-button" disabled={!!aiBusy||!!pending} onClick={()=>askAI('followups')}>{aiBusy==='followups'?'Thinking…':'Suggest follow-ups'}</button></div>{followups.map((q,i)=><div className="dw-item" key={i}><strong>{q.question}</strong><p className="dw-caption">{q.why}</p><button className="dw-inline-button" onClick={()=>addCustom('custom_question',q.question)}>Add as custom question</button></div>)}<textarea rows="2" placeholder="Ask about the current SAP PM object…" value={aiQuestion} onChange={e=>setAiQuestion(e.target.value)}/><button className="dw-button" disabled={!!aiBusy||!aiQuestion.trim()} onClick={()=>askAI('ask')}>{aiBusy==='ask'?'Asking…':'Ask Wani'}</button>{aiAnswer&&<div className="dw-ai-answer"><p>{aiAnswer}</p><button className="dw-inline-button" onClick={()=>{writeNote(selected.id,'note','main',(val(selected.id,'note','main').text||'')+'\\n'+aiAnswer,true)}}>Save to internal notes</button></div>}</div></Section>}
     <Section title="Notes & action items" count={todos.filter(t=>t.object_id===selected.id).length}><NoteInput label="Object notes" value={val(selected.id,'note','main').text} onChange={v=>writeNote(selected.id,'note','main',v)} internal={entry(selected.id,'note','main')?.is_internal} onInternal={v=>writeNote(selected.id,'note','main',val(selected.id,'note','main').text||'',v)}/>
     {!presenter&&<><div className="dw-inline"><input className="dw-input" aria-label="New action item" value={newTodo} onChange={e=>setNewTodo(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addTodo()}}} placeholder="Add follow-up / action item…"/><button className="dw-button" onClick={addTodo}>Add</button></div>{todos.filter(t=>t.object_id===selected.id).map(t=><div key={t.id} className="dw-task"><label><input type="checkbox" checked={t.done} onChange={e=>editTodo(t.id,{done:e.target.checked})}/>{t.text}</label><input aria-label="Owner" placeholder="Owner" defaultValue={t.owner||''} onBlur={e=>editTodo(t.id,{owner:e.target.value})}/><input aria-label="Due date" type="date" defaultValue={t.due_date||''} onChange={e=>editTodo(t.id,{due_date:e.target.value||null})}/><button className="dw-button" onClick={()=>deleteTodo(t.id)}>Remove</button></div>)}</>}</Section>
     </>}
