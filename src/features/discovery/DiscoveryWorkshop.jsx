@@ -415,17 +415,19 @@ export default function DiscoveryWorkshop({session}) {
   try {
    // Storage objects do not cascade with database rows. Remove private uploads first.
    const folder=userId+'/'+w.id
-   const paths=[];let offset=0
-   for(;;){
-    const {data,error}=await supabase.storage.from('discovery-legacy').list(folder,{limit:100,offset})
-    if(error)throw error
-    paths.push(...(data||[]).filter(x=>x.id&&x.name).map(x=>folder+'/'+x.name))
-    if(!data||data.length<100)break
-    offset+=data.length
-   }
-   for(let i=0;i<paths.length;i+=100){
-    const {error}=await supabase.storage.from('discovery-legacy').remove(paths.slice(i,i+100))
-    if(error)throw error
+   for(const bucket of ['discovery-legacy','discovery-transcripts']){
+    const paths=[];let offset=0
+    for(;;){
+     const {data,error}=await supabase.storage.from(bucket).list(folder,{limit:100,offset})
+     if(error)throw error
+     paths.push(...(data||[]).filter(x=>x.id&&x.name).map(x=>folder+'/'+x.name))
+     if(!data||data.length<100)break
+     offset+=data.length
+    }
+    for(let i=0;i<paths.length;i+=100){
+     const {error}=await supabase.storage.from(bucket).remove(paths.slice(i,i+100))
+     if(error)throw error
+    }
    }
    await removeWorkshop(w.id)
    await refresh()
