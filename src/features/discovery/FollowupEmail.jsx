@@ -23,6 +23,15 @@ export default function FollowupEmail({workshop,session,stakeholders=[],onClose}
    setSubject(data.subject||'');setBody(data.body||'')
   }catch(e){setError(e.message)}finally{setBusy(false)}
  }
+ async function translateGerman(){
+  if(!subject.trim()&&!body.trim())return
+  setBusy(true);setError('')
+  try{
+   const response=await fetch('/api/discovery-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:'translate_de',workshopId:workshop.id,payload:{format:'email',subject,body}})})
+   const data=await response.json();if(!response.ok)throw new Error(data.error||'Translation failed')
+   setSubject(data.subject||subject);setBody(data.body||body);setLanguage('de');setSaved(false)
+  }catch(e){setError(e.message)}finally{setBusy(false)}
+ }
  const save=async()=>{
   if(!subject.trim()&&!body.trim())return
   try{const r=await supabase.from('discovery_email_drafts').insert({workshop_id:workshop.id,language,subject,body,model:'Claude Sonnet'});if(r.error)throw r.error;setSaved(true);setError('')}catch(e){setError(e.message)}
@@ -43,6 +52,6 @@ export default function FollowupEmail({workshop,session,stakeholders=[],onClose}
  <label className="dw-mini-field">Client recipients (edit before opening mail app)<input value={recipients} onChange={e=>setRecipients(e.target.value)} placeholder="email@example.com"/></label>
  <label className="dw-mini-field">Subject<input value={subject} onChange={e=>{setSubject(e.target.value);setSaved(false)}}/></label>
  <label className="dw-mini-field">Email body<textarea rows="15" value={body} onChange={e=>{setBody(e.target.value);setSaved(false)}}/></label>
- <div className="dw-export-actions"><button className="dw-button" onClick={copy} disabled={!subject&&!body}>Copy</button><button className="dw-button" onClick={save} disabled={!subject&&!body}>Save draft</button><button className="dw-button dw-primary" onClick={openMail} disabled={!subject&&!body}>Open in mail client</button>{saved&&<span className="dw-caption">Draft saved</span>}</div>
+ <div className="dw-export-actions"><button className="dw-button" onClick={translateGerman} disabled={busy||!subject&&!body}>Translate to German</button><button className="dw-button" onClick={copy} disabled={!subject&&!body}>Copy</button><button className="dw-button" onClick={save} disabled={!subject&&!body}>Save draft</button><button className="dw-button dw-primary" onClick={openMail} disabled={!subject&&!body}>Open in mail client</button>{saved&&<span className="dw-caption">Draft saved</span>}</div>
  </div></div>
 }
