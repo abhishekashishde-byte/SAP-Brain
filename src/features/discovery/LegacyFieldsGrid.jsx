@@ -3,9 +3,28 @@ import { useState } from 'react'
 const HANDLING=[['','Unmapped'],['standard_field','Standard SAP field'],['classification','Classification characteristic'],['long_text','Long text'],['custom_field','Custom field (Z)'],['separate_object','Separate object'],['archive_only','Archive only'],['not_needed','Not needed'],['clarify','Clarify']]
 const USED=[['','Choose…'],['yes','Yes'],['partly','Partly'],['no','No']]
 const initial=()=>({source_system_id:null,source_field:'',meaning:'',used_today:null,sap_handling:null,sap_target:'',sap_catalog_field_id:null,note:'',origin:'manual'})
-export default function LegacyFieldsGrid({workshopId,object,systems,fields,onAdd,onEdit,onDelete,onPaste,presenter}) {
+export default function LegacyFieldsGrid({workshopId,object,systems,fields,onAdd,onEdit,onDelete,onPaste,presenter,session}) {
  const [draft,setDraft]=useState(initial())
  const [showClient,setShowClient]=useState(false)
+ const [suggestions,setSuggestions]=useState([])
+ const [suggestionError,setSuggestionError]=useState('')
+ const [suggestionLoading,setSuggestionLoading]=useState(false)
+ async function suggest(){
+  setSuggestionError('');setSuggestionLoading(true)
+  try{
+   const response=await fetch('/api/discovery-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},
+    body:JSON.stringify({action:'suggest_extra_fields',workshopId,payload:{objectId:object.id,objectTitle:object.title}})})
+   const data=await response.json()
+   if(!response.ok)throw new Error(data.error||'Suggestion request failed')
+   setSuggestions((data.suggestions||[]).map(x=>({...x,localId:crypto.randomUUID()})))
+   if(data.warning)setSuggestionError(data.warning)
+  }catch(e){setSuggestionError(e.message)}finally{setSuggestionLoading(false)}
+ }
+ function acceptSuggestion(s){
+  onAdd({workshop_id:workshopId,object_id:object.id,source_system_id:null,source_field:s.source_field,meaning:s.meaning||'',used_today:null,sap_handling:s.sap_handling,sap_target:s.sap_target||'',sap_catalog_field_id:null,note:s.note||'AI suggestion — verify mapping',origin:'ai_suggested',sort_order:current.length})
+  setSuggestions(old=>old.filter(x=>x.localId!==s.localId))
+ }
+
  if(presenter&&!showClient)return <div className="dw-object-source"><p className="dw-caption">Extra fields are hidden in presenter mode.</p><button className="dw-button" onClick={()=>setShowClient(true)}>Show extra fields to client</button></div>
  const current=fields.filter(x=>x.object_id===object.id)
  const open=current.filter(x=>!x.sap_handling||x.sap_handling==='clarify').length
@@ -23,6 +42,9 @@ export default function LegacyFieldsGrid({workshopId,object,systems,fields,onAdd
   if(rows.length)onPaste(rows)
  }
  return <section className="dw-legacy-fields"><div className="dw-inline dw-extra-heading"><h3>Extra fields in source</h3><span className="dw-count">{current.length} extra fields · {open} open</span>{presenter&&<button className="dw-button" onClick={()=>setShowClient(false)}>Hide from client</button>}</div>
+ {!presenter&&<div className="dw-ai-suggestions"><button className="dw-button" type="button" disabled={suggestionLoading} onClick={suggest}>{suggestionLoading?'Checking legacy hints…':'Suggest from legacy manual'}</button>
+ {suggestionError&&<p className="dw-caption" role="status">{suggestionError}</p>}
+ {suggestions.map(v=><div className="dw-suggestion" key={v.localId}><strong>{v.source_field}</strong><span>{v.meaning||''} · {v.sap_handling} · {v.sap_target||'No SAP target proposed'}</span><button className="dw-button dw-primary" onClick={()=>acceptSuggestion(v)}>Accept & add</button><button className="dw-button" onClick={()=>setSuggestions(a=>a.filter(x=>x.localId!==v.localId))}>Reject</button></div>)}</div>}
  <p className="dw-caption">Record source fields missing from the SAP catalog. Paste a seven-column Excel range into the Field name cell: Source system, Field name, Meaning, Used today, SAP handling, SAP target, Note.</p>
  <div className="dw-extra-scroll"><table className="dw-extra-table"><thead><tr><th>Source</th><th>Source field name</th><th>Meaning / example</th><th>Used today</th><th>SAP handling</th><th>SAP target</th><th>Note</th><th>Actions</th></tr></thead><tbody>
  {current.map(row=><tr key={row.id}><td>{cell('source_system_id',row.source_system_id,row.id,sourceOpts)}</td>
