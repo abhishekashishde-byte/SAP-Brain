@@ -16,8 +16,8 @@ import {
   ANSWER_CONTAINER_PROMPT, parseAnswerContainer, extractQuickAnswer,
   QUICK_MARKER_START, QUICK_MARKER_END, META_MARKER_START,
   ON_DEMAND_VISUAL_PROMPT, validateVisualData,
-} from './_shared.js'
-import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from './intent-prompts.js'
+} from '../server/shared/_shared.js'
+import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from '../server/shared/intent-prompts.js'
 import { assessEvidenceRouting, attachSelectedTavilyResults } from '../lib/evidence-routing.js'
 import { createClient } from '@supabase/supabase-js'
 

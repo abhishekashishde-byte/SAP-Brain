@@ -3,7 +3,7 @@
 // within Vercel's 12-function limit.
 
 import chatHandler from './chat.js'
-import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import { requireApprovedUser, requireJsonBody, sendAuthError } from '../server/shared/_auth.js'
 import {
   FREE_DAILY_CREDITS,
   FREE_MONTHLY_CREDITS,
@@ -11,7 +11,7 @@ import {
   getQuotaRequestId,
   getWaniCreditUsage,
   shouldConsumeCredit,
-} from './_quota.js'
+} from '../server/shared/_quota.js'
 import { notifyQuotaReached } from '../lib/emailNotifications.js'
 
 function getAdminEmails() {

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { requireApprovedUser, requireJsonBody, sendAuthError } from '../../api/_auth.js'
+import { requireApprovedUser, requireJsonBody, sendAuthError } from '../shared/_auth.js'
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MODEL=process.env.DISCOVERY_AI_MODEL||'claude-sonnet-5-5'

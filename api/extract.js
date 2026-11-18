@@ -1,7 +1,7 @@
 // api/extract.js — Passive memory extraction
 // Stores facts only for the user identified by the verified Supabase session.
 
-import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import { requireApprovedUser, requireJsonBody, sendAuthError } from '../server/shared/_auth.js'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 

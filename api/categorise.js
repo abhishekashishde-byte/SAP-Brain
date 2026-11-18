@@ -1,6 +1,6 @@
 // api/categorise.js — AI topic detection with clean title generation
 
-import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import { requireApprovedUser, requireJsonBody, sendAuthError } from '../server/shared/_auth.js'
 
 const MODULES = {
   "PP – Production Planning": ["Production Orders","Production Versions","Bill of Materials","Routings & Work Centers","MRP & Planning","Demand Management","Capacity Planning","Goods Issue / Confirmation"],

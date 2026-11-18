@@ -3,7 +3,7 @@
 // and administrator status always come from the verified Supabase session.
 
 import { createClient } from '@supabase/supabase-js'
-import { requireApprovedUser, requireAuthenticatedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import { requireApprovedUser, requireAuthenticatedUser, requireJsonBody, sendAuthError } from '../server/shared/_auth.js'
 import { handleAdminDashboard } from '../lib/adminDashboard.js'
 import { notifySignup, notifyLogin, notifyApprovalToUser, emailNotificationsConfigured } from '../lib/emailNotifications.js'
 

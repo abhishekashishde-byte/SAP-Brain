@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { requireApprovedUser,requireJsonBody,sendAuthError } from '../../api/_auth.js'
+import { requireApprovedUser,requireJsonBody,sendAuthError } from '../shared/_auth.js'
 import { discoveryCatalog } from '../../src/features/discovery/catalog.js'
 import { processCatalog } from '../../src/features/discovery/processCatalog.js'
 const KINDS=new Set(['field_mark','answer','decision','process','stakeholder','driver','sizing','request','todo','risk','gap'])
