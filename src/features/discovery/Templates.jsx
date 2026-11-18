@@ -9,17 +9,18 @@ export function SaveTemplate({workshop,session,source,onSave,onClose}){
  const [draft,setDraft]=useState(null)
  const [replacements,setReplacements]=useState([])
  const [reviewed,setReviewed]=useState(false)
+ const [anonymisationRun,setAnonymisationRun]=useState(false)
  const [confirmed,setConfirmed]=useState(false)
  const [busy,setBusy]=useState(false)
  const [error,setError]=useState('')
- function prepare(){setDraft(pickTemplateContent(source,include));setReviewed(false);setReplacements([]);setConfirmed(false)}
+ function prepare(){setDraft(pickTemplateContent(source,include));setAnonymisationRun(false);setReviewed(false);setReplacements([]);setConfirmed(false)}
  async function anonymise(){
   setBusy(true);setError('')
-  const content=draft||pickTemplateContent(source,include);setDraft(content)
+  const content=draft||pickTemplateContent(source,include);setDraft(content);setAnonymisationRun(false)
   try{
    const response=await fetch('/api/discovery-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:'template_anonymise',workshopId:workshop.id,payload:{content}})})
    const data=await response.json();if(!response.ok)throw new Error(data.error||'Anonymisation failed')
-   setReplacements((data.replacements||[]).map(x=>({...x,id:crypto.randomUUID()})));setReviewed(false)
+   setReplacements((data.replacements||[]).map(x=>({...x,id:crypto.randomUUID()})));setAnonymisationRun(true);setReviewed(false)
   }catch(e){setError(e.message)}finally{setBusy(false)}
  }
  function decision(id,apply){
@@ -31,7 +32,7 @@ export function SaveTemplate({workshop,session,source,onSave,onClose}){
   setReplacements(old=>old.filter(x=>x.id!==id))
  }
  async function save(){
-  if(!draft||!reviewed||!confirmed||!name.trim())return
+  if(!draft||!anonymisationRun||!reviewed||!confirmed||!name.trim())return
   setBusy(true);setError('')
   try{await onSave({name:name.trim(),tags:tags.split(',').map(x=>x.trim()).filter(Boolean),content:draft,source_workshop_id:workshop.id});onClose()}
   catch(e){setError(e.message)}finally{setBusy(false)}
@@ -43,10 +44,10 @@ export function SaveTemplate({workshop,session,source,onSave,onClose}){
  <div className="dw-export-actions"><button className="dw-button" onClick={prepare}>Prepare selected content</button><button className="dw-button" onClick={anonymise} disabled={busy}>{busy?'Analysing…':'Anonymise (AI suggestions)'}</button></div>
  {draft&&<p className="dw-caption">{templateItems(draft).length} template suggestions prepared. No decision has been copied to another workshop.</p>}
  {replacements.map(r=><div className="dw-hint-row" key={r.id}><div><strong>{r.from} → {r.to}</strong><p>{r.reason}</p></div><div className="dw-actions"><button className="dw-button dw-primary" onClick={()=>decision(r.id,true)}>Apply</button><button className="dw-button" onClick={()=>decision(r.id,false)}>Skip</button></div></div>)}
- {draft&&replacements.length===0&&<label className="dw-mini-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>I reviewed all suggested replacements and the remaining text.</label>}
+ {draft&&anonymisationRun&&replacements.length===0&&<label className="dw-mini-checkbox"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>I reviewed all suggested replacements and the remaining text.</label>}
  {draft&&<label className="dw-mini-checkbox"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I confirm the template contains no client-specific confidential information.</label>}
  {error&&<p role="alert" className="dw-alert">{error}</p>}
- <button className="dw-button dw-primary" onClick={save} disabled={!draft||!reviewed||!confirmed||busy||!name.trim()}>Save private template</button>
+ <button className="dw-button dw-primary" onClick={save} disabled={!draft||!anonymisationRun||!reviewed||!confirmed||busy||!name.trim()}>Save private template</button>
  </div></div>
 }
 export function TemplateLibrary({templates,onRename,onDelete,onUse}){
@@ -58,7 +59,7 @@ export function TemplateLibrary({templates,onRename,onDelete,onUse}){
  </section>
 }
 export function TemplateSuggestions({template,items,accepted=[],onAccept,onDismiss}){
- const groups=useMemo(()=>Object.groupBy(items.filter(x=>!accepted.includes(x.key)),x=>x.kind==='entry'?x.data.object_id:'Other'),[items,accepted])
+ const groups=useMemo(()=>items.filter(x=>!accepted.includes(x.key)).reduce((acc,x)=>{const group=x.kind==='entry'?x.data.object_id:'Other';(acc[group]??=[]).push(x);return acc},{}),[items,accepted])
  return <section className="dw-series"><div className="dw-object-heading"><h3>Suggestions from {template||'personal template'}</h3><button className="dw-button" onClick={onDismiss}>Dismiss remaining suggestions</button></div>
  <p className="dw-caption">Greyed items are NOT customer facts. Accept a suggestion individually or accept all suggestions for one SAP object.</p>
  {Object.entries(groups).map(([object,items])=><div key={object}><div className="dw-object-heading"><h4>{object}</h4><button className="dw-button" onClick={()=>items.forEach(onAccept)}>Accept all for this object</button></div>{items.map(item=><div className="dw-series-item" key={item.key}><span>{item.kind}: {item.label}</span><button className="dw-button dw-primary" onClick={()=>onAccept(item)}>Accept</button></div>)}</div>)}
