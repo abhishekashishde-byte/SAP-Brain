@@ -14,6 +14,7 @@ import {loadFirstCall,addFirstCall,removeFirstCall,createFirstCallQueue} from '.
 import FitGap from './FitGap.jsx'
 import {loadScopingP1,addGap,editGap,deleteGap,ignoreCandidate,unignoreCandidate,loadScopingInventories,addInventory,editInventory,deleteInventory} from './scopingData.js'
 import ScopingInventory from './ScopingInventory.jsx'
+import FollowupEmail from './FollowupEmail.jsx'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
 const emptyForm=()=>({client_name:'',title:'SAP PM Discovery Workshop',project_name:'',consultant_name:'',call_date:today(),start_time:'',end_time:'',participants:'',legacy_system:'',scope_areas:discoveryCatalog.areas.map(a=>a.id)})
@@ -54,6 +55,7 @@ export default function DiscoveryWorkshop({session}) {
  const [firstCall,setFirstCall]=useState({stakeholders:[],drivers:[],sizing:[],requests:[],parking:[]})
  const [firstTab,setFirstTab]=useState(null)
  const [scopingTab,setScopingTab]=useState(null)
+ const [emailOpen,setEmailOpen]=useState(false)
  const [gaps,setGaps]=useState([])
  const [inventories,setInventories]=useState({interfaces:[],forms_reports:[],raid:[]})
  const [ignoredGaps,setIgnoredGaps]=useState([])
@@ -122,7 +124,7 @@ export default function DiscoveryWorkshop({session}) {
    const map={};for(const row of rows)map[eKey(row.object_id,row.item_type,row.item_id)]=row
    for(const row of q.pending.values())map[eKey(row.object_id,row.item_type,row.item_id)]=row
    setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);setLegacyHints(hintRows);setFirstCall(firstRows);const fq=createFirstCallQueue(w.id,userId,setFirstPending);firstQueue.current=fq;for(const edit of fq.pending.values())firstRows[edit.kind]=firstRows[edit.kind].map(row=>(row.id||row.metric_id)===edit.id?{...row,...edit.values}:row);setFirstCall({...firstRows});setGaps(scopeRows.gaps);setIgnoredGaps(scopeRows.ignored);setInventories(inventoryRows);fq.start();const pq=createProcessQueue(w.id,userId,setProcessPending);const procMap=Object.fromEntries(procRows.map(r=>[r.process_id,r]));for(const row of pq.pending.values())procMap[row.process_id]=row;setProcessEntries(procMap);processQueue.current=pq;pq.start();queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
-   setMode('workshop');setFirstTab(null);setScopingTab(null);setShowProcesses(false);setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
+   setMode('workshop');setEmailOpen(false);setFirstTab(null);setScopingTab(null);setShowProcesses(false);setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
   }catch(e){setError(e.message)}finally{setLoading(false)}
  }
  async function create(e) {
@@ -346,9 +348,10 @@ export default function DiscoveryWorkshop({session}) {
  const covered={objects:scoped.length,fields:scoped.reduce((n,o)=>n+o.fields.length,0),questions:scoped.reduce((n,o)=>n+o.questions.length,0),decisions:scoped.reduce((n,o)=>n+o.decisions.length,0)}
  return <main className={`dw ${presenter?'dw-presenter':''}`}>
   <header className="dw-header"><div className="dw-brand"><button className="dw-back" onClick={mode==='workshop'?goBack:()=>window.location.assign('/')} aria-label="Go back">←</button><span className="dw-logo">W</span><span>Wani <span className="dw-slash">/</span> Discovery Workshop</span></div>
-   {mode==='workshop'&&<div className="dw-actions"><span className="dw-save" aria-live="polite">{pending+processPending+firstPending?(pending+processPending+firstPending)+' pending sync':savingMeta?'Saving…':'Saved'}</span><button className="dw-button" onClick={()=>setPresenter(x=>!x)}>{presenter?'Work mode':'Presenter mode'}</button><button className="dw-button" onClick={()=>setParkOpen(x=>!x)}>Parking ({firstCall.parking.filter(x=>x.status==='parked').length})</button><button className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)}>Objects</button></div>}
+   {mode==='workshop'&&<div className="dw-actions"><span className="dw-save" aria-live="polite">{pending+processPending+firstPending?(pending+processPending+firstPending)+' pending sync':savingMeta?'Saving…':'Saved'}</span><button className="dw-button" onClick={()=>setPresenter(x=>!x)}>{presenter?'Work mode':'Presenter mode'}</button><button className="dw-button" onClick={()=>setEmailOpen(true)}>Draft follow-up email</button><button className="dw-button" onClick={()=>setParkOpen(x=>!x)}>Parking ({firstCall.parking.filter(x=>x.status==='parked').length})</button><button className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)}>Objects</button></div>}
   </header>
   <div className="dw-container">
+  {emailOpen&&workshop&&<FollowupEmail workshop={workshop} session={session} stakeholders={firstCall.stakeholders} onClose={()=>setEmailOpen(false)}/>}
   {error&&<div role="alert" className="dw-alert">{error}<button className="dw-close" onClick={()=>setError('')}>×</button></div>}
   {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">SAP PM · Discovery</div><h1>Customer workshops</h1><p>Client-confidential data. Only your signed-in account can access your workshop records.</p></div><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div>
    {loading&&<p>Loading workshops…</p>}{!loading&&!workshops.length&&<div className="dw-card"><h2>No workshops yet</h2><p>Create a workshop to begin capturing SAP PM requirements.</p></div>}
