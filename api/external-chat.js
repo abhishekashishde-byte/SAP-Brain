@@ -10,7 +10,7 @@
 //
 // Response: { "reply": "...", "model": "claude"|"groq", "tokens_used": 0 }
 
-import { tokenize, detokenize, callClaude, callGroq, isComplexQuestion, BASE_SYSTEM_PROMPT, TONE_ADDITIONS } from './_shared.js'
+import { tokenize, detokenize, callClaude, callGroq, isComplexQuestion, BASE_SYSTEM_PROMPT, TONE_ADDITIONS } from '../server/shared/_shared.js'
 
 export default async function handler(req, res) {
   // ── CORS — allow Klarix domains ───────────────────────────────────────────
