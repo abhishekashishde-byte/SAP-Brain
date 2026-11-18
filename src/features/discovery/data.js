@@ -68,3 +68,8 @@ export const changeSourceSystem = (id,values) => supabase.from('discovery_source
 export const deleteSourceSystem = id => supabase.from('discovery_source_systems').delete().eq('id',id).then(requireData)
 export const loadObjectSources = id => supabase.from('discovery_object_sources').select('*').eq('workshop_id',id).then(requireData)
 export const saveObjectSources = row => supabase.from('discovery_object_sources').upsert({...row,updated_at:new Date().toISOString()},{onConflict:'workshop_id,object_id'}).select('*').single().then(requireData)
+
+export const loadLegacyFields = id => supabase.from('discovery_legacy_fields').select('*').eq('workshop_id',id).order('sort_order').then(requireData)
+export const createLegacyField = values => supabase.from('discovery_legacy_fields').insert(values).select('*').single().then(requireData)
+export const updateLegacyField = (id,values) => supabase.from('discovery_legacy_fields').update({...values,updated_at:new Date().toISOString()}).eq('id',id).select('*').single().then(requireData)
+export const deleteLegacyField = id => supabase.from('discovery_legacy_fields').delete().eq('id',id).then(requireData)
