@@ -40,7 +40,7 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
   for(const row of Object.values(entries).filter(x=>x.object_id===o.id&&(x.item_type==='custom_field'||x.item_type==='custom_question')))rows.Custom.push([a,o.title,row.item_type,row.item_id,row.value?.label||row.value?.text||'',row.value?.mark||row.value?.answer||''])
   for(const type of ['legacy_today','note']){const e=get(o.id,type,'main');if(can(e)&&e?.value?.text)rows.Notes.push([type==='note'?'Object':'Legacy today',a,o.title,e.value.text,!!e.is_internal])}
  }
- const {sourceSystems=[],objectSources={},legacyFields=[],processEntries={},legacyHints=[],firstCall={}}=extras
+ const {sourceSystems=[],objectSources={},legacyFields=[],processEntries={},legacyHints=[],firstCall={},gaps=[],inventories={}}=extras
  const sourceById=Object.fromEntries(sourceSystems.map(x=>[x.id,x]))
  for(const source of sourceSystems)rows.SourceSystems.push([source.name,source.system_type,source.version||'',source.owner||'',source.notes||''])
  for(const o of objects){
@@ -66,6 +66,15 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
  for(const x of requests)rows.Requests.push([x.item,x.related_id||'',x.format||'',stakeholders.find(z=>z.id===x.from_stakeholder)?.name||'',x.due_date||'',x.status||'open',x.note||''])
  rows.Parking=[['Topic','Context','Status','Created at','Notes']]
  for(const x of parking)rows.Parking.push([x.text,x.context_id||'',x.status||'parked',x.created_at||'',x.note||''])
+ rows.Gaps=[['Gap ID','Title','Description','Related item','Origin','Gap type','RICEFW','Size','Size points','Priority','Owner','Status','Solution idea','Notes']]
+ const sizePts={S:1,M:3,L:8,XL:13}
+ for(const g of gaps)rows.Gaps.push(['G-'+String(g.seq).padStart(3,'0'),g.title,g.description||'',g.related_id||'',g.origin,g.gap_type||'',g.ricefw||'',g.size||'',sizePts[g.size]||0,g.priority||'',g.owner||'',g.status||'open',audience==='internal'||!g.is_internal_solution?g.solution_idea||'':'',g.note||''])
+ rows.Interfaces=[['Name','Partner system','Direction','Related object/process','Data / object','Frequency','Volume','Technology','Today exists','Owner','Status','Notes']]
+ for(const x of inventories.interfaces||[])rows.Interfaces.push([x.name,x.partner_system||'',x.direction||'',x.related_id||'',x.data_text||'',x.frequency||'',x.volume||'',x.technology||'',x.exists_today||'',stakeholders.find(p=>p.id===x.owner_stakeholder)?.name||'',x.status||'open',x.note||''])
+ rows.FormsReports=[['Name','Kind','Related object','Used by','Frequency','Today in','Sample received','Linked request','Decision','Notes']]
+ for(const x of inventories.forms_reports||[])rows.FormsReports.push([x.name,x.kind||'',x.related_id||'',x.used_by||'',x.frequency||'',x.today_in||'',x.sample_received?'Yes':'No',requests.find(r=>r.id===x.request_id)?.item||'',x.decision||'',x.note||''])
+ rows.RAID=[['Kind','Description','Related item','Probability','Impact','Mitigation / validation','Owner','Status','Notes']]
+ for(const x of inventories.raid||[])rows.RAID.push([x.kind,x.text,x.related_id||'',x.probability||'',x.impact||'',x.mitigation||'',stakeholders.find(p=>p.id===x.owner_stakeholder)?.name||'',x.status||'open',audience==='internal'||!x.is_internal?x.note||'':''])
  const customProcesses=Object.values(processEntries).filter(x=>x.custom).map(x=>({...x.custom,id:x.process_id,sapHint:'',relatedObjects:'',questions:[]}))
  for(const p of [...processCatalog.processes,...customProcesses]){
   const state=processEntries[p.id]||{},category=processCatalog.categories.find(c=>c.id===p.category)?.title||p.category
@@ -132,5 +141,18 @@ export function printReport(w,e,t,audience,extras){
  const body=Object.entries(rows).map(([name,data])=>'<section><h2>'+esc(name)+'</h2><table><thead><tr>'+data[0].map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+data.slice(1).map(r=>'<tr>'+r.map(c=>'<td>'+esc(valueText(c))+'</td>').join('')+'</tr>').join('')+'</tbody></table></section>').join('')
  popup.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(w.client_name)+' · Discovery Workshop</title><style>body{font:11px/1.5 Arial;color:#151515;margin:15mm}h1{font-size:22px}h2{font-size:15px;border-bottom:2px solid #333;padding-bottom:6px}table{border-collapse:collapse;width:100%;table-layout:fixed}td,th{border:1px solid #bbb;padding:5px;overflow-wrap:anywhere;vertical-align:top}th{background:#eee}thead{display:table-header-group}tr{break-inside:avoid}section{break-before:page}section:first-of-type{break-before:auto}@page{size:A4 landscape;margin:12mm}</style></head><body><h1>'+esc(w.client_name)+' — '+esc(w.title)+'</h1><p>Meeting date: '+esc(w.call_date)+' · '+esc(audience)+' report</p>'+body+'</body></html>')
  popup.document.close();popup.focus();popup.print()
+}
+export function exportScopePack(w,e,t,audience,extras){
+ const {rows}=gather(w,e,t,audience,extras)
+ const sections=['Sizing','Gaps','Interfaces','FormsReports','RAID']
+ const data=sections.map(name=>{
+  const lines=rows[name]||[[]]
+  return '## '+(name==='FormsReports'?'Forms & reports':name)+'\\n\\n'+
+    '| '+lines[0].map(tab).join(' | ')+' |\\n|'+lines[0].map(()=>'---').join('|')+'|\\n'+
+    lines.slice(1).map(r=>'| '+r.map(v=>tab(valueText(v)).replace(/\\|/g,'\\\\|')).join(' | ')+' |').join('\\n')
+ }).join('\\n\\n')
+ const sizePoints=(extras.gaps||[]).filter(g=>g.status!=='rejected').reduce((n,g)=>n+({S:1,M:3,L:8,XL:13}[g.size]||0),0)
+ const summary='# Scope pack — '+w.client_name+'\\n\\nWorkshop: '+w.title+'\\nMeeting date: '+w.call_date+'\\nAudience: '+audience+'\\nTotal relative size points: '+sizePoints+'\\n\\n'
+ download(new Blob([summary+data+'\\n'],{type:'text/markdown;charset=utf-8'}),filename(w)+'_scope_pack.md')
 }
 export {gather}
