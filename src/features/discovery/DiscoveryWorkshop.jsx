@@ -20,6 +20,8 @@ import {CarryoverReview,EngagementTimeline} from './Series.jsx'
 import {loadTemplates,saveTemplate,editTemplate,deleteTemplate,templateItems} from './templateData.js'
 import {SaveTemplate,TemplateLibrary,TemplateSuggestions} from './Templates.jsx'
 import {localizeObject,getAreaTitle,germanHoverText,germanCatalogStatus} from './i18n.js'
+import Transcripts from './Transcripts.jsx'
+import {loadTranscripts,loadTranscriptSuggestions} from './transcriptData.js'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
 const emptyForm=()=>({client_name:'',title:'SAP PM Discovery Workshop',project_name:'',consultant_name:'',call_date:today(),start_time:'',end_time:'',participants:'',legacy_system:'',scope_areas:discoveryCatalog.areas.map(a=>a.id)})
@@ -72,6 +74,8 @@ export default function DiscoveryWorkshop({session}) {
  const [emailOpen,setEmailOpen]=useState(false)
  const [gaps,setGaps]=useState([])
  const [inventories,setInventories]=useState({interfaces:[],forms_reports:[],raid:[]})
+ const [transcripts,setTranscripts]=useState([])
+ const [transcriptSuggestions,setTranscriptSuggestions]=useState([])
  const [ignoredGaps,setIgnoredGaps]=useState([])
  const [firstPending,setFirstPending]=useState(0)
  const [parkOpen,setParkOpen]=useState(false)
@@ -136,11 +140,11 @@ export default function DiscoveryWorkshop({session}) {
  async function openWorkshop(w) {
   queue.current?.close();queue.current=null;processQueue.current?.close();processQueue.current=null;firstQueue.current?.close();firstQueue.current=null;setLoading(true);setError('')
   try {
-   const [rows,taskRows,sources,objectRows,extraRows,procRows,hintRows,firstRows,scopeRows,inventoryRows,seriesRows,prevRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id),loadProcessEntries(w.id),loadHints(w.id),loadFirstCall(w.id),loadScopingP1(w.id),loadScopingInventories(w.id),loadEngagementSessions(w.engagement_id),loadPreviousEntries(w.previous_workshop_id)])
+   const [rows,taskRows,sources,objectRows,extraRows,procRows,hintRows,firstRows,scopeRows,inventoryRows,seriesRows,prevRows,transcriptRows,suggestionRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id),loadProcessEntries(w.id),loadHints(w.id),loadFirstCall(w.id),loadScopingP1(w.id),loadScopingInventories(w.id),loadEngagementSessions(w.engagement_id),loadPreviousEntries(w.previous_workshop_id),loadTranscripts(w.id),loadTranscriptSuggestions(w.id)])
    const q=createEntryQueue(w.id,userId,setPending)
    const map={};for(const row of rows)map[eKey(row.object_id,row.item_type,row.item_id)]=row
    for(const row of q.pending.values())map[eKey(row.object_id,row.item_type,row.item_id)]=row
-   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);setLegacyHints(hintRows);setFirstCall(firstRows);const fq=createFirstCallQueue(w.id,userId,setFirstPending);firstQueue.current=fq;for(const edit of fq.pending.values())firstRows[edit.kind]=firstRows[edit.kind].map(row=>(row.id||row.metric_id)===edit.id?{...row,...edit.values}:row);setFirstCall({...firstRows});setGaps(scopeRows.gaps);setIgnoredGaps(scopeRows.ignored);setInventories(inventoryRows);setEngagementSessions(seriesRows);setPreviousEntries(prevRows);setCarryoverOpen(!!w.previous_workshop_id);setOnlyCarried(false);fq.start();const pq=createProcessQueue(w.id,userId,setProcessPending);const procMap=Object.fromEntries(procRows.map(r=>[r.process_id,r]));for(const row of pq.pending.values())procMap[row.process_id]=row;setProcessEntries(procMap);processQueue.current=pq;pq.start();queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
+   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);setLegacyHints(hintRows);setFirstCall(firstRows);const fq=createFirstCallQueue(w.id,userId,setFirstPending);firstQueue.current=fq;for(const edit of fq.pending.values())firstRows[edit.kind]=firstRows[edit.kind].map(row=>(row.id||row.metric_id)===edit.id?{...row,...edit.values}:row);setFirstCall({...firstRows});setGaps(scopeRows.gaps);setIgnoredGaps(scopeRows.ignored);setInventories(inventoryRows);setTranscripts(transcriptRows);setTranscriptSuggestions(suggestionRows);setEngagementSessions(seriesRows);setPreviousEntries(prevRows);setCarryoverOpen(!!w.previous_workshop_id);setOnlyCarried(false);fq.start();const pq=createProcessQueue(w.id,userId,setProcessPending);const procMap=Object.fromEntries(procRows.map(r=>[r.process_id,r]));for(const row of pq.pending.values())procMap[row.process_id]=row;setProcessEntries(procMap);processQueue.current=pq;pq.start();queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
    setMode('workshop');setNextOpen(false);setEmailOpen(false);setFirstTab(null);setScopingTab(null);setShowProcesses(false);setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
   }catch(e){setError(e.message)}finally{setLoading(false)}
  }
@@ -321,6 +325,85 @@ export default function DiscoveryWorkshop({session}) {
   }
   writeEntry('workshop','note','template_suggestions',{...stage,accepted:[...accepted]})
  }
+ async function refreshTranscriptData(){
+  if(!workshop)return
+  try{const [ts,ss]=await Promise.all([loadTranscripts(workshop.id),loadTranscriptSuggestions(workshop.id)]);setTranscripts(ts);setTranscriptSuggestions(ss)}
+  catch(e){setError('Transcript refresh failed: '+e.message)}
+ }
+ function existingTranscriptValue(s){
+  const p=s.payload||{},id=s.target_ref
+  if(s.kind==='field_mark'){
+   const o=discoveryCatalog.objects.find(o=>o.fields.some(f=>f.id===id))
+   const existing=o&&val(o.id,'field',id).mark
+   return existing?{object_id:o.id,field_id:id,mark:existing}:undefined
+  }
+  if(s.kind==='answer'){
+   const o=discoveryCatalog.objects.find(o=>o.questions.some(q=>q.id===id))
+   const existing=o&&val(o.id,'question',id).answer
+   return existing!==undefined?{object_id:o.id,question_id:id,answer:existing}:undefined
+  }
+  if(s.kind==='decision'){
+   const o=discoveryCatalog.objects.find(o=>o.decisions.some(d=>d.id===id))
+   const value=o&&val(o.id,'decision',id)
+   return value?.choice?{object_id:o.id,decision_id:id,choice:value.choice,status:value.status}:undefined
+  }
+  if(s.kind==='process'){
+   const row=processEntries[id]
+   return row?.status?{process_id:id,status:row.status,frequency:row.frequency}:undefined
+  }
+  return undefined
+ }
+ async function acceptTranscriptSuggestion(s){
+  const p=s.payload||{},id=s.target_ref
+  if(s.kind==='field_mark'){
+   const o=discoveryCatalog.objects.find(o=>o.fields.some(f=>f.id===id))
+   if(!o||!['needed','not_needed','clarify'].includes(p.mark))throw Error('Invalid SAP field suggestion')
+   writeEntry(o.id,'field',id,{...val(o.id,'field',id),mark:p.mark});return
+  }
+  if(s.kind==='answer'){
+   const o=discoveryCatalog.objects.find(o=>o.questions.some(q=>q.id===id))
+   if(!o||p.answer===undefined)throw Error('Invalid question suggestion')
+   writeEntry(o.id,'question',id,{...val(o.id,'question',id),answer:p.answer});return
+  }
+  if(s.kind==='decision'){
+   const o=discoveryCatalog.objects.find(o=>o.decisions.some(d=>d.id===id))
+   if(!o||!p.choice)throw Error('Invalid decision suggestion')
+   writeEntry(o.id,'decision',id,{...val(o.id,'decision',id),choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open'});return
+  }
+  if(s.kind==='process'){
+   if(!processCatalog.processes.some(x=>x.id===id)||!['valid','not_valid','later','clarify'].includes(p.status))throw Error('Invalid process suggestion')
+   changeProcess(id,{...processEntries[id],status:p.status,frequency:processCatalog.frequencies.includes(p.frequency)?p.frequency:null});return
+  }
+  if(s.kind==='stakeholder'){
+   if(!p.name?.trim())throw Error('Missing stakeholder name')
+   await addFirst('stakeholders',{name:p.name.trim(),organisation:['client','consultant','partner','vendor'].includes(p.organisation)?p.organisation:'client',function_role:p.function_role||'',project_role:'other',present:false});return
+  }
+  if(s.kind==='driver'){
+   if(!p.text?.trim()||!['pain','goal'].includes(p.kind))throw Error('Invalid pain point or goal')
+   await addFirst('drivers',{kind:p.kind,text:p.text.trim(),priority:['must','should','could'].includes(p.priority)?p.priority:'should'});return
+  }
+  if(s.kind==='sizing'){
+   if(!p.metric_id||p.value===undefined||!Number.isFinite(Number(p.value)))throw Error('Invalid sizing suggestion')
+   editFirst('sizing',{metric_id:p.metric_id},{metric_id:p.metric_id,value:Number(p.value),approx:!!p.approx,source:'client'});return
+  }
+  if(s.kind==='request'){
+   if(!p.item?.trim())throw Error('Missing request text')
+   await addFirst('requests',{item:p.item.trim(),related_id:p.related_id||null,status:'open'});return
+  }
+  if(s.kind==='todo'){
+   if(!p.text?.trim())throw Error('Missing action-item text')
+   const task=await createTodo({workshop_id:workshop.id,object_id:p.object_id||null,text:p.text.trim(),owner:p.owner||'',done:false});setTodos(v=>[...v,task]);return
+  }
+  if(s.kind==='risk'){
+   if(!p.text?.trim())throw Error('Missing risk text')
+   await newInventory('raid',{kind:'risk',text:p.text.trim(),related_id:p.related_id||null,probability:['low','medium','high'].includes(p.probability)?p.probability:null,impact:['low','medium','high'].includes(p.impact)?p.impact:null,status:'open'});return
+  }
+  if(s.kind==='gap'){
+   if(!p.title?.trim())throw Error('Missing gap title')
+   await createGap({title:p.title.trim(),description:p.description||'',related_id:p.related_id||null,origin:'ai',gap_type:null,status:'open'});return
+  }
+  throw Error('Unsupported transcript proposal kind')
+ }
  async function addTodo() {
   if(!newTodo.trim())return
   try {const task=await createTodo({workshop_id:workshop.id,object_id:selected.id,text:newTodo.trim(),owner:'',done:false});setTodos(x=>[...x,task]);setNewTodo('')}catch(e){setError(e.message)}
@@ -451,9 +534,9 @@ export default function DiscoveryWorkshop({session}) {
  <div className="dw-stats"><strong>Completeness check</strong><span>{covered.fields-counts.fields} unmarked fields</span><span>{covered.questions-counts.questions} unanswered questions</span><span>{covered.decisions-counts.decisions} undecided decisions</span><span>{counts.clarify} clarifications</span></div>
  <div className="dw-inline"><label>Show <select value={summaryFilter} onChange={e=>setSummaryFilter(e.target.value)}><option value="all">All objects</option><option value="open">With unresolved points</option><option value="decisions">With decisions</option><option value="todos">With action items</option></select></label></div>
  {scoped.filter(o=>summaryFilter==='all'||summaryFilter==='open'&&(o.fields.some(f=>!val(o.id,'field',f.id).mark||val(o.id,'field',f.id).mark==='clarify')||o.questions.some(q=>val(o.id,'question',q.id).answer===undefined)||o.decisions.some(d=>val(o.id,'decision',d.id).status!=='decided'))||summaryFilter==='decisions'&&o.decisions.some(d=>val(o.id,'decision',d.id).status==='decided')||summaryFilter==='todos'&&todos.some(t=>t.object_id===o.id)).map(o=><div key={o.id} className="dw-summary-object"><h3>{o.title}</h3><p>Fields marked: {o.fields.filter(f=>val(o.id,'field',f.id).mark).length}/{o.fields.length} · Answers: {o.questions.filter(q=>val(o.id,'question',q.id).answer!==undefined).length}/{o.questions.length} · Decisions: {o.decisions.filter(d=>val(o.id,'decision',d.id).status==='decided').length}/{o.decisions.length}</p><button className="dw-inline-button" onClick={()=>{selectObject(o.id);setShowSummary(false)}}>Review object →</button></div>)}</div>:
-   <div className="dw-workspace"><aside className={`dw-sidebar ${mobileNav?'dw-open':''}`}><div className="dw-nav-group"><div className="dw-nav-heading">Workshop</div>{FIRST_CALL_SECTIONS.map(([id,title])=><button key={id} className={`dw-nav-item ${firstTab===id?'dw-active':''}`} onClick={()=>openFirst(id)}>{title}<span>{(firstCall[id]||[]).length}</span></button>)}</div>{workshop.previous_workshop_id&&<label className="dw-mini-checkbox"><input type="checkbox" checked={onlyCarried} onChange={e=>setOnlyCarried(e.target.checked)}/>Carried-over items</label>}<div className="dw-sidebar-top"><strong>Workshop catalog</strong><span>{objects.length}/{scoped.length}</span></div><input className="dw-search" placeholder="Search objects or T-codes" value={search} onChange={e=>setSearch(e.target.value)}/><select className="dw-scope" value={scope} onChange={e=>setScope(e.target.value)}><option value="all">All areas</option>{discoveryCatalog.areas.filter(a=>scoped.some(o=>o.area===a.id)).map(a=><option value={a.id} key={a.id}>{a.title}</option>)}</select>
+   <div className="dw-workspace"><aside className={`dw-sidebar ${mobileNav?'dw-open':''}`}><div className="dw-nav-group"><div className="dw-nav-heading">Workshop</div><button className={`dw-nav-item ${scopingTab==='transcripts'?'dw-active':''}`} onClick={()=>openScoping('transcripts')}>Transcripts <span>{transcriptSuggestions.filter(x=>x.status==='pending'||x.status==='edited').length}</span></button>{FIRST_CALL_SECTIONS.map(([id,title])=><button key={id} className={`dw-nav-item ${firstTab===id?'dw-active':''}`} onClick={()=>openFirst(id)}>{title}<span>{(firstCall[id]||[]).length}</span></button>)}</div>{workshop.previous_workshop_id&&<label className="dw-mini-checkbox"><input type="checkbox" checked={onlyCarried} onChange={e=>setOnlyCarried(e.target.checked)}/>Carried-over items</label>}<div className="dw-sidebar-top"><strong>Workshop catalog</strong><span>{objects.length}/{scoped.length}</span></div><input className="dw-search" placeholder="Search objects or T-codes" value={search} onChange={e=>setSearch(e.target.value)}/><select className="dw-scope" value={scope} onChange={e=>setScope(e.target.value)}><option value="all">All areas</option>{discoveryCatalog.areas.filter(a=>scoped.some(o=>o.area===a.id)).map(a=><option value={a.id} key={a.id}>{a.title}</option>)}</select>
     {discoveryCatalog.areas.map(a=>{const children=objects.filter(o=>o.area===a.id);return children.length?<div key={a.id} className="dw-nav-group"><div className="dw-nav-heading">{getAreaTitle(a,presenter?workshop.client_language:'en')}</div><NoteInput label="Area notes" value={val(a.id,'area_note','main').text} onChange={v=>writeNote(a.id,'area_note','main',v)} internal={entry(a.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(a.id,'area_note','main',val(a.id,'area_note','main').text||'',v)}/>{children.map(o=><button className={`dw-nav-item ${o.id===selected?.id?'dw-active':''}`} key={o.id} onClick={()=>selectObject(o.id)} title={germanHoverText(o.id,'object')}>{localizeObject(o,presenter?workshop.client_language:'en').title}<span>{objectSources[o.id]?.not_maintained?'None':(objectSources[o.id]?.source_system_ids||[]).map(id=>sourceSystems.find(x=>x.id===id)?.system_type||'').filter(Boolean).map(type=>type==='sap_ecc'||type==='sap_s4'?'SAP':type==='excel_access'?'Excel':type==='paper'?'Paper':type.startsWith('non_sap_')?'Non-SAP':'Other').filter((x,i,a)=>a.indexOf(x)===i).join('+')||'—'} · {labels[val(o.id,'object_status','main').status]||'Not started'}</span></button>)}</div>:null})}<div className="dw-nav-group"><div className="dw-nav-heading">Scoping</div><button className={`dw-nav-item ${scopingTab==='gaps'?'dw-active':''}`} onClick={()=>openScoping('gaps')}>Fit-gap <span>{gaps.length}</span></button>{[['interfaces','Interfaces'],['forms_reports','Forms & reports'],['raid','Risks & assumptions']].map(([id,title])=><button key={id} className={`dw-nav-item ${scopingTab===id?'dw-active':''}`} onClick={()=>openScoping(id)}>{title}<span>{inventories[id].length}</span></button>)}</div><div className="dw-nav-group"><div className="dw-nav-heading">Additional discovery</div><button className={`dw-nav-item ${showProcesses?'dw-active':''}`} onClick={()=>{setShowProcesses(true);setScopingTab(null);setFirstTab(null);setShowSummary(false);setMobileNav(false)}}>Processes & jobs <span>{processCatalog.processes.length}</span></button></div></aside>
-   <div className="dw-main">{['interfaces','forms_reports','raid'].includes(scopingTab)?<ScopingInventory key={scopingTab} kind={scopingTab} rows={inventories[scopingTab]} stakeholders={firstCall.stakeholders} requests={firstCall.requests} onAdd={newInventory} onEdit={changeInventory} onDelete={removeInventory} onGap={inventoryToGap} presenter={presenter}/>:scopingTab==='gaps'?<FitGap entries={entries} legacyFields={legacyFields} processEntries={processEntries} legacyHints={legacyHints} gaps={gaps} ignored={ignoredGaps} stakeholders={firstCall.stakeholders} onAdd={createGap} onEdit={changeGap} onDelete={removeGap} onIgnore={ignoreGapCandidate} onUnignore={unignoreGapCandidate} presenter={presenter} session={session} workshopId={workshop.id} onMerge={mergeGapGroup}/>:firstTab?<FirstCall key={firstTab} section={firstTab} rows={firstCall} workshopId={workshop.id} add={addFirst} edit={editFirst} remove={deleteFirst} onTodo={moveParkToTodo} objectId={selected?.id} presenter={presenter}/>:showProcesses?<ProcessJobs workshopId={workshop.id} entries={processEntries} onChange={changeProcess} presenter={presenter} language={workshop.client_language||'en'} onJump={selectObject} onTask={createProcessTask} categoryNotes={Object.fromEntries(processCatalog.categories.map(cat=>[cat.id,{text:val('process:'+cat.id,'area_note','main').text||'',internal:!!entry('process:'+cat.id,'area_note','main')?.is_internal}]))} onCategoryNote={(id,text,internal)=>writeNote('process:'+id,'area_note','main',text,internal)}/>:selected&&<div className="dw-card"><div className="dw-object-heading"><div><div className="dw-kicker">{area?.title} · {selectedIndex+1} / {objects.length}</div><h2 title={germanHoverText(selected.id,'object')}>{displaySelected.title}</h2></div><select aria-label="Object status" value={val(selected.id,'object_status','main').status||'not_started'} onChange={e=>writeEntry(selected.id,'object_status','main',{status:e.target.value})}>{statuses.map(x=><option key={x} value={x}>{labels[x]}</option>)}</select></div>
+   <div className="dw-main">{scopingTab==='transcripts'?<Transcripts workshop={workshop} session={session} transcripts={transcripts} suggestions={transcriptSuggestions} onRefresh={refreshTranscriptData} onAccept={acceptTranscriptSuggestion} onExisting={existingTranscriptValue} presenter={presenter}/>:['interfaces','forms_reports','raid'].includes(scopingTab)?<ScopingInventory key={scopingTab} kind={scopingTab} rows={inventories[scopingTab]} stakeholders={firstCall.stakeholders} requests={firstCall.requests} onAdd={newInventory} onEdit={changeInventory} onDelete={removeInventory} onGap={inventoryToGap} presenter={presenter}/>:scopingTab==='gaps'?<FitGap entries={entries} legacyFields={legacyFields} processEntries={processEntries} legacyHints={legacyHints} gaps={gaps} ignored={ignoredGaps} stakeholders={firstCall.stakeholders} onAdd={createGap} onEdit={changeGap} onDelete={removeGap} onIgnore={ignoreGapCandidate} onUnignore={unignoreGapCandidate} presenter={presenter} session={session} workshopId={workshop.id} onMerge={mergeGapGroup}/>:firstTab?<FirstCall key={firstTab} section={firstTab} rows={firstCall} workshopId={workshop.id} add={addFirst} edit={editFirst} remove={deleteFirst} onTodo={moveParkToTodo} objectId={selected?.id} presenter={presenter}/>:showProcesses?<ProcessJobs workshopId={workshop.id} entries={processEntries} onChange={changeProcess} presenter={presenter} language={workshop.client_language||'en'} onJump={selectObject} onTask={createProcessTask} categoryNotes={Object.fromEntries(processCatalog.categories.map(cat=>[cat.id,{text:val('process:'+cat.id,'area_note','main').text||'',internal:!!entry('process:'+cat.id,'area_note','main')?.is_internal}]))} onCategoryNote={(id,text,internal)=>writeNote('process:'+id,'area_note','main',text,internal)}/>:selected&&<div className="dw-card"><div className="dw-object-heading"><div><div className="dw-kicker">{area?.title} · {selectedIndex+1} / {objects.length}</div><h2 title={germanHoverText(selected.id,'object')}>{displaySelected.title}</h2></div><select aria-label="Object status" value={val(selected.id,'object_status','main').status||'not_started'} onChange={e=>writeEntry(selected.id,'object_status','main',{status:e.target.value})}>{statuses.map(x=><option key={x} value={x}>{labels[x]}</option>)}</select></div>
     <button className="dw-inline-button" onClick={()=>openScoping('gaps')}>Gaps: {gaps.filter(g=>g.related_id===selected.id).length}</button><button className="dw-inline-button" onClick={()=>setShowProcesses(true)}>Related processes: {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='valid').length} valid · {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='clarify').length} clarify</button><div className="dw-caption">{legacyFields.filter(x=>x.object_id===selected.id).length} extra source fields · {legacyFields.filter(x=>x.object_id===selected.id&&(!x.sap_handling||x.sap_handling==='clarify')).length} open</div><div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div><p className="dw-description">{displaySelected.plain}</p>
     {val(selected.id,'object_status','main').status!=='out_of_scope'&&<>
     <ObjectSourcePicker workshopId={workshop.id} objectId={selected.id} systems={sourceSystems} value={objectSources[selected.id]} onSave={updateObjectSources} presenter={presenter}/>
