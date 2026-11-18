@@ -1,13 +1,14 @@
 import { discoveryCatalog } from './catalog.js'
 import { entryKey } from './data.js'
+import { processCatalog } from './processCatalog.js'
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 const xml=s=>esc(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'')
 const valueText=v=>v==null?'':Array.isArray(v)?v.join('; '):typeof v==='object'?JSON.stringify(v):String(v)
 const clean=v=>v==null?'':typeof v==='string'?v:valueText(v)
-function gather(workshop,entries,todos,audience='client') {
+function gather(workshop,entries,todos,audience='client',extras={}) {
  const get=(o,t,id)=>entries[entryKey(o,t,id)]
  const can=(e)=>audience==='internal'||!e?.is_internal
- const rows={Overview:[['Property','Value']],Requirements:[['Area','SAP Object','T-codes','Field ID','Field','Tier','Status','Field note','Object status']],Questions:[['Area','SAP Object','Question ID','Question','Type','Answer','Other','Approximate','Note']],Decisions:[['Area','SAP Object','Decision ID','Decision','Selected option','Status','Rationale']],Actions:[['SAP Object','Action item','Owner','Due date','Status']],Notes:[['Level','Area','SAP Object','Note','Internal']],Custom:[['Area','SAP Object','Type','ID','Description','Value']],Coverage:[['Area','SAP Object','Item type','Total','Completed','Open']]}
+ const rows={Overview:[['Property','Value']],Requirements:[['Area','SAP Object','T-codes','Field ID','Field','Tier','Status','Field note','Object status']],Questions:[['Area','SAP Object','Question ID','Question','Type','Answer','Other','Approximate','Note']],Decisions:[['Area','SAP Object','Decision ID','Decision','Selected option','Status','Rationale']],Actions:[['SAP Object','Action item','Owner','Due date','Status']],Notes:[['Level','Area','SAP Object','Note','Internal']],Custom:[['Area','SAP Object','Type','ID','Description','Value']],Coverage:[['Area','SAP Object','Item type','Total','Completed','Open']],SourceSystems:[['Name','Type','Version','Owner / contact','Notes']],ObjectSources:[['Area','SAP Object','Source systems','Not maintained','Notes']],ExtraFields:[['Area','SAP Object','Source system','Source field','Meaning / example','Used today','SAP handling','SAP target','SAP catalog field','Notes','Origin']],Processes:[['Category','Process ID','Process / job','Description','Status','Frequency','Run window','Volume','Responsible','How done today','SAP hint','Related objects','Note']],ProcessQuestions:[['Category','Process','Question ID','Question','Type','Answer']]}
  const add=(k,v)=>rows.Overview.push([k,clean(v)])
  ;[['Customer',workshop.client_name],['Meeting date',workshop.call_date],['Time',[(workshop.start_time||''),(workshop.end_time||'')].filter(Boolean).join(' – ')],['Workshop',workshop.title],['Project',workshop.project_name],['Consultant',workshop.consultant_name],['Participants',workshop.participants],['Legacy system',workshop.legacy_system],['SAP module','Plant Maintenance'],['Catalog version',workshop.catalog_version],['Status',workshop.status],['Audience',audience]].forEach(([k,v])=>add(k,v))
  const objects=discoveryCatalog.objects.filter(o=>!workshop.scope_areas?.length||workshop.scope_areas.includes(o.area))
@@ -35,6 +36,23 @@ function gather(workshop,entries,todos,audience='client') {
   for(const row of Object.values(entries).filter(x=>x.object_id===o.id&&(x.item_type==='custom_field'||x.item_type==='custom_question')))rows.Custom.push([a,o.title,row.item_type,row.item_id,row.value?.label||row.value?.text||'',row.value?.mark||row.value?.answer||''])
   for(const type of ['legacy_today','note']){const e=get(o.id,type,'main');if(can(e)&&e?.value?.text)rows.Notes.push([type==='note'?'Object':'Legacy today',a,o.title,e.value.text,!!e.is_internal])}
  }
+ const {sourceSystems=[],objectSources={},legacyFields=[],processEntries={}}=extras
+ const sourceById=Object.fromEntries(sourceSystems.map(x=>[x.id,x]))
+ for(const source of sourceSystems)rows.SourceSystems.push([source.name,source.system_type,source.version||'',source.owner||'',source.notes||''])
+ for(const o of objects){
+  const src=objectSources[o.id]||{}
+  rows.ObjectSources.push([labels[o.area],o.title,(src.source_system_ids||[]).map(id=>sourceById[id]?.name||'(source removed)').join('; '),src.not_maintained?'Yes':'No',src.note||''])
+ }
+ for(const item of legacyFields.filter(x=>objects.some(o=>o.id===x.object_id))){
+  const object=objects.find(o=>o.id===item.object_id)
+  rows.ExtraFields.push([labels[object.area],object.title,sourceById[item.source_system_id]?.name||'',item.source_field,item.meaning||'',item.used_today||'',item.sap_handling||'unmapped',item.sap_target||'',item.sap_catalog_field_id||'',item.note||'',item.origin||'manual'])
+ }
+ const customProcesses=Object.values(processEntries).filter(x=>x.custom).map(x=>({...x.custom,id:x.process_id,sapHint:'',relatedObjects:'',questions:[]}))
+ for(const p of [...processCatalog.processes,...customProcesses]){
+  const state=processEntries[p.id]||{},category=processCatalog.categories.find(c=>c.id===p.category)?.title||p.category
+  rows.Processes.push([category,p.id,p.title,p.plain,state.status||'unanswered',state.frequency||'',state.run_window||'',state.volume||'',state.responsible||'',state.today||'',audience==='internal'?p.sapHint||'':'',p.relatedObjects||'',audience==='internal'||!state.is_internal?state.note||'':''])
+  for(const q of p.questions||[]){const answer=state.answers?.[q.id]?.answer;rows.ProcessQuestions.push([category,p.title,q.id,q.text,q.type,clean(answer)])}
+ }
  const names=Object.fromEntries(discoveryCatalog.objects.map(o=>[o.id,o.title]))
  for(const t of todos) rows.Actions.push([names[t.object_id]||'',t.text,t.owner||'',t.due_date||'',t.done?'Done':'Open'])
  for(const k of ['fields','marked','questions','answered','decisions','decided','clarify'])add(k,coverage[k])
@@ -44,9 +62,9 @@ function download(blob,filename){const url=URL.createObjectURL(blob),a=document.
 const filename=w=>(w.client_name||'customer').replace(/[^a-z0-9_-]+/gi,'_').slice(0,35)+'_'+(w.call_date||'undated')
 const tab=v=>String(v??'').replace(/\t/g,' ').replace(/\r?\n/g,' ')
 const csvLine=a=>a.map(v=>'"'+tab(valueText(v)).replace(/"/g,'""')+'"').join(',')
-export function exportCSV(w,e,t,audience){const {rows}=gather(w,e,t,audience);let out='Sheet,Column1,Column2,Column3,Column4,Column5,Column6,Column7,Column8,Column9\r\n';for(const [name,data] of Object.entries(rows))for(const line of data)out+=csvLine([name,...line])+'\r\n';download(new Blob(['\ufeff'+out],{type:'text/csv;charset=utf-8'}),filename(w)+'.csv')}
-export function exportJSON(w,e,t,audience){const {rows}=gather(w,e,t,audience);download(new Blob([JSON.stringify({workshop:w,audience,sheets:rows},null,2)],{type:'application/json'}),filename(w)+'.json')}
-export function exportMarkdown(w,e,t,audience){const {rows}=gather(w,e,t,audience);let md='# '+w.client_name+' — '+(w.title||'Discovery Workshop')+'\n\nMeeting date: '+w.call_date+'\n\n';for(const [sheet,data] of Object.entries(rows)){md+='## '+sheet+'\n\n';md+='| '+data[0].map(tab).join(' | ')+' |\n|'+data[0].map(()=>'---').join('|')+'|\n';for(const line of data.slice(1))md+='| '+line.map(x=>tab(valueText(x)).replace(/\|/g,'\\|')).join(' | ')+' |\n';md+='\n'}download(new Blob([md],{type:'text/markdown;charset=utf-8'}),filename(w)+'.md')}
+export function exportCSV(w,e,t,audience,extras){const {rows}=gather(w,e,t,audience,extras);const width=Math.max(...Object.values(rows).flatMap(data=>data.map(line=>line.length)));let out=csvLine(['Sheet',...Array.from({length:width},(_,i)=>'Column'+(i+1))])+'\r\n';for(const [name,data] of Object.entries(rows))for(const line of data)out+=csvLine([name,...line])+'\r\n';download(new Blob(['\ufeff'+out],{type:'text/csv;charset=utf-8'}),filename(w)+'.csv')}
+export function exportJSON(w,e,t,audience,extras){const {rows}=gather(w,e,t,audience,extras);download(new Blob([JSON.stringify({workshop:w,audience,sheets:rows},null,2)],{type:'application/json'}),filename(w)+'.json')}
+export function exportMarkdown(w,e,t,audience,extras){const {rows}=gather(w,e,t,audience,extras);let md='# '+w.client_name+' — '+(w.title||'Discovery Workshop')+'\n\nMeeting date: '+w.call_date+'\n\n';for(const [sheet,data] of Object.entries(rows)){md+='## '+sheet+'\n\n';md+='| '+data[0].map(tab).join(' | ')+' |\n|'+data[0].map(()=>'---').join('|')+'|\n';for(const line of data.slice(1))md+='| '+line.map(x=>tab(valueText(x)).replace(/\|/g,'\\|')).join(' | ')+' |\n';md+='\n'}download(new Blob([md],{type:'text/markdown;charset=utf-8'}),filename(w)+'.md')}
 
 // Minimal standards-compliant, dependency-free XLSX writer. ZIP store method,
 // Office OpenXML inline strings, widths, filters, frozen header and print setup.
@@ -72,8 +90,8 @@ function sheetXML(data){const size=Math.max(1,...data.map(x=>x.length)),last=let
  data.map((r,ri)=>'<row r="'+(ri+1)+'">'+r.map((v,ci)=>{const cell=letters(ci)+(ri+1),str=valueText(v);return typeof v==='number'&&Number.isFinite(v)?'<c r="'+cell+'" s="'+(ri===0?1:0)+'"><v>'+v+'</v></c>':'<c r="'+cell+'" t="inlineStr" s="'+(ri===0?1:0)+'"><is><t xml:space="preserve">'+xml(str)+'</t></is></c>'}).join('')+'</row>').join('')+
  '</sheetData><autoFilter ref="A1:'+last+data.length+'"/><pageMargins left="0.25" right="0.25" top="0.55" bottom="0.55" header="0.25" footer="0.25"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/></worksheet>'
 }
-export function exportXLSX(w,e,t,audience){
- const {rows}=gather(w,e,t,audience),names=Object.keys(rows)
+export function exportXLSX(w,e,t,audience,extras){
+ const {rows}=gather(w,e,t,audience,extras),names=Object.keys(rows)
  const files=[['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+names.map((_,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'</Types>'],
  ['_rels/.rels','<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
  ['xl/workbook.xml','<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+names.map((n,i)=>'<sheet name="'+xml(n)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('')+'</sheets></workbook>'],
@@ -82,8 +100,8 @@ export function exportXLSX(w,e,t,audience){
  names.forEach((n,i)=>files.push(['xl/worksheets/sheet'+(i+1)+'.xml',sheetXML(rows[n])]))
  download(zip(files),filename(w)+'.xlsx')
 }
-export function printReport(w,e,t,audience){
- const {rows}=gather(w,e,t,audience)
+export function printReport(w,e,t,audience,extras){
+ const {rows}=gather(w,e,t,audience,extras)
  const popup=window.open('','_blank');if(!popup){alert('Please allow pop-ups to print this report.');return}
  const body=Object.entries(rows).map(([name,data])=>'<section><h2>'+esc(name)+'</h2><table><thead><tr>'+data[0].map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+data.slice(1).map(r=>'<tr>'+r.map(c=>'<td>'+esc(valueText(c))+'</td>').join('')+'</tr>').join('')+'</tbody></table></section>').join('')
  popup.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(w.client_name)+' · Discovery Workshop</title><style>body{font:11px/1.5 Arial;color:#151515;margin:15mm}h1{font-size:22px}h2{font-size:15px;border-bottom:2px solid #333;padding-bottom:6px}table{border-collapse:collapse;width:100%;table-layout:fixed}td,th{border:1px solid #bbb;padding:5px;overflow-wrap:anywhere;vertical-align:top}th{background:#eee}thead{display:table-header-group}tr{break-inside:avoid}section{break-before:page}section:first-of-type{break-before:auto}@page{size:A4 landscape;margin:12mm}</style></head><body><h1>'+esc(w.client_name)+' — '+esc(w.title)+'</h1><p>Meeting date: '+esc(w.call_date)+' · '+esc(audience)+' report</p>'+body+'</body></html>')
