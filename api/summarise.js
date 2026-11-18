@@ -1,4 +1,4 @@
-import { requireApprovedUser, requireJsonBody, sendAuthError } from './_auth.js'
+import { requireApprovedUser, requireJsonBody, sendAuthError } from '../server/shared/_auth.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
