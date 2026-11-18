@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import { discoveryCatalog, discoveryCounts } from './catalog.js'
-import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue,loadHints,reviewHint } from './data.js'
+import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveEntry,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue,loadHints,reviewHint } from './data.js'
 import './DiscoveryWorkshop.css'
 import {SourceSystemList,ObjectSourcePicker} from './SourceSystems.jsx'
 import LegacyFieldsGrid from './LegacyFieldsGrid.jsx'
@@ -17,6 +17,8 @@ import ScopingInventory from './ScopingInventory.jsx'
 import FollowupEmail from './FollowupEmail.jsx'
 import {createNextSession,loadEngagementSessions,loadPreviousEntries} from './seriesData.js'
 import {CarryoverReview,EngagementTimeline} from './Series.jsx'
+import {loadTemplates,saveTemplate,editTemplate,deleteTemplate,templateItems} from './templateData.js'
+import {SaveTemplate,TemplateLibrary,TemplateSuggestions} from './Templates.jsx'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
 const emptyForm=()=>({client_name:'',title:'SAP PM Discovery Workshop',project_name:'',consultant_name:'',call_date:today(),start_time:'',end_time:'',participants:'',legacy_system:'',scope_areas:discoveryCatalog.areas.map(a=>a.id)})
@@ -49,6 +51,9 @@ function DecisionEditor({item,value={},onChange}) {
 }
 export default function DiscoveryWorkshop({session}) {
  const [workshops,setWorkshops]=useState([])
+ const [templates,setTemplates]=useState([])
+ const [selectedTemplate,setSelectedTemplate]=useState(null)
+ const [templateOpen,setTemplateOpen]=useState(false)
  const [workshop,setWorkshop]=useState(null)
  const [engagementSessions,setEngagementSessions]=useState([])
  const [previousEntries,setPreviousEntries]=useState([])
@@ -123,6 +128,8 @@ export default function DiscoveryWorkshop({session}) {
  },[scoped,entries])
  const refresh=useCallback(async()=>{if(!userId)return;setLoading(true);try{setWorkshops(await loadWorkshops(userId));setError('')}catch(e){setError(e.message)}finally{setLoading(false)}},[userId])
  useEffect(()=>{refresh()},[refresh])
+ const refreshTemplateLibrary=useCallback(async()=>{if(!userId)return;try{setTemplates(await loadTemplates(userId))}catch(e){setError('Template library unavailable: '+e.message)}},[userId])
+ useEffect(()=>{refreshTemplateLibrary()},[refreshTemplateLibrary])
  useEffect(()=>()=>{queue.current?.close();processQueue.current?.close();firstQueue.current?.close()},[])
  async function openWorkshop(w) {
   queue.current?.close();queue.current=null;processQueue.current?.close();processQueue.current=null;firstQueue.current?.close();firstQueue.current=null;setLoading(true);setError('')
@@ -139,7 +146,9 @@ export default function DiscoveryWorkshop({session}) {
   e.preventDefault();setError('')
   if(!form.client_name.trim()||!form.call_date){setError('Customer and meeting date are required.');return}
   setLoading(true)
-  try {const w=await createWorkshop({...form,owner_id:userId,catalog_id:discoveryCatalog.catalogId,catalog_version:discoveryCatalog.version, start_time:form.start_time||null,end_time:form.end_time||null});await refresh();await openWorkshop(w)}
+  try {const w=await createWorkshop({...form,owner_id:userId,catalog_id:discoveryCatalog.catalogId,catalog_version:discoveryCatalog.version, start_time:form.start_time||null,end_time:form.end_time||null});
+   if(selectedTemplate){const items=templateItems(selectedTemplate.content||{});await saveEntry({workshop_id:w.id,object_id:'workshop',item_type:'note',item_id:'template_suggestions',value:{template_id:selectedTemplate.id,template_name:selectedTemplate.name,items,accepted:[]},is_internal:true})}
+   setSelectedTemplate(null);await refresh();await openWorkshop(w)}
   catch(e){setError(e.message);setLoading(false)}
  }
  async function changeWorkshop(field,value) {
@@ -290,6 +299,26 @@ export default function DiscoveryWorkshop({session}) {
    await refresh();await openWorkshop(data);setNextOpen(false)
   }catch(e){setError('Next session could not be created: '+e.message)}finally{setLoading(false)}
  }
+ async function createPersonalTemplate(values){
+  const created=await saveTemplate({...values,owner_id:userId});setTemplates(v=>[created,...v])
+ }
+ async function renamePersonalTemplate(id,values){try{const saved=await editTemplate(id,values);setTemplates(v=>v.map(x=>x.id===id?saved:x))}catch(e){setError(e.message)}}
+ async function removePersonalTemplate(id){try{await deleteTemplate(id);setTemplates(v=>v.filter(x=>x.id!==id))}catch(e){setError(e.message)}}
+ async function acceptTemplateBatch(items){
+  const stage=val('workshop','note','template_suggestions')
+  if(!stage?.items?.length)return
+  const accepted=new Set(stage.accepted||[])
+  for(const item of items.filter(x=>!accepted.has(x.key))){
+   const x=item.data
+   if(item.kind==='entry')writeEntry(x.object_id,x.item_type,x.item_id,x.value)
+   if(item.kind==='process')changeProcess(x.process_id,{workshop_id:workshop.id,process_id:x.process_id,status:x.status,frequency:x.frequency,custom:x.custom,answers:{}})
+   if(item.kind==='request')await addFirst('requests',{...x,status:'open'})
+   if(item.kind==='gap')await createGap({title:x.title,description:x.description,gap_type:x.gap_type,ricefw:x.ricefw,related_id:x.related_id,solution_idea:x.solution_idea,origin:'manual'})
+   if(item.kind==='raid')await newInventory('raid',{kind:x.kind,text:x.text,related_id:x.related_id,mitigation:x.mitigation,status:'open'})
+   accepted.add(item.key)
+  }
+  writeEntry('workshop','note','template_suggestions',{...stage,accepted:[...accepted]})
+ }
  async function addTodo() {
   if(!newTodo.trim())return
   try {const task=await createTodo({workshop_id:workshop.id,object_id:selected.id,text:newTodo.trim(),owner:'',done:false});setTodos(x=>[...x,task]);setNewTodo('')}catch(e){setError(e.message)}
@@ -366,16 +395,18 @@ export default function DiscoveryWorkshop({session}) {
  const covered={objects:scoped.length,fields:scoped.reduce((n,o)=>n+o.fields.length,0),questions:scoped.reduce((n,o)=>n+o.questions.length,0),decisions:scoped.reduce((n,o)=>n+o.decisions.length,0)}
  return <main className={`dw ${presenter?'dw-presenter':''}`}>
   <header className="dw-header"><div className="dw-brand"><button className="dw-back" onClick={mode==='workshop'?goBack:()=>window.location.assign('/')} aria-label="Go back">←</button><span className="dw-logo">W</span><span>Wani <span className="dw-slash">/</span> Discovery Workshop</span></div>
-   {mode==='workshop'&&<div className="dw-actions"><span className="dw-save" aria-live="polite">{pending+processPending+firstPending?(pending+processPending+firstPending)+' pending sync':savingMeta?'Saving…':'Saved'}</span><button className="dw-button" onClick={()=>setPresenter(x=>!x)}>{presenter?'Work mode':'Presenter mode'}</button><button className="dw-button" onClick={()=>{setNextOpen(x=>!x);setNextDate(workshop.call_date)}}>Next session</button><button className="dw-button" onClick={()=>setEmailOpen(true)}>Draft follow-up email</button><button className="dw-button" onClick={()=>setParkOpen(x=>!x)}>Parking ({firstCall.parking.filter(x=>x.status==='parked').length})</button><button className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)}>Objects</button></div>}
+   {mode==='workshop'&&<div className="dw-actions"><span className="dw-save" aria-live="polite">{pending+processPending+firstPending?(pending+processPending+firstPending)+' pending sync':savingMeta?'Saving…':'Saved'}</span><button className="dw-button" onClick={()=>setPresenter(x=>!x)}>{presenter?'Work mode':'Presenter mode'}</button><button className="dw-button" onClick={()=>setTemplateOpen(true)}>Save as template</button><button className="dw-button" onClick={()=>{setNextOpen(x=>!x);setNextDate(workshop.call_date)}}>Next session</button><button className="dw-button" onClick={()=>setEmailOpen(true)}>Draft follow-up email</button><button className="dw-button" onClick={()=>setParkOpen(x=>!x)}>Parking ({firstCall.parking.filter(x=>x.status==='parked').length})</button><button className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)}>Objects</button></div>}
   </header>
   <div className="dw-container">
+  {templateOpen&&workshop&&<SaveTemplate workshop={workshop} session={session} source={{entries,processEntries,requests:firstCall.requests,gaps,raid:inventories.raid}} onSave={createPersonalTemplate} onClose={()=>setTemplateOpen(false)}/>}
   {nextOpen&&workshop&&<div className="dw-quick dw-inline"><label>Next meeting date <input type="date" value={nextDate} onChange={e=>setNextDate(e.target.value)}/></label><button className="dw-button dw-primary" disabled={loading} onClick={nextSession}>Create next session</button><button className="dw-button" onClick={()=>setNextOpen(false)}>Cancel</button></div>}
   {emailOpen&&workshop&&<FollowupEmail workshop={workshop} session={session} stakeholders={firstCall.stakeholders} onClose={()=>setEmailOpen(false)}/>}
   {error&&<div role="alert" className="dw-alert">{error}<button className="dw-close" onClick={()=>setError('')}>×</button></div>}
-  {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">SAP PM · Discovery</div><h1>Customer workshops</h1><p>Client-confidential data. Only your signed-in account can access your workshop records.</p></div><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div>
+  {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">SAP PM · Discovery</div><h1>Customer workshops</h1><p>Client-confidential data. Only your signed-in account can access your workshop records.</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>setMode('templates')}>My templates ({templates.length})</button><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div></div>
    {loading&&<p>Loading workshops…</p>}{!loading&&!workshops.length&&<div className="dw-card"><h2>No workshops yet</h2><p>Create a workshop to begin capturing SAP PM requirements.</p></div>}
    <div className="dw-workshop-list">{workshops.map(w=><article className="dw-list-card" key={w.id}><div><div className="dw-kicker">{w.call_date} · {w.status}</div><h2>{w.client_name}</h2><p>{w.title} · {w.project_name||'SAP PM'}</p></div><div className="dw-actions"><button className="dw-button dw-primary" onClick={()=>openWorkshop(w)}>Open</button><button className="dw-button" onClick={()=>deleteWorkshop(w)}>Delete</button></div></article>)}</div></>}
-  {mode==='create'&&<div className="dw-card dw-form-card"><button className="dw-inline-button" onClick={()=>setMode('list')}>← All workshops</button><h1>New discovery workshop</h1><form onSubmit={create}><div className="dw-form-grid">
+  {mode==='templates'&&<><button className="dw-inline-button" onClick={()=>setMode('list')}>← All workshops</button><TemplateLibrary templates={templates} onRename={renamePersonalTemplate} onDelete={removePersonalTemplate} onUse={template=>{setSelectedTemplate(template);setForm(emptyForm());setMode('create')}}/></>}
+  {mode==='create'&&<div className="dw-card dw-form-card"><button className="dw-inline-button" onClick={()=>setMode('list')}>← All workshops</button><h1>New discovery workshop</h1>{selectedTemplate&&<p className="dw-caption">Starting from template: {selectedTemplate.name}. All content remains suggestions until accepted.</p>}<form onSubmit={create}><div className="dw-form-grid">
    {[['client_name','Customer / company *','text'],['call_date','Meeting date *','date'],['title','Workshop title','text'],['project_name','Project','text'],['consultant_name','Consultant','text'],['participants','Participants','text'],['legacy_system','Legacy system','text'],['start_time','Start time','time'],['end_time','End time','time']].map(([key,label,type])=><label key={key}>{label}<input required={key==='client_name'||key==='call_date'} type={type} value={form[key]} onChange={e=>setForm(x=>({...x,[key]:e.target.value}))}/></label>)}
    </div><fieldset className="dw-scope-fields"><legend>SAP process areas in scope</legend>{discoveryCatalog.areas.map(a=><label key={a.id}><input type="checkbox" checked={form.scope_areas.includes(a.id)} onChange={e=>setForm(x=>({...x,scope_areas:e.target.checked?[...x.scope_areas,a.id]:x.scope_areas.filter(k=>k!==a.id)}))}/>{a.title}</label>)}</fieldset>
    <p className="dw-caption">Customer information and workshop notes are confidential and are not included in Wani's shared knowledge base.</p><button type="submit" disabled={loading||!form.scope_areas.length} className="dw-button dw-primary">Create workshop</button></form></div>}
@@ -391,6 +422,7 @@ export default function DiscoveryWorkshop({session}) {
     {!presenter&&<LegacyImportPanel workshop={workshop} session={session} onImported={refreshLegacyHints}/>}
     <NoteInput label="General workshop notes" value={val('workshop','workshop_note','main').text} onChange={v=>writeNote('workshop','workshop_note','main',v)} internal={entry('workshop','workshop_note','main')?.is_internal} onInternal={v=>writeNote('workshop','workshop_note','main',val('workshop','workshop_note','main').text||'',v)}/>
    </section>
+   {val('workshop','note','template_suggestions').items?.length>0&&<TemplateSuggestions template={val('workshop','note','template_suggestions').template_name} items={val('workshop','note','template_suggestions').items} accepted={val('workshop','note','template_suggestions').accepted||[]} onAccept={item=>acceptTemplateBatch([item])} onAcceptAll={acceptTemplateBatch} onDismiss={()=>writeEntry('workshop','note','template_suggestions',{items:[],accepted:[]})}/>}
    {carryoverOpen?<CarryoverReview workshop={workshop} entries={entries} previousEntries={previousEntries} todos={todos} requests={firstCall.requests} parking={firstCall.parking} onJump={id=>{selectObject(id);setCarryoverOpen(false)}} onTodo={t=>editTodo(t.id,{done:true})} onRequest={r=>editFirst('requests',r,{status:'received'})} onParking={p=>editFirst('parking',p,{status:'dropped'})}/>:showSummary?<div className="dw-card"><h2>Workshop summary</h2><EngagementTimeline workshops={engagementSessions} current={workshop}/><p className="dw-caption">All catalog items, including unanswered items, are part of the export dataset. Documents are only generated on request.</p><p>{counts.fields} fields marked · {counts.questions} questions answered · {counts.decisions} decisions made · {todos.filter(t=>!t.done).length} open to-dos</p><label>Export audience <select value={audience} onChange={e=>setAudience(e.target.value)}><option value="client">Client — hide internal notes</option><option value="internal">Internal — include all notes</option></select></label><div className="dw-ai-box"><h3>AI meeting minutes (optional)</h3><p className="dw-caption">Generated only when requested. Review and edit before sharing. Internal notes stay out of client minutes.</p><div className="dw-inline"><label>Minutes audience <select value={minutesAudience} onChange={e=>setMinutesAudience(e.target.value)}><option value="client">Client</option><option value="internal">Internal</option></select></label><button className="dw-button" disabled={!!aiBusy||!!pending||!!processPending} onClick={()=>askAI('minutes',{audience:minutesAudience})}>{aiBusy==='minutes'?'Generating…':'Generate minutes'}</button></div>
  {minutes&&<><textarea rows="14" aria-label="Editable meeting minutes" value={minutes} onChange={e=>setMinutes(e.target.value)}/><button className="dw-button" onClick={storeMinutes}>Save reviewed minutes</button></>}</div>
  <div className="dw-export-actions"><button className="dw-button" onClick={()=>exportScopePack(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Scope pack (.md)</button><button className="dw-button dw-primary" onClick={()=>exportXLSX(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Download Excel (.xlsx)</button><button className="dw-button" onClick={()=>printReport(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Print / Save PDF</button><button className="dw-button" onClick={()=>exportCSV(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>CSV ZIP</button><button className="dw-button" onClick={()=>exportMarkdown(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Markdown</button><button className="dw-button" onClick={()=>exportJSON(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>JSON</button></div>
