@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { discoveryCatalog, discoveryCounts } from './catalog.js'
-import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources } from './data.js'
+import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField } from './data.js'
 import './DiscoveryWorkshop.css'
 import {SourceSystemList,ObjectSourcePicker} from './SourceSystems.jsx'
+import LegacyFieldsGrid from './LegacyFieldsGrid.jsx'
 import {exportCSV,exportJSON,exportMarkdown,exportXLSX,printReport} from './exports.js'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
@@ -39,6 +40,7 @@ export default function DiscoveryWorkshop({session}) {
  const [workshop,setWorkshop]=useState(null)
  const [sourceSystems,setSourceSystems]=useState([])
  const [objectSources,setObjectSources]=useState({})
+ const [legacyFields,setLegacyFields]=useState([])
  const [form,setForm]=useState(emptyForm())
  const [mode,setMode]=useState('list')
  const [entries,setEntries]=useState({})
@@ -91,11 +93,11 @@ export default function DiscoveryWorkshop({session}) {
  async function openWorkshop(w) {
   queue.current?.close();queue.current=null;setLoading(true);setError('')
   try {
-   const [rows,taskRows,sources,objectRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id)])
+   const [rows,taskRows,sources,objectRows,extraRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id)])
    const q=createEntryQueue(w.id,userId,setPending)
    const map={};for(const row of rows)map[eKey(row.object_id,row.item_type,row.item_id)]=row
    for(const row of q.pending.values())map[eKey(row.object_id,row.item_type,row.item_id)]=row
-   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
+   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
    setMode('workshop');setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
   }catch(e){setError(e.message)}finally{setLoading(false)}
  }
@@ -138,6 +140,22 @@ export default function DiscoveryWorkshop({session}) {
   setObjectSources(prev=>({...prev,[row.object_id]:row}))
   try{const saved=await saveObjectSources(row);setObjectSources(prev=>({...prev,[row.object_id]:saved}))}
   catch(e){setObjectSources(prev=>({...prev,[row.object_id]:old}));setError('Source mapping save failed: '+e.message)}
+ }
+ async function addExtraField(row) {
+  try {const {id:_id,updated_at:_updated, ...values}=row;const saved=await createLegacyField({...values,workshop_id:workshop.id});setLegacyFields(old=>[...old,saved])}
+  catch(e){setError('Extra field could not be saved: '+e.message)}
+ }
+ async function editExtraField(id,changes){
+  const old=legacyFields.find(x=>x.id===id)
+  setLegacyFields(rows=>rows.map(r=>r.id===id?{...r,...changes}:r))
+  try{const saved=await updateLegacyField(id,changes);setLegacyFields(rows=>rows.map(r=>r.id===id?saved:r))}
+  catch(e){setLegacyFields(rows=>rows.map(r=>r.id===id?old:r));setError('Extra field update failed: '+e.message)}
+ }
+ async function removeExtraField(id) {
+  try{await deleteLegacyField(id);setLegacyFields(rows=>rows.filter(r=>r.id!==id))}catch(e){setError('Extra field deletion failed: '+e.message)}
+ }
+ async function pasteExtraFields(rows){
+  for(const row of rows)await addExtraField({...row,object_id:selected.id,workshop_id:workshop.id})
  }
  async function addTodo() {
   if(!newTodo.trim())return
@@ -224,9 +242,10 @@ export default function DiscoveryWorkshop({session}) {
    <div className="dw-workspace"><aside className={`dw-sidebar ${mobileNav?'dw-open':''}`}><div className="dw-sidebar-top"><strong>Workshop catalog</strong><span>{objects.length}/{scoped.length}</span></div><input className="dw-search" placeholder="Search objects or T-codes" value={search} onChange={e=>setSearch(e.target.value)}/><select className="dw-scope" value={scope} onChange={e=>setScope(e.target.value)}><option value="all">All areas</option>{discoveryCatalog.areas.filter(a=>scoped.some(o=>o.area===a.id)).map(a=><option value={a.id} key={a.id}>{a.title}</option>)}</select>
     {discoveryCatalog.areas.map(a=>{const children=objects.filter(o=>o.area===a.id);return children.length?<div key={a.id} className="dw-nav-group"><div className="dw-nav-heading">{a.title}</div><NoteInput label="Area notes" value={val(a.id,'area_note','main').text} onChange={v=>writeNote(a.id,'area_note','main',v)} internal={entry(a.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(a.id,'area_note','main',val(a.id,'area_note','main').text||'',v)}/>{children.map(o=><button className={`dw-nav-item ${o.id===selected?.id?'dw-active':''}`} key={o.id} onClick={()=>selectObject(o.id)}>{o.title}<span>{objectSources[o.id]?.not_maintained?'None':(objectSources[o.id]?.source_system_ids||[]).length?'Source ✓':''} {labels[val(o.id,'object_status','main').status]||'Not started'}</span></button>)}</div>:null})}</aside>
    <div className="dw-main">{selected&&<div className="dw-card"><div className="dw-object-heading"><div><div className="dw-kicker">{area?.title} · {selectedIndex+1} / {objects.length}</div><h2>{selected.title}</h2></div><select aria-label="Object status" value={val(selected.id,'object_status','main').status||'not_started'} onChange={e=>writeEntry(selected.id,'object_status','main',{status:e.target.value})}>{statuses.map(x=><option key={x} value={x}>{labels[x]}</option>)}</select></div>
-    <div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div><p className="dw-description">{selected.plain}</p>
+    <div className="dw-caption">{legacyFields.filter(x=>x.object_id===selected.id).length} extra source fields · {legacyFields.filter(x=>x.object_id===selected.id&&(!x.sap_handling||x.sap_handling==='clarify')).length} open</div><div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div><p className="dw-description">{selected.plain}</p>
     {val(selected.id,'object_status','main').status!=='out_of_scope'&&<>
     <ObjectSourcePicker workshopId={workshop.id} objectId={selected.id} systems={sourceSystems} value={objectSources[selected.id]} onSave={updateObjectSources} presenter={presenter}/>
+    <LegacyFieldsGrid workshopId={workshop.id} object={selected} systems={sourceSystems} fields={legacyFields} onAdd={addExtraField} onEdit={editExtraField} onDelete={removeExtraField} onPaste={pasteExtraFields} presenter={presenter}/>
 
     {!presenter&&<Section title="Current legacy process" count="Notes"><NoteInput label="How the customer works today" value={val(selected.id,'legacy_today','main').text} onChange={v=>writeNote(selected.id,'legacy_today','main',v)}/></Section>}
     <Section title="Key fields" count={selected.fields.length}><p className="dw-caption">Click a field to cycle: Needed → Not needed → Clarify → Unmarked.</p><div className="dw-fields">{selected.fields.filter(f=>showOptional||f.tier==='core').map(f=>{const v=val(selected.id,'field',f.id),i=markCycle.indexOf(v.mark||'');return <div key={f.id} className="dw-field-wrap"><button title="Cycle field marking" className={`dw-field dw-mark-${v.mark||'none'}`} onClick={()=>writeEntry(selected.id,'field',f.id,{...v,mark:markCycle[(i+1)%markCycle.length]})}><span>{v.mark?labels[v.mark]:'○'}</span><strong>{f.label}</strong><small>{f.tier}</small></button><details className="dw-mini-note"><summary>+ Field note</summary><textarea value={v.note||''} onChange={e=>writeEntry(selected.id,'field',f.id,{...v,note:e.target.value})}/></details></div>})}</div>{entries&&Object.values(entries).filter(x=>x.object_id===selected.id&&x.item_type==='custom_field').map(x=><div className="dw-field-wrap" key={x.item_id}><button className="dw-field" onClick={()=>{const v=x.value||{};writeEntry(selected.id,'custom_field',x.item_id,{...v,mark:markCycle[(markCycle.indexOf(v.mark||'')+1)%markCycle.length]})}}>{x.value?.label} · {labels[x.value?.mark]||'Unmarked'}</button></div>)}<div className="dw-inline"><input className="dw-input" aria-label="New custom field" placeholder="Add custom field" value={customLabel} onChange={e=>setCustomLabel(e.target.value)}/><button className="dw-button" onClick={()=>addCustom('custom_field',customLabel)}>+ Field</button></div>
