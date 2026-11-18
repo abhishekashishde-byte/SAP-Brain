@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { supabase } from '../../supabaseClient'
 import { discoveryCatalog, discoveryCounts } from './catalog.js'
 import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue,loadHints,reviewHint } from './data.js'
 import './DiscoveryWorkshop.css'
@@ -187,7 +188,27 @@ export default function DiscoveryWorkshop({session}) {
  }
  async function editTodo(id,values){setTodos(x=>x.map(t=>t.id===id?{...t,...values}:t));try{await updateTodo(id,values)}catch(e){setError(e.message)}}
  async function deleteTodo(id){try{await removeTodo(id);setTodos(x=>x.filter(t=>t.id!==id))}catch(e){setError(e.message)}}
- async function deleteWorkshop(w){if(!window.confirm('Delete workshop and all its notes and decisions permanently?'))return;try{await removeWorkshop(w.id);await refresh()}catch(e){setError(e.message)}}
+ async function deleteWorkshop(w){
+  if(!window.confirm('Permanently delete this workshop, its notes, AI hints and uploaded manuals?'))return
+  try {
+   // Storage objects do not cascade with database rows. Remove private uploads first.
+   const folder=userId+'/'+w.id
+   const paths=[];let offset=0
+   for(;;){
+    const {data,error}=await supabase.storage.from('discovery-legacy').list(folder,{limit:100,offset})
+    if(error)throw error
+    paths.push(...(data||[]).filter(x=>x.id&&x.name).map(x=>folder+'/'+x.name))
+    if(!data||data.length<100)break
+    offset+=data.length
+   }
+   for(let i=0;i<paths.length;i+=100){
+    const {error}=await supabase.storage.from('discovery-legacy').remove(paths.slice(i,i+100))
+    if(error)throw error
+   }
+   await removeWorkshop(w.id)
+   await refresh()
+  }catch(e){setError('Workshop deletion could not complete: '+e.message)}
+ }
  function selectObject(id){setSelectedId(id);setShowProcesses(false);setShowSummary(false);setShowOptional(false);setMobileNav(false);setCustomLabel('');setCustomQuestion('');setFollowups([]);setAiAnswer('')}
  function addCustom(type,label) {
   if(!label.trim()||!selected)return
