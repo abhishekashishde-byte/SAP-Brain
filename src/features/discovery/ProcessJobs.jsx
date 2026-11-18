@@ -44,6 +44,7 @@ export default function ProcessJobs({workshopId,entries,onChange,presenter,onJum
     {cat.kind==='job'&&<strong className="dw-caption">Background job frequency</strong>}
     <div className="dw-choice">{processCatalog.frequencies.map(f=><button key={f} className={e.frequency===f?'selected':''} onClick={()=>set(p,{frequency:e.frequency===f?null:f})}>{freqLabels[f]}</button>)}</div>
     <div className="dw-process-grid">{[['run_window','Run window / timing'],['volume','Volume'],['responsible','Responsible']].map(([field,label])=><label key={field}>{label}<input value={e[field]||''} onChange={x=>set(p,{[field]:x.target.value})}/></label>)}</div>
+    <label className="dw-internal"><input type="checkbox" checked={!!e.answers?.needs_solution} onChange={x=>set(p,{answers:{...(e.answers||{}),needs_solution:x.target.checked}})}/> Needs solution (include as potential fit-gap)</label>
     <label className="dw-process-label">How it is done today<textarea rows="2" value={e.today||''} onChange={x=>set(p,{today:x.target.value})}/></label>
     {(p.questions||[]).map(question=><ProcessAnswer key={question.id} question={question} value={q[question.id]} onChange={v=>set(p,{answers:{...q,[question.id]:v}})}/>)}
     {(!presenter||!e.is_internal)&&<label className="dw-process-label">Process notes<textarea rows="2" value={e.note||''} onChange={x=>set(p,{note:x.target.value})}/></label>}
