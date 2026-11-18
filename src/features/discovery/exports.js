@@ -90,10 +90,11 @@ function download(blob,filename){const url=URL.createObjectURL(blob),a=document.
 const filename=w=>(w.client_name||'customer').replace(/[^a-z0-9_-]+/gi,'_').slice(0,35)+'_'+(w.call_date||'undated')
 const tab=v=>String(v??'').replace(/\t/g,' ').replace(/\r?\n/g,' ')
 const csvLine=a=>a.map(v=>'"'+tab(valueText(v)).replace(/"/g,'""')+'"').join(',')
+const CSV_FILENAMES={SourceSystems:'source_systems.csv',ObjectSources:'object_sources.csv',ExtraFields:'extra_fields.csv',ProcessQuestions:'process_questions.csv',LegacyHints:'legacy_hints.csv',FormsReports:'forms_reports.csv'}
 export function exportCSV(w,e,t,audience,extras){
  const {rows}=gather(w,e,t,audience,extras)
  const files=Object.entries(rows).map(([name,data])=>[
-  name.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'.csv',
+  CSV_FILENAMES[name]||name.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'.csv',
   '\ufeff'+data.map(csvLine).join('\r\n')+'\r\n'
  ])
  download(zip(files,'application/zip'),filename(w)+'_CSV.zip')
