@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { supabase } from '../../supabaseClient'
 import { discoveryCatalog, discoveryCounts } from './catalog.js'
-import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue } from './data.js'
+import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue,loadHints,reviewHint } from './data.js'
 import './DiscoveryWorkshop.css'
 import {SourceSystemList,ObjectSourcePicker} from './SourceSystems.jsx'
 import LegacyFieldsGrid from './LegacyFieldsGrid.jsx'
 import ProcessJobs from './ProcessJobs.jsx'
+import {LegacyImportPanel,LegacyHintsPanel} from './LegacyImport.jsx'
 import {processCatalog} from './processCatalog.js'
 import {exportCSV,exportJSON,exportMarkdown,exportXLSX,printReport} from './exports.js'
 
@@ -43,6 +45,7 @@ export default function DiscoveryWorkshop({session}) {
  const [sourceSystems,setSourceSystems]=useState([])
  const [objectSources,setObjectSources]=useState({})
  const [legacyFields,setLegacyFields]=useState([])
+ const [legacyHints,setLegacyHints]=useState([])
  const [processEntries,setProcessEntries]=useState({})
  const [showProcesses,setShowProcesses]=useState(false)
  const [processPending,setProcessPending]=useState(0)
@@ -99,11 +102,11 @@ export default function DiscoveryWorkshop({session}) {
  async function openWorkshop(w) {
   queue.current?.close();queue.current=null;processQueue.current?.close();processQueue.current=null;setLoading(true);setError('')
   try {
-   const [rows,taskRows,sources,objectRows,extraRows,procRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id),loadProcessEntries(w.id)])
+   const [rows,taskRows,sources,objectRows,extraRows,procRows,hintRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id),loadProcessEntries(w.id),loadHints(w.id)])
    const q=createEntryQueue(w.id,userId,setPending)
    const map={};for(const row of rows)map[eKey(row.object_id,row.item_type,row.item_id)]=row
    for(const row of q.pending.values())map[eKey(row.object_id,row.item_type,row.item_id)]=row
-   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);const pq=createProcessQueue(w.id,userId,setProcessPending);const procMap=Object.fromEntries(procRows.map(r=>[r.process_id,r]));for(const row of pq.pending.values())procMap[row.process_id]=row;setProcessEntries(procMap);processQueue.current=pq;pq.start();queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
+   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);setLegacyHints(hintRows);const pq=createProcessQueue(w.id,userId,setProcessPending);const procMap=Object.fromEntries(procRows.map(r=>[r.process_id,r]));for(const row of pq.pending.values())procMap[row.process_id]=row;setProcessEntries(procMap);processQueue.current=pq;pq.start();queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
    setMode('workshop');setShowProcesses(false);setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
   }catch(e){setError(e.message)}finally{setLoading(false)}
  }
@@ -172,13 +175,40 @@ export default function DiscoveryWorkshop({session}) {
   try{const row=await createTodo({workshop_id:workshop.id,object_id:null,text:'['+process.id+'] '+text,owner:'',done:false});setTodos(old=>[...old,row])}
   catch(e){setError(e.message)}
  }
+ async function refreshLegacyHints(){
+  try{setLegacyHints(await loadHints(workshop.id))}catch(e){setError('Legacy hints could not be loaded: '+e.message)}
+ }
+ async function reviewLegacyHint(id,accepted){
+  try{await reviewHint(id,accepted);setLegacyHints(rows=>rows.map(h=>h.id===id?{...h,accepted}:h))}
+  catch(e){setError('Hint review could not be saved: '+e.message)}
+ }
  async function addTodo() {
   if(!newTodo.trim())return
   try {const task=await createTodo({workshop_id:workshop.id,object_id:selected.id,text:newTodo.trim(),owner:'',done:false});setTodos(x=>[...x,task]);setNewTodo('')}catch(e){setError(e.message)}
  }
  async function editTodo(id,values){setTodos(x=>x.map(t=>t.id===id?{...t,...values}:t));try{await updateTodo(id,values)}catch(e){setError(e.message)}}
  async function deleteTodo(id){try{await removeTodo(id);setTodos(x=>x.filter(t=>t.id!==id))}catch(e){setError(e.message)}}
- async function deleteWorkshop(w){if(!window.confirm('Delete workshop and all its notes and decisions permanently?'))return;try{await removeWorkshop(w.id);await refresh()}catch(e){setError(e.message)}}
+ async function deleteWorkshop(w){
+  if(!window.confirm('Permanently delete this workshop, its notes, AI hints and uploaded manuals?'))return
+  try {
+   // Storage objects do not cascade with database rows. Remove private uploads first.
+   const folder=userId+'/'+w.id
+   const paths=[];let offset=0
+   for(;;){
+    const {data,error}=await supabase.storage.from('discovery-legacy').list(folder,{limit:100,offset})
+    if(error)throw error
+    paths.push(...(data||[]).filter(x=>x.id&&x.name).map(x=>folder+'/'+x.name))
+    if(!data||data.length<100)break
+    offset+=data.length
+   }
+   for(let i=0;i<paths.length;i+=100){
+    const {error}=await supabase.storage.from('discovery-legacy').remove(paths.slice(i,i+100))
+    if(error)throw error
+   }
+   await removeWorkshop(w.id)
+   await refresh()
+  }catch(e){setError('Workshop deletion could not complete: '+e.message)}
+ }
  function selectObject(id){setSelectedId(id);setShowProcesses(false);setShowSummary(false);setShowOptional(false);setMobileNav(false);setCustomLabel('');setCustomQuestion('');setFollowups([]);setAiAnswer('')}
  function addCustom(type,label) {
   if(!label.trim()||!selected)return
@@ -246,13 +276,14 @@ export default function DiscoveryWorkshop({session}) {
     {quickOpen&&!presenter&&<div className="dw-inline dw-quick"><input autoFocus className="dw-input" value={quickText} onChange={e=>setQuickText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){quickCapture()}if(e.key==='Escape')setQuickOpen(false)}} placeholder="Quick capture note; todo: for an action item"/><button className="dw-button" onClick={quickCapture}>Save note</button><button className="dw-button" onClick={()=>setQuickOpen(false)}>Cancel</button></div>}
     <div className="dw-stats"><span>Fields marked: {counts.fields}/{covered.fields}</span><span>Questions answered: {counts.questions}/{covered.questions}</span><span>Decisions made: {counts.decisions}/{covered.decisions}</span><span>Need clarification: {counts.clarify}</span><span>Open tasks: {todos.filter(t=>!t.done).length}</span></div>
     {!presenter&&<SourceSystemList workshop={workshop} systems={sourceSystems} onAdd={createSource} onUpdate={editSource} onDelete={removeSource}/>}
+    {!presenter&&<LegacyImportPanel workshop={workshop} session={session} onImported={refreshLegacyHints}/>}
     <NoteInput label="General workshop notes" value={val('workshop','workshop_note','main').text} onChange={v=>writeNote('workshop','workshop_note','main',v)} internal={entry('workshop','workshop_note','main')?.is_internal} onInternal={v=>writeNote('workshop','workshop_note','main',val('workshop','workshop_note','main').text||'',v)}/>
    </section>
    {showSummary?<div className="dw-card"><h2>Workshop summary</h2><p className="dw-caption">All catalog items, including unanswered items, are part of the export dataset. Documents are only generated on request.</p><p>{counts.fields} fields marked · {counts.questions} questions answered · {counts.decisions} decisions made · {todos.filter(t=>!t.done).length} open to-dos</p><label>Export audience <select value={audience} onChange={e=>setAudience(e.target.value)}><option value="client">Client — hide internal notes</option><option value="internal">Internal — include all notes</option></select></label><div className="dw-ai-box"><h3>AI meeting minutes (optional)</h3><p className="dw-caption">Generated only when requested. Review and edit before sharing. Internal notes stay out of client minutes.</p><div className="dw-inline"><label>Minutes audience <select value={minutesAudience} onChange={e=>setMinutesAudience(e.target.value)}><option value="client">Client</option><option value="internal">Internal</option></select></label><button className="dw-button" disabled={!!aiBusy||!!pending||!!processPending} onClick={()=>askAI('minutes',{audience:minutesAudience})}>{aiBusy==='minutes'?'Generating…':'Generate minutes'}</button></div>
  {minutes&&<><textarea rows="14" aria-label="Editable meeting minutes" value={minutes} onChange={e=>setMinutes(e.target.value)}/><button className="dw-button" onClick={storeMinutes}>Save reviewed minutes</button></>}</div>
- <div className="dw-export-actions"><button className="dw-button dw-primary" onClick={()=>exportXLSX(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries})}>Download Excel (.xlsx)</button><button className="dw-button" onClick={()=>printReport(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries})}>Print / Save PDF</button><button className="dw-button" onClick={()=>exportCSV(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries})}>CSV ZIP</button><button className="dw-button" onClick={()=>exportMarkdown(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries})}>Markdown</button><button className="dw-button" onClick={()=>exportJSON(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries})}>JSON</button></div>
+ <div className="dw-export-actions"><button className="dw-button dw-primary" onClick={()=>exportXLSX(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>Download Excel (.xlsx)</button><button className="dw-button" onClick={()=>printReport(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>Print / Save PDF</button><button className="dw-button" onClick={()=>exportCSV(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>CSV ZIP</button><button className="dw-button" onClick={()=>exportMarkdown(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>Markdown</button><button className="dw-button" onClick={()=>exportJSON(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>JSON</button></div>
  <div className="dw-summary-extra">
- <h3>Source systems</h3><p>{sourceSystems.length} sources registered</p>
+ <h3>Legacy manual mapping hints</h3><p>{legacyHints.length} suggestions · {legacyHints.filter(x=>x.accepted===true).length} accepted · {legacyHints.filter(x=>x.accepted==null).length} awaiting review</p><h3>Source systems</h3><p>{sourceSystems.length} sources registered</p>
  {sourceSystems.map(x=><p key={x.id}><strong>{x.name}</strong> · {x.system_type} · {x.version||'Version not specified'} · {x.owner||'Owner not assigned'}</p>)}
  <h3>Extra fields from source</h3><p>{legacyFields.length} extra source fields · {legacyFields.filter(x=>!x.sap_handling||x.sap_handling==='clarify').length} still open</p>
  {legacyFields.map(f=><p key={f.id}><strong>{discoveryCatalog.objects.find(o=>o.id===f.object_id)?.title||f.object_id}: {f.source_field}</strong> · {f.sap_handling||'Not mapped'} · {f.sap_target||'Target open'}</p>)}
@@ -269,6 +300,7 @@ export default function DiscoveryWorkshop({session}) {
     <button className="dw-inline-button" onClick={()=>setShowProcesses(true)}>Related processes: {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='valid').length} valid · {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='clarify').length} clarify</button><div className="dw-caption">{legacyFields.filter(x=>x.object_id===selected.id).length} extra source fields · {legacyFields.filter(x=>x.object_id===selected.id&&(!x.sap_handling||x.sap_handling==='clarify')).length} open</div><div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div><p className="dw-description">{selected.plain}</p>
     {val(selected.id,'object_status','main').status!=='out_of_scope'&&<>
     <ObjectSourcePicker workshopId={workshop.id} objectId={selected.id} systems={sourceSystems} value={objectSources[selected.id]} onSave={updateObjectSources} presenter={presenter}/>
+    <LegacyHintsPanel objectId={selected.id} hints={legacyHints} onReview={reviewLegacyHint} presenter={presenter}/>
     <LegacyFieldsGrid workshopId={workshop.id} object={selected} systems={sourceSystems} fields={legacyFields} onAdd={addExtraField} onEdit={editExtraField} onDelete={removeExtraField} onPaste={pasteExtraFields} presenter={presenter} session={session}/>
 
     {!presenter&&<Section title="Current legacy process" count="Notes"><NoteInput label="How the customer works today" value={val(selected.id,'legacy_today','main').text} onChange={v=>writeNote(selected.id,'legacy_today','main',v)}/></Section>}

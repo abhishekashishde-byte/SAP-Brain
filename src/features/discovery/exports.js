@@ -40,7 +40,7 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
   for(const row of Object.values(entries).filter(x=>x.object_id===o.id&&(x.item_type==='custom_field'||x.item_type==='custom_question')))rows.Custom.push([a,o.title,row.item_type,row.item_id,row.value?.label||row.value?.text||'',row.value?.mark||row.value?.answer||''])
   for(const type of ['legacy_today','note']){const e=get(o.id,type,'main');if(can(e)&&e?.value?.text)rows.Notes.push([type==='note'?'Object':'Legacy today',a,o.title,e.value.text,!!e.is_internal])}
  }
- const {sourceSystems=[],objectSources={},legacyFields=[],processEntries={}}=extras
+ const {sourceSystems=[],objectSources={},legacyFields=[],processEntries={},legacyHints=[]}=extras
  const sourceById=Object.fromEntries(sourceSystems.map(x=>[x.id,x]))
  for(const source of sourceSystems)rows.SourceSystems.push([source.name,source.system_type,source.version||'',source.owner||'',source.notes||''])
  for(const o of objects){
@@ -50,6 +50,10 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
  for(const item of legacyFields.filter(x=>objects.some(o=>o.id===x.object_id))){
   const object=objects.find(o=>o.id===item.object_id)
   rows.ExtraFields.push([labels[object.area],object.title,sourceById[item.source_system_id]?.name||'',item.source_field,item.meaning||'',item.used_today||'',item.sap_handling||'unmapped',item.sap_target||'',item.sap_catalog_field_id||'',item.note||'',item.origin||'manual'])
+ }
+ if(audience==='internal'){
+  rows.LegacyHints=[['SAP Object','Legacy feature','Suggested mapping / gap','Gap type','Source reference']]
+  for(const h of legacyHints.filter(h=>h.accepted===true))rows.LegacyHints.push([discoveryCatalog.objects.find(o=>o.id===h.object_id)?.title||h.object_id,h.legacy_feature,h.hint,h.gap_type,h.source_ref||''])
  }
  const customProcesses=Object.values(processEntries).filter(x=>x.custom).map(x=>({...x.custom,id:x.process_id,sapHint:'',relatedObjects:'',questions:[]}))
  for(const p of [...processCatalog.processes,...customProcesses]){

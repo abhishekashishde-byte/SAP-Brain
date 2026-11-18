@@ -58,6 +58,10 @@ export default async function handler(req,res) {
   const audience=payload.audience==='internal'?'internal':'client'
   const included=(entries||[]).filter(e=>audience==='internal'||!e.is_internal)
   const processEntries=(processResult.data||[]).map(p=>({...p,note:audience==='internal'||!p.is_internal?p.note:null,is_internal:audience==='internal'?p.is_internal:false}))
+  const {data:approvedHints,error:hintsError}=audience==='internal'?
+   await db.from('discovery_legacy_hints').select('object_id,legacy_feature,hint,gap_type,source_ref').eq('workshop_id',w.id).eq('accepted',true):
+   {data:[],error:null}
+  if(hintsError)throw hintsError
   const sourceSystems=sourcesResult.data||[]
   const legacyFields=extraResult.data||[]
   // Accept only short labels for identifiers the UI already sent, never instructions.
@@ -66,7 +70,7 @@ export default async function handler(req,res) {
   const labels=Object.fromEntries(Object.entries(rawLabels).filter(([k,v])=>capturedIds.has(k)&&k.length<100&&(typeof v==='string'||v&&typeof v.title==='string')).slice(0,500).map(([k,v])=>[k,typeof v==='string'?v.slice(0,160):{title:v.title.slice(0,160),area:String(v.area||'').slice(0,80)}]))
   const rawProcesses=payload.processLookup&&typeof payload.processLookup==='object'?payload.processLookup:{}
   const processLabels=Object.fromEntries(Object.entries(rawProcesses).filter(([k])=>processEntries.some(p=>p.process_id===k)).slice(0,100).map(([k,v])=>[k,String(v).slice(0,160)]))
-  const context={workshop:{client_name:w.client_name,title:w.title,call_date:w.call_date,participants:w.participants,project_name:w.project_name,legacy_system:w.legacy_system,scope:w.scope_areas},entries:included,todos:todos||[],sourceSystems,objectSources:objectSourcesResult.data||[],extraFields:legacyFields,processEntries,labels,processLabels}
+  const context={workshop:{client_name:w.client_name,title:w.title,call_date:w.call_date,participants:w.participants,project_name:w.project_name,legacy_system:w.legacy_system,scope:w.scope_areas},entries:included,todos:todos||[],sourceSystems,objectSources:objectSourcesResult.data||[],extraFields:legacyFields,acceptedLegacyHints:approvedHints||[],processEntries,labels,processLabels}
   if(action==='suggest_extra_fields'){
    const objectId=String(payload.objectId||'').slice(0,100)
    if(!objectId)return respond(res,400,{error:'SAP object required'})

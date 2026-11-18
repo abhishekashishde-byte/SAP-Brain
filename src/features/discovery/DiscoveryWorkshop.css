@@ -57,3 +57,7 @@
 
 .dw-process-cat-notes{padding:9px 16px;border-bottom:1px solid #40364e;background:#1a1626}.dw-process-cat-notes label:not(.dw-internal){font-size:11px;color:#bfb3d0;display:flex;flex-direction:column;gap:5px}.dw-process-cat-notes textarea{background:#211a2f;border:1px solid #4e4160;color:#eee;border-radius:8px;padding:9px;resize:vertical}.dw-process-cat-notes .dw-internal{margin:8px 0}
 @media print{.dw-process-cat-notes{background:white!important}.dw-process-cat-notes textarea{background:white!important;color:#111!important}}
+
+.dw-legacy-import{background:#191525;border:1px solid #46375c;border-radius:12px;padding:14px;margin:15px 0}.dw-legacy-import h3{font-size:15px;margin:0 0 9px}.dw-legacy-import input[type=file]{max-width:100%;color:#bbb0ca;font-size:12px}.dw-legacy-import .dw-inline{flex-wrap:wrap;gap:12px}.dw-hint-row{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;border-top:1px solid #3d314e;padding:12px 0}.dw-hint-row strong{font-size:13px}.dw-hint-row p{font-size:12px;color:#c9c0da;line-height:1.55}.dw-hint-row small{font-size:11px;color:#9890aa}.dw-hint-row .dw-actions{flex-wrap:wrap}.dw-hint-row .dw-button{font-size:11px}
+@media(max-width:650px){.dw-hint-row{flex-direction:column}.dw-hint-row .dw-actions{width:100%}}
+@media print{.dw-legacy-import{display:none!important}}
