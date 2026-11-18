@@ -1,0 +1,680 @@
+{
+  "catalogId": "sap-pm-process-catalog",
+  "version": "1.0.0",
+  "language": "en",
+  "statuses": [
+    "valid",
+    "not_valid",
+    "later",
+    "clarify"
+  ],
+  "frequencies": [
+    "daily",
+    "weekly",
+    "fortnightly",
+    "monthly",
+    "period_end",
+    "yearly",
+    "on_demand",
+    "event_driven"
+  ],
+  "categories": [
+    {
+      "id": "jobs",
+      "title": "Background jobs & periodic runs",
+      "kind": "job"
+    },
+    {
+      "id": "corr",
+      "title": "Corrective work variants",
+      "kind": "process"
+    },
+    {
+      "id": "prev",
+      "title": "Preventive & inspection variants",
+      "kind": "process"
+    },
+    {
+      "id": "spares",
+      "title": "Spares, repair & refurbishment",
+      "kind": "process"
+    },
+    {
+      "id": "ext",
+      "title": "Contractors & purchasing variants",
+      "kind": "process"
+    },
+    {
+      "id": "cost",
+      "title": "Cost & billing variants",
+      "kind": "process"
+    },
+    {
+      "id": "assets",
+      "title": "Asset lifecycle",
+      "kind": "process"
+    },
+    {
+      "id": "ops",
+      "title": "Operations & organisation",
+      "kind": "process"
+    }
+  ],
+  "processes": [
+    {
+      "id": "jobs.p1",
+      "category": "jobs",
+      "title": "PM scheduling / deadline monitoring",
+      "plain": "Automatic creation of due preventive orders/notifications.",
+      "sapHint": "IP30 (RISTRA20) as background job",
+      "relatedObjects": "mplan",
+      "questions": [
+        {
+          "id": "jobs.p1.q1",
+          "text": "Call horizon / how far ahead?",
+          "type": "text"
+        },
+        {
+          "id": "jobs.p1.q2",
+          "text": "Who reviews new PM orders after the run?",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "jobs.p2",
+      "category": "jobs",
+      "title": "MRP run for spare parts",
+      "plain": "Automatic reorder proposals for stock parts.",
+      "sapHint": "MRP Live / MD01N, reorder point planning",
+      "relatedObjects": "mat,purch",
+      "questions": [
+        {
+          "id": "jobs.p2.q1",
+          "text": "Planning horizon?",
+          "type": "text"
+        },
+        {
+          "id": "jobs.p2.q2",
+          "text": "Who converts proposals?",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "jobs.p3",
+      "category": "jobs",
+      "title": "Purchase requisition → PO conversion",
+      "plain": "Turning approved requisitions into purchase orders.",
+      "sapHint": "ME59N / Fiori Manage PRs",
+      "relatedObjects": "purch",
+      "questions": []
+    },
+    {
+      "id": "jobs.p4",
+      "category": "jobs",
+      "title": "Order settlement",
+      "plain": "Moving maintenance order costs to receivers.",
+      "sapHint": "KO8G / CO88 periodic settlement",
+      "relatedObjects": "cost",
+      "questions": [
+        {
+          "id": "jobs.p4.q1",
+          "text": "Period-end only or more often?",
+          "type": "single",
+          "options": [
+            "Period-end",
+            "Monthly",
+            "Weekly"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jobs.p5",
+      "category": "jobs",
+      "title": "Mass technical / business completion",
+      "plain": "Closing old orders in bulk.",
+      "sapHint": "IW38 mass change, CLSD after settlement",
+      "relatedObjects": "order,conf",
+      "questions": [
+        {
+          "id": "jobs.p5.q1",
+          "text": "Rule for closing (e.g. TECO + 30 days)?",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "jobs.p6",
+      "category": "jobs",
+      "title": "Measurement readings import",
+      "plain": "Readings from machines / files loaded automatically.",
+      "sapHint": "Interface / BAPI to measurement documents",
+      "relatedObjects": "mp",
+      "questions": [
+        {
+          "id": "jobs.p6.q1",
+          "text": "Source (PLC, SCADA, IoT, file)?",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "jobs.p7",
+      "category": "jobs",
+      "title": "Mobile synchronisation",
+      "plain": "Orders and confirmations synced to/from devices.",
+      "sapHint": "Mobile solution sync",
+      "relatedObjects": "users",
+      "questions": []
+    },
+    {
+      "id": "jobs.p8",
+      "category": "jobs",
+      "title": "Shop paper mass print",
+      "plain": "Printing job cards for the next day/week.",
+      "sapHint": "IW37N / IW3D mass print",
+      "relatedObjects": "order",
+      "questions": []
+    },
+    {
+      "id": "jobs.p9",
+      "category": "jobs",
+      "title": "Overdue / backlog alerts",
+      "plain": "Emails or lists for overdue PM and open jobs.",
+      "sapHint": "Scheduled reports / Fiori alerts",
+      "relatedObjects": "kpi,mplan",
+      "questions": []
+    },
+    {
+      "id": "jobs.p10",
+      "category": "jobs",
+      "title": "Warranty / contract expiry alerts",
+      "plain": "Warning before warranty or service contract ends.",
+      "sapHint": "Report / custom alert",
+      "relatedObjects": "eq",
+      "questions": []
+    },
+    {
+      "id": "jobs.p11",
+      "category": "jobs",
+      "title": "Statistics / KPI refresh",
+      "plain": "Updating reporting data (MTBF, costs).",
+      "sapHint": "PMIS / analytics refresh",
+      "relatedObjects": "kpi",
+      "questions": []
+    },
+    {
+      "id": "jobs.p12",
+      "category": "jobs",
+      "title": "Archiving old orders / notifications",
+      "plain": "Removing old data from the active system.",
+      "sapHint": "SAP archiving objects PM_ORDER / PM_QMEL",
+      "relatedObjects": "order,notif",
+      "questions": []
+    },
+    {
+      "id": "corr.p1",
+      "category": "corr",
+      "title": "Breakdown repair (immediate)",
+      "plain": "Machine stops, repair now.",
+      "sapHint": "Notification M1 + breakdown flag, quick order",
+      "relatedObjects": "notif,order",
+      "questions": [
+        {
+          "id": "corr.p1.q1",
+          "text": "Share of all jobs?",
+          "type": "single",
+          "options": [
+            "< 20 %",
+            "20–50 %",
+            "> 50 %"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "corr.p2",
+      "category": "corr",
+      "title": "Planned corrective work",
+      "plain": "Defect found, repaired later as planned job.",
+      "sapHint": "Notification + order with planning",
+      "relatedObjects": "notif,order",
+      "questions": []
+    },
+    {
+      "id": "corr.p3",
+      "category": "corr",
+      "title": "Small jobs without planning",
+      "plain": "Quick fixes only recorded afterwards.",
+      "sapHint": "Activity report (M3) / confirmation only",
+      "relatedObjects": "notif,conf",
+      "questions": []
+    },
+    {
+      "id": "corr.p4",
+      "category": "corr",
+      "title": "Operator reports (autonomous maintenance / TPM)",
+      "plain": "Operators report defects or do small tasks themselves.",
+      "sapHint": "Fiori notification, simple roles",
+      "relatedObjects": "notif,users",
+      "questions": []
+    },
+    {
+      "id": "corr.p5",
+      "category": "corr",
+      "title": "Building / facility requests",
+      "plain": "Work on rooms, buildings, no asset.",
+      "sapHint": "Orders on functional locations",
+      "relatedObjects": "fl,order",
+      "questions": []
+    },
+    {
+      "id": "corr.p6",
+      "category": "corr",
+      "title": "Modification / improvement work",
+      "plain": "Changes to machines, not repairs.",
+      "sapHint": "Separate order / activity type",
+      "relatedObjects": "order,cost",
+      "questions": []
+    },
+    {
+      "id": "corr.p7",
+      "category": "corr",
+      "title": "Shift handover / logbook",
+      "plain": "Notes passed between shifts.",
+      "sapHint": "Notification list / shift notes",
+      "relatedObjects": "notif",
+      "questions": []
+    },
+    {
+      "id": "prev.p1",
+      "category": "prev",
+      "title": "Time-based preventive maintenance",
+      "plain": "Fixed intervals (weekly, monthly…).",
+      "sapHint": "Single cycle / strategy plans",
+      "relatedObjects": "mplan,tl",
+      "questions": []
+    },
+    {
+      "id": "prev.p2",
+      "category": "prev",
+      "title": "Counter-based maintenance",
+      "plain": "By run hours, km, cycles.",
+      "sapHint": "Counter / multiple counter plans",
+      "relatedObjects": "mplan,mp",
+      "questions": []
+    },
+    {
+      "id": "prev.p3",
+      "category": "prev",
+      "title": "Condition-based maintenance",
+      "plain": "Work triggered by measured condition.",
+      "sapHint": "Measuring point limits + development / APM",
+      "relatedObjects": "mp,mplan",
+      "questions": [
+        {
+          "id": "prev.p3.q1",
+          "text": "Auto-trigger needed?",
+          "type": "yesno"
+        }
+      ]
+    },
+    {
+      "id": "prev.p4",
+      "category": "prev",
+      "title": "Inspection rounds / routes",
+      "plain": "One round covering many assets.",
+      "sapHint": "Plans with object list",
+      "relatedObjects": "mplan,tl",
+      "questions": []
+    },
+    {
+      "id": "prev.p5",
+      "category": "prev",
+      "title": "Lubrication routes",
+      "plain": "Regular lubrication of many points.",
+      "sapHint": "Object list plans / routes",
+      "relatedObjects": "mplan",
+      "questions": []
+    },
+    {
+      "id": "prev.p6",
+      "category": "prev",
+      "title": "Statutory / legal inspections",
+      "plain": "Required by law or insurance (lifts, pressure vessels).",
+      "sapHint": "Plans with strict scheduling + documents",
+      "relatedObjects": "mplan,eq",
+      "questions": [
+        {
+          "id": "prev.p6.q1",
+          "text": "Who certifies (internal / external)?",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "prev.p7",
+      "category": "prev",
+      "title": "Calibration of test equipment",
+      "plain": "Measuring devices checked regularly.",
+      "sapHint": "QM test equipment + inspection lots",
+      "relatedObjects": "eq,mplan",
+      "questions": [
+        {
+          "id": "prev.p7.q1",
+          "text": "How many devices?",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "prev.p8",
+      "category": "prev",
+      "title": "Shutdown / turnaround",
+      "plain": "Big planned stop with many jobs.",
+      "sapHint": "Revisions, order grouping, capacity planning",
+      "relatedObjects": "order,wc",
+      "questions": [
+        {
+          "id": "prev.p8.q1",
+          "text": "How often per year?",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "prev.p9",
+      "category": "prev",
+      "title": "Weekday-based schedules (e.g. 2nd Tuesday)",
+      "plain": "PM tied to a weekday of the month.",
+      "sapHint": "Not standard – workaround / custom",
+      "relatedObjects": "mplan",
+      "questions": []
+    },
+    {
+      "id": "spares.p1",
+      "category": "spares",
+      "title": "In-house refurbishment of repairable spares",
+      "plain": "Broken part repaired in own workshop and back to stock.",
+      "sapHint": "Refurbishment order (PM04), split valuation",
+      "relatedObjects": "mat,order,eq",
+      "questions": [
+        {
+          "id": "spares.p1.q1",
+          "text": "Which parts?",
+          "type": "text"
+        },
+        {
+          "id": "spares.p1.q2",
+          "text": "Track condition (new / used / repaired)?",
+          "type": "yesno"
+        }
+      ]
+    },
+    {
+      "id": "spares.p2",
+      "category": "spares",
+      "title": "External repair at vendor",
+      "plain": "Part sent to vendor for repair.",
+      "sapHint": "Subcontracting / external refurbishment",
+      "relatedObjects": "mat,purch",
+      "questions": [
+        {
+          "id": "spares.p2.q1",
+          "text": "Volume per month?",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "spares.p3",
+      "category": "spares",
+      "title": "Rotables / exchange units",
+      "plain": "Spare unit swapped in, old one repaired.",
+      "sapHint": "Serialised equipment + install/dismantle",
+      "relatedObjects": "eq,mat",
+      "questions": []
+    },
+    {
+      "id": "spares.p4",
+      "category": "spares",
+      "title": "Spare parts returns",
+      "plain": "Unused parts back to store.",
+      "sapHint": "GI reversal 262 / 202",
+      "relatedObjects": "mat,conf",
+      "questions": []
+    },
+    {
+      "id": "spares.p5",
+      "category": "spares",
+      "title": "Emergency purchase of parts",
+      "plain": "Part bought urgently outside normal process.",
+      "sapHint": "Urgent PR / PO, possibly direct",
+      "relatedObjects": "purch",
+      "questions": [
+        {
+          "id": "spares.p5.q1",
+          "text": "Who may buy without approval?",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "spares.p6",
+      "category": "spares",
+      "title": "Critical spares / insurance spares",
+      "plain": "Rare, expensive parts kept just in case.",
+      "sapHint": "Separate MRP handling / no MRP",
+      "relatedObjects": "mat",
+      "questions": []
+    },
+    {
+      "id": "spares.p7",
+      "category": "spares",
+      "title": "Physical inventory of store",
+      "plain": "Counting stock.",
+      "sapHint": "Physical inventory (MI01 / cycle counting)",
+      "relatedObjects": "mat",
+      "questions": [
+        {
+          "id": "spares.p7.q1",
+          "text": "Frequency?",
+          "type": "single",
+          "options": [
+            "Yearly",
+            "Cycle counting",
+            "Never"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spares.p8",
+      "category": "spares",
+      "title": "Free-issue / consumables",
+      "plain": "Small parts taken without booking.",
+      "sapHint": "Cost centre issue, non-stock",
+      "relatedObjects": "mat,cost",
+      "questions": []
+    },
+    {
+      "id": "ext.p1",
+      "category": "ext",
+      "title": "Contractor jobs (single orders)",
+      "plain": "External company for a specific job.",
+      "sapHint": "External operation → PR → PO → service entry",
+      "relatedObjects": "order,purch",
+      "questions": []
+    },
+    {
+      "id": "ext.p2",
+      "category": "ext",
+      "title": "Framework contracts / call-offs",
+      "plain": "Contractor on yearly contract, call when needed.",
+      "sapHint": "Outline agreement / framework order",
+      "relatedObjects": "purch",
+      "questions": []
+    },
+    {
+      "id": "ext.p3",
+      "category": "ext",
+      "title": "Service contracts per asset",
+      "plain": "Vendor maintains asset under contract.",
+      "sapHint": "Warranty / contract on equipment + service PO",
+      "relatedObjects": "eq,purch",
+      "questions": []
+    },
+    {
+      "id": "ext.p4",
+      "category": "ext",
+      "title": "Warranty claims to vendor",
+      "plain": "Repair paid by vendor under warranty.",
+      "sapHint": "Warranty check, claim process",
+      "relatedObjects": "eq,notif",
+      "questions": []
+    },
+    {
+      "id": "ext.p5",
+      "category": "ext",
+      "title": "Order approval by cost limit",
+      "plain": "Jobs above an amount need approval.",
+      "sapHint": "Release / workflow / estimated costs",
+      "relatedObjects": "order",
+      "questions": []
+    },
+    {
+      "id": "cost.p1",
+      "category": "cost",
+      "title": "Internal chargeback to departments",
+      "plain": "Costs charged to the department that caused them.",
+      "sapHint": "Settlement to requesting cost centre",
+      "relatedObjects": "cost",
+      "questions": []
+    },
+    {
+      "id": "cost.p2",
+      "category": "cost",
+      "title": "Work for external customers / tenants",
+      "plain": "Maintenance billed to someone outside.",
+      "sapHint": "Customer Service / service orders + billing",
+      "relatedObjects": "notif,cost",
+      "questions": [
+        {
+          "id": "cost.p2.q1",
+          "text": "Billed?",
+          "type": "yesno"
+        }
+      ]
+    },
+    {
+      "id": "cost.p3",
+      "category": "cost",
+      "title": "Capex / investment work",
+      "plain": "Maintenance team builds or installs new assets.",
+      "sapHint": "WBS / investment orders, AuC",
+      "relatedObjects": "cost,order",
+      "questions": []
+    },
+    {
+      "id": "cost.p4",
+      "category": "cost",
+      "title": "Yearly maintenance budget",
+      "plain": "Budget per area or asset.",
+      "sapHint": "Budget planning / reporting",
+      "relatedObjects": "cost",
+      "questions": []
+    },
+    {
+      "id": "assets.p1",
+      "category": "assets",
+      "title": "New asset commissioning",
+      "plain": "Adding new machines to the system.",
+      "sapHint": "Create FL / equipment, plans",
+      "relatedObjects": "eq,fl",
+      "questions": []
+    },
+    {
+      "id": "assets.p2",
+      "category": "assets",
+      "title": "Asset transfer between locations / sites",
+      "plain": "Asset moved.",
+      "sapHint": "Install / dismantle, plant change",
+      "relatedObjects": "eq",
+      "questions": []
+    },
+    {
+      "id": "assets.p3",
+      "category": "assets",
+      "title": "Asset scrapping / disposal",
+      "plain": "Asset taken out permanently.",
+      "sapHint": "Status, deletion flag, FI-AA retirement",
+      "relatedObjects": "eq,cost",
+      "questions": []
+    },
+    {
+      "id": "assets.p4",
+      "category": "assets",
+      "title": "Asset stored / spare machine",
+      "plain": "Machine kept in storage.",
+      "sapHint": "Dismantle to storage / status",
+      "relatedObjects": "eq",
+      "questions": []
+    },
+    {
+      "id": "ops.p1",
+      "category": "ops",
+      "title": "Permit to work / LOTO",
+      "plain": "Permits before risky work.",
+      "sapHint": "Work Clearance Management / permits",
+      "relatedObjects": "order",
+      "questions": []
+    },
+    {
+      "id": "ops.p2",
+      "category": "ops",
+      "title": "Mobile work execution",
+      "plain": "Technicians work on tablet / phone.",
+      "sapHint": "Mobile solution",
+      "relatedObjects": "users,conf",
+      "questions": []
+    },
+    {
+      "id": "ops.p3",
+      "category": "ops",
+      "title": "Weekly planning & scheduling meeting",
+      "plain": "Planner and team plan the next week.",
+      "sapHint": "Capacity planning, scheduling board",
+      "relatedObjects": "wc,order",
+      "questions": []
+    },
+    {
+      "id": "ops.p4",
+      "category": "ops",
+      "title": "Failure analysis / RCA meetings",
+      "plain": "Regular review of top failures.",
+      "sapHint": "Catalogs + PMIS",
+      "relatedObjects": "cat,kpi",
+      "questions": []
+    },
+    {
+      "id": "ops.p5",
+      "category": "ops",
+      "title": "Multi-site / central maintenance team",
+      "plain": "One team serving several sites.",
+      "sapHint": "Planning plant setup",
+      "relatedObjects": "org",
+      "questions": []
+    },
+    {
+      "id": "ops.p6",
+      "category": "ops",
+      "title": "Tool / special equipment management",
+      "plain": "Tools issued for jobs.",
+      "sapHint": "PRTs",
+      "relatedObjects": "tl,order",
+      "questions": []
+    }
+  ]
+}
