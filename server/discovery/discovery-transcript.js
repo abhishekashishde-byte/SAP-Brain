@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
-import { requireApprovedUser,requireJsonBody,sendAuthError } from './_auth.js'
-import { discoveryCatalog } from '../src/features/discovery/catalog.js'
-import { processCatalog } from '../src/features/discovery/processCatalog.js'
+import { requireApprovedUser,requireJsonBody,sendAuthError } from '../../api/_auth.js'
+import { discoveryCatalog } from '../../src/features/discovery/catalog.js'
+import { processCatalog } from '../../src/features/discovery/processCatalog.js'
 const KINDS=new Set(['field_mark','answer','decision','process','stakeholder','driver','sizing','request','todo','risk','gap'])
 const EXTENSIONS=new Set(['txt','vtt','docx','mp3','m4a','wav'])
 const AUDIO=new Set(['mp3','m4a','wav'])

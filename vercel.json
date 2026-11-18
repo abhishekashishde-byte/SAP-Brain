@@ -1,6 +1,22 @@
 {
   "rewrites": [
     {
+      "source": "/api/discovery-ai",
+      "destination": "/api/discovery?route=ai"
+    },
+    {
+      "source": "/api/discovery-import",
+      "destination": "/api/discovery?route=import"
+    },
+    {
+      "source": "/api/discovery-transcript",
+      "destination": "/api/discovery?route=transcript"
+    },
+    {
+      "source": "/api/discovery-retention",
+      "destination": "/api/discovery?route=retention"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
@@ -40,17 +56,8 @@
     "api/Notify.js": {
       "maxDuration": 30
     },
-    "api/discovery-ai.js": {
-      "maxDuration": 120
-    },
-    "api/discovery-import.js": {
+    "api/discovery.js": {
       "maxDuration": 300
-    },
-    "api/discovery-transcript.js": {
-      "maxDuration": 300
-    },
-    "api/discovery-retention.js": {
-      "maxDuration": 60
     }
   },
   "crons": [
