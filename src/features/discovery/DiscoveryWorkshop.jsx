@@ -368,7 +368,7 @@ export default function DiscoveryWorkshop({session}) {
   if(s.kind==='decision'){
    const o=discoveryCatalog.objects.find(o=>o.decisions.some(d=>d.id===id))
    if(!o||!p.choice)throw Error('Invalid decision suggestion')
-   writeEntry(o.id,'decision',id,{...val(o.id,'decision',id),choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open'}))throw Error('Request save failed');return
+   writeEntry(o.id,'decision',id,{...val(o.id,'decision',id),choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open'});return
   }
   if(s.kind==='process'){
    if(!processCatalog.processes.some(x=>x.id===id)||!['valid','not_valid','later','clarify'].includes(p.status))throw Error('Invalid process suggestion')
@@ -388,7 +388,7 @@ export default function DiscoveryWorkshop({session}) {
   }
   if(s.kind==='request'){
    if(!p.item?.trim())throw Error('Missing request text')
-   if(!await addFirst('requests',{item:p.item.trim(),related_id:p.related_id||null,status:'open'});return
+   if(!await addFirst('requests',{item:p.item.trim(),related_id:p.related_id||null,status:'open'}))throw Error('Request save failed');return
   }
   if(s.kind==='todo'){
    if(!p.text?.trim())throw Error('Missing action-item text')
