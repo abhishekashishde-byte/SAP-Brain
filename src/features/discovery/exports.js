@@ -40,7 +40,7 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
   for(const row of Object.values(entries).filter(x=>x.object_id===o.id&&(x.item_type==='custom_field'||x.item_type==='custom_question')))rows.Custom.push([a,o.title,row.item_type,row.item_id,row.value?.label||row.value?.text||'',row.value?.mark||row.value?.answer||''])
   for(const type of ['legacy_today','note']){const e=get(o.id,type,'main');if(can(e)&&e?.value?.text)rows.Notes.push([type==='note'?'Object':'Legacy today',a,o.title,e.value.text,!!e.is_internal])}
  }
- const {sourceSystems=[],objectSources={},legacyFields=[],processEntries={},legacyHints=[]}=extras
+ const {sourceSystems=[],objectSources={},legacyFields=[],processEntries={},legacyHints=[],firstCall={}}=extras
  const sourceById=Object.fromEntries(sourceSystems.map(x=>[x.id,x]))
  for(const source of sourceSystems)rows.SourceSystems.push([source.name,source.system_type,source.version||'',source.owner||'',source.notes||''])
  for(const o of objects){
@@ -55,6 +55,17 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
   rows.LegacyHints=[['SAP Object','Legacy feature','Suggested mapping / gap','Gap type','Source reference']]
   for(const h of legacyHints.filter(h=>h.accepted===true))rows.LegacyHints.push([discoveryCatalog.objects.find(o=>o.id===h.object_id)?.title||h.object_id,h.legacy_feature,h.hint,h.gap_type,h.source_ref||''])
  }
+ const {stakeholders=[],drivers=[],sizing=[],requests=[],parking=[]}=firstCall
+ rows.Stakeholders=[['Name','Organisation','Function / role','Project role','Responsible for','Present','Contact','Notes']]
+ for(const x of stakeholders)rows.Stakeholders.push([x.name,x.organisation||'',x.function_role||'',x.project_role||'',(x.responsible_for||[]).join('; '),x.present?'Yes':'No',audience==='internal'?x.contact||'':'',audience==='internal'||!x.is_internal?x.note||'':''])
+ rows.Drivers=[['Type','Description','Priority','Raised by','Affected items','KPI','Baseline','Notes']]
+ for(const x of drivers)rows.Drivers.push([x.kind,x.text,x.priority,stakeholders.find(z=>z.id===x.raised_by)?.name||'',(x.affected||[]).join('; '),x.kpi||'',x.baseline||'',x.note||''])
+ rows.Sizing=[['Metric ID','Label','Unit','Value','Approximate','Source','Notes']]
+ for(const x of sizing)rows.Sizing.push([x.metric_id,x.custom_label||'',x.custom_unit||'',x.value??'',x.approx?'Yes':'No',x.source||'',x.note||''])
+ rows.Requests=[['Item','Related ID','Format','From','Due date','Status','Notes']]
+ for(const x of requests)rows.Requests.push([x.item,x.related_id||'',x.format||'',stakeholders.find(z=>z.id===x.from_stakeholder)?.name||'',x.due_date||'',x.status||'open',x.note||''])
+ rows.Parking=[['Topic','Context','Status','Created at','Notes']]
+ for(const x of parking)rows.Parking.push([x.text,x.context_id||'',x.status||'parked',x.created_at||'',x.note||''])
  const customProcesses=Object.values(processEntries).filter(x=>x.custom).map(x=>({...x.custom,id:x.process_id,sapHint:'',relatedObjects:'',questions:[]}))
  for(const p of [...processCatalog.processes,...customProcesses]){
   const state=processEntries[p.id]||{},category=processCatalog.categories.find(c=>c.id===p.category)?.title||p.category
