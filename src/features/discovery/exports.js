@@ -147,12 +147,12 @@ export function exportScopePack(w,e,t,audience,extras){
  const sections=['Sizing','Gaps','Interfaces','FormsReports','RAID']
  const data=sections.map(name=>{
   const lines=rows[name]||[[]]
-  return '## '+(name==='FormsReports'?'Forms & reports':name)+'\\n\\n'+
-    '| '+lines[0].map(tab).join(' | ')+' |\\n|'+lines[0].map(()=>'---').join('|')+'|\\n'+
-    lines.slice(1).map(r=>'| '+r.map(v=>tab(valueText(v)).replace(/\\|/g,'\\\\|')).join(' | ')+' |').join('\\n')
- }).join('\\n\\n')
+  return '## '+(name==='FormsReports'?'Forms & reports':name)+'\n\n'+
+    '| '+lines[0].map(tab).join(' | ')+' |\n|'+lines[0].map(()=>'---').join('|')+'|\n'+
+    lines.slice(1).map(r=>'| '+r.map(v=>tab(valueText(v)).replace(/\\|/g,'\\\\|')).join(' | ')+' |').join('\n')
+ }).join('\n\n')
  const sizePoints=(extras.gaps||[]).filter(g=>g.status!=='rejected').reduce((n,g)=>n+({S:1,M:3,L:8,XL:13}[g.size]||0),0)
- const summary='# Scope pack — '+w.client_name+'\\n\\nWorkshop: '+w.title+'\\nMeeting date: '+w.call_date+'\\nAudience: '+audience+'\\nTotal relative size points: '+sizePoints+'\\n\\n'
- download(new Blob([summary+data+'\\n'],{type:'text/markdown;charset=utf-8'}),filename(w)+'_scope_pack.md')
+ const summary='# Scope pack — '+w.client_name+'\n\nWorkshop: '+w.title+'\nMeeting date: '+w.call_date+'\nAudience: '+audience+'\nTotal relative size points: '+sizePoints+'\n\n'
+ download(new Blob([summary+data+'\n'],{type:'text/markdown;charset=utf-8'}),filename(w)+'_scope_pack.md')
 }
 export {gather}
