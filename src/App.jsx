@@ -3,6 +3,7 @@ import { supabase, signOut } from './supabaseClient'
 import Login from './pages/Login.jsx'
 import { WaniLogo, WaniWordmark } from './pages/Login.jsx'
 import Brain from './pages/Brain.jsx'
+import DiscoveryWorkshop from './features/discovery/DiscoveryWorkshop.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
 
 export const ThemeContext = createContext({ dark: false, toggle: () => {} })
@@ -179,8 +180,11 @@ export default function App() {
           ? adminView
             ? <AdminDashboard session={session} onClose={() => setAdminView(false)} />
             : <>
-                <Brain session={session}/>
-                {adminAvailable && (
+                {window.location.pathname.startsWith('/discovery') ? <DiscoveryWorkshop/> : <>
+                  <Brain session={session}/>
+                  <a href="/discovery" aria-label="Open Discovery Workshop" style={{position:'fixed',left:14,bottom:16,zIndex:2147482000,border:'1px solid #65528b',borderRadius:12,padding:'11px 15px',background:'#171321',color:'#eee9ff',boxShadow:'0 8px 25px #0006',fontWeight:700,fontSize:12}}>Discovery Workshop</a>
+                </>}
+                {adminAvailable && !window.location.pathname.startsWith('/discovery') && (
                   <button
                     onClick={() => setAdminView(true)}
                     title="Open Wani admin dashboard"
