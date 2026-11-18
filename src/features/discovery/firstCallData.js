@@ -36,7 +36,17 @@ export const SIZING_METRICS=[
  ['history_years','Years of history available','years']
 ]
 // Linked question mappings are reviewed by id, never inferred by text. Add when verified.
-export const SIZING_LINKS={}
+export const SIZING_LINKS={
+ 'org.q1':'sites',
+ 'org.q4':'technicians',
+ 'fl.q3':'locations',
+ 'eq.q1':'assets',
+ 'mp.q2':'meters',
+ 'notif.q3':'requests_month',
+ 'tl.q1':'checklists',
+ 'mplan.q1':'pm_schedules',
+ 'mat.q1':'spare_parts'
+}
 
 // Queue individual updates by row rather than issuing a network call at each keystroke.
 export function createFirstCallQueue(workshopId,userId,onChange){

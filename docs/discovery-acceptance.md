@@ -49,3 +49,44 @@ This document is a **review checklist**, not a claim that browser/database tests
 - [ ] Database migration tested and backed up before production.
 - [ ] Review stacked pull requests in dependency order.
 - [ ] Merge/deploy only after all blocking checks pass.
+
+## Addendum 02 — first-call essentials
+- [ ] Run migration 014 and verify owner-only RLS for stakeholders, drivers, sizing, requests and parking.
+- [ ] Stakeholder spreadsheet paste, permissions/contact privacy, owner badges and decision-maker/date picker.
+- [ ] Nine explicitly mapped numeric SAP questions synchronize with sizing in both directions.
+- [ ] All 15 fixed metrics and custom metrics persist; incomplete rows do not silently disappear.
+- [ ] Requests, due dates, process links and parking Shift+P / Move to to-do function on mobile and desktop.
+
+## Addendum 03 — scoping
+- [ ] Run migrations 015–017; verify RLS as two different real users.
+- [ ] Candidate collector selects only recorded clarify fields, open decisions, qualifying legacy fields, status-flagged processes and accepted missing-in-SAP hints. Ignored items persist.
+- [ ] Gap numbering remains unique with simultaneous tabs; S/M/L/XL points match 1/3/8/13.
+- [ ] Interface/form/RAID create/edit/delete and Create-gap actions work; sample request FKs valid.
+- [ ] AI suggestions require click; apply per field; duplicate grouping never destroys original rows without consent.
+- [ ] Follow-up EN/DE, Formal/Friendly, inclusion toggles, copy and mailto; no auto-send, no internal notes or hidden implementation hints.
+- [ ] Scope Pack includes sizing, fit-gap, interfaces, forms/reports and RAID.
+- [ ] Individual CSV files `gaps.csv`, `interfaces.csv`, `formsreports.csv`, `raid.csv` exist in ZIP. Verify filenames against customer handover requirements.
+
+## Addendum 04 — later sessions and data privacy
+- [ ] Run migrations 018–021 on a non-production clone first.
+- [ ] Transactional `discovery_next_session` creates optional engagement and copies all listed data, preserving carry-forward IDs and remapping stakeholder, source-system, request and todo FKs.
+- [ ] Verify sessions 1 → 2 → 3, unresolved items, carried-over filter, old/new value differences, and legacy workshops without engagements.
+- [ ] Template contents exclude stakeholders, contacts, sizing and attachments. Explicit AI anonymisation + human review required before private save.
+- [ ] Template starts as suggestions; accepting one item/whole object never silently approves unrelated items.
+- [ ] German catalog generator produces draft overlays; a qualified SAP reviewer must check ALL translated titles, fields, questions and options, then approve overlays before presenter mode uses them.
+- [ ] English catalog IDs/answer values remain canonical in German presenter mode.
+- [ ] Minutes/email translation requires explicit click and remains editable.
+- [ ] Consent checkbox and date/text stored before upload. Reject uploads without consent and reject unauthorized cross-user access.
+- [ ] TXT/VTT/DOCX import works; MP3/M4A/WAV only works when a speech-to-text provider is configured (`OPENAI_API_KEY` or project-specific configuration).
+- [ ] Transcript analysis is initiated by the user. Quotes must occur in source; timestamps only if supported by the source; confidence displayed.
+- [ ] Accept/Edit/Reject, skip conflicts on high-confidence batch acceptance, and validate all catalog target IDs.
+- [ ] Delete transcript removes private file, transcript text and suggestions, with no remaining download access.
+- [ ] Configure Vercel `CRON_SECRET`, deploy the protected daily retention cron and verify expired records/files are actually deleted.
+- [ ] Verify environment supports long-running transcript analysis; use a durable job queue for documents that exceed request timeout rather than claiming background operation.
+
+## Outstanding release cautions
+- The GitHub branches contain code, **not a verified deployment**; production remains unchanged.
+- Build, browser QA, Excel/PDF print QA and migrations have not yet been confirmed green.
+- German translation overlay files are placeholders with `reviewed: false` until an administrator generates and reviews drafts.
+- Some import/AI actions use synchronous serverless requests and require timeout testing.
+- The transcript analysis uses verified source quotations as a guard but an AI model can still make incorrect semantic proposals; all changes require review.

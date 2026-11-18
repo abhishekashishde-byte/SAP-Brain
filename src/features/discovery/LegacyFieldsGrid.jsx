@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 const HANDLING=[['','Unmapped'],['standard_field','Standard SAP field'],['classification','Classification characteristic'],['long_text','Long text'],['custom_field','Custom field (Z)'],['separate_object','Separate object'],['archive_only','Archive only'],['not_needed','Not needed'],['clarify','Clarify']]
 const USED=[['','Choose…'],['yes','Yes'],['partly','Partly'],['no','No']]
+const choiceCode=(value,choices)=>choices.find(([code,label])=>[code,label].some(x=>String(x).toLowerCase()===String(value||'').trim().toLowerCase()))?.[0]||null
 const initial=()=>({source_system_id:null,source_field:'',meaning:'',used_today:null,sap_handling:null,sap_target:'',sap_catalog_field_id:null,note:'',origin:'manual'})
 export default function LegacyFieldsGrid({workshopId,object,systems,fields,onAdd,onEdit,onDelete,onPaste,presenter,session}) {
  const [draft,setDraft]=useState(initial())
@@ -37,7 +38,7 @@ export default function LegacyFieldsGrid({workshopId,object,systems,fields,onAdd
   e.preventDefault()
   const rows=text.trim().split(/\r?\n/).filter(Boolean).map(line=>{
    const x=line.split('\t')
-   return {source_system_id:systems.find(s=>s.id===x[0]||s.name===x[0])?.id||null,source_field:(x[1]||'').trim(),meaning:x[2]||'',used_today:USED.some(([k])=>k===String(x[3]).toLowerCase())?String(x[3]).toLowerCase():null,sap_handling:HANDLING.some(([k])=>k===String(x[4]).toLowerCase())?String(x[4]).toLowerCase():null,sap_target:x[5]||'',note:x[6]||'',origin:'paste'}
+   return {source_system_id:systems.find(s=>s.id===x[0]||s.name===x[0])?.id||null,source_field:(x[1]||'').trim(),meaning:x[2]||'',used_today:choiceCode(x[3],USED),sap_handling:choiceCode(x[4],HANDLING),sap_target:x[5]||'',note:x[6]||'',origin:'paste'}
   }).filter(x=>x.source_field)
   if(rows.length)onPaste(rows)
  }

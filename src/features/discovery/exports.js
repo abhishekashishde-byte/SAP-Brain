@@ -36,7 +36,7 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
   coverage.fields+=o.fields.length;coverage.marked+=fieldCount;coverage.questions+=o.questions.length;coverage.answered+=questionCount;coverage.decisions+=o.decisions.length;coverage.decided+=decisionCount
   for(const f of o.fields){const e=get(o.id,'field',f.id),v=e?.value||{};if(v.mark==='clarify')coverage.clarify++;rows.Requirements.push([a,o.title,tc,f.id,f.label,f.tier,v.mark||'unmarked',can(e)?v.note||'':'',status])}
   for(const q of o.questions){const e=get(o.id,'question',q.id),v=e?.value||{};rows.Questions.push([a,o.title,q.id,q.text,q.type,clean(v.answer),v.other||'',v.approx?'Yes':'',can(e)?v.note||'':''])}
-  for(const d of o.decisions){const v=get(o.id,'decision',d.id)?.value||{};rows.Decisions.push([a,o.title,d.id,d.text,v.choice==='Other…'?v.other||'Other':v.choice||'',v.status||'open',v.rationale||''])}
+  for(const d of o.decisions){const v=get(o.id,'decision',d.id)?.value||{};rows.Decisions.push([a,o.title,d.id,d.text,v.choice==='Other…'?v.other||'Other':v.choice||'',v.status||'open',v.rationale||'',(extras.firstCall?.stakeholders||[]).find(s=>s.id===v.decided_by)?.name||'',v.decided_at||''])}
   for(const row of Object.values(entries).filter(x=>x.object_id===o.id&&(x.item_type==='custom_field'||x.item_type==='custom_question')))rows.Custom.push([a,o.title,row.item_type,row.item_id,row.value?.label||row.value?.text||'',row.value?.mark||row.value?.answer||''])
   for(const type of ['legacy_today','note']){const e=get(o.id,type,'main');if(can(e)&&e?.value?.text)rows.Notes.push([type==='note'?'Object':'Legacy today',a,o.title,e.value.text,!!e.is_internal])}
  }
@@ -90,10 +90,11 @@ function download(blob,filename){const url=URL.createObjectURL(blob),a=document.
 const filename=w=>(w.client_name||'customer').replace(/[^a-z0-9_-]+/gi,'_').slice(0,35)+'_'+(w.call_date||'undated')
 const tab=v=>String(v??'').replace(/\t/g,' ').replace(/\r?\n/g,' ')
 const csvLine=a=>a.map(v=>'"'+tab(valueText(v)).replace(/"/g,'""')+'"').join(',')
+const CSV_FILENAMES={SourceSystems:'source_systems.csv',ObjectSources:'object_sources.csv',ExtraFields:'extra_fields.csv',ProcessQuestions:'process_questions.csv',LegacyHints:'legacy_hints.csv',FormsReports:'forms_reports.csv'}
 export function exportCSV(w,e,t,audience,extras){
  const {rows}=gather(w,e,t,audience,extras)
  const files=Object.entries(rows).map(([name,data])=>[
-  name.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'.csv',
+  CSV_FILENAMES[name]||name.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'.csv',
   '\ufeff'+data.map(csvLine).join('\r\n')+'\r\n'
  ])
  download(zip(files,'application/zip'),filename(w)+'_CSV.zip')

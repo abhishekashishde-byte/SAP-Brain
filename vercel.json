@@ -45,6 +45,18 @@
     },
     "api/discovery-import.js": {
       "maxDuration": 300
+    },
+    "api/discovery-transcript.js": {
+      "maxDuration": 300
+    },
+    "api/discovery-retention.js": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/discovery-retention",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

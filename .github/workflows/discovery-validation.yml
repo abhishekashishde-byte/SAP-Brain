@@ -1,5 +1,8 @@
 name: Discovery Workshop validation
 on:
+  push:
+    branches:
+      - 'feature/discovery-*'
   pull_request:
     paths:
       - 'src/features/discovery/**'
