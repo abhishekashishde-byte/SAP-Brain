@@ -10,7 +10,7 @@ function ProcessAnswer({question,value,onChange}){
  {['yesno','single','multi'].includes(question.type)?<div className="dw-choice">{options.map(opt=><button key={opt} className={Array.isArray(v)?v.includes(opt)?'selected':'':v===opt?'selected':''} onClick={()=>onChange({answer:question.type==='multi'?(Array.isArray(v)?v.includes(opt)?v.filter(a=>a!==opt):[...v,opt]:[opt]):opt})}>{opt}</button>)}</div>:question.type==='number'?<input type="number" value={v} onChange={e=>onChange({answer:e.target.value})}/>:<textarea rows="2" value={v} onChange={e=>onChange({answer:e.target.value})}/>}
  </div>
 }
-export default function ProcessJobs({workshopId,entries,onChange,presenter,onJump,onTask}) {
+export default function ProcessJobs({workshopId,entries,onChange,presenter,onJump,onTask,categoryNotes={},onCategoryNote}) {
  const [search,setSearch]=useState('')
  const [filter,setFilter]=useState('all')
  const [newCategory,setNewCategory]=useState(null)
@@ -34,6 +34,7 @@ export default function ProcessJobs({workshopId,entries,onChange,presenter,onJum
   const list=visible.filter(p=>p.category===cat.id)
   if(!list.length&&filter!=='all'&&search)return null
   return <section key={cat.id} className="dw-process-category"><h3>{cat.title} <span>{list.length}</span></h3>
+  {(!presenter||!categoryNotes[cat.id]?.internal)&&<div className="dw-process-cat-notes"><label>Category notes<textarea rows="2" value={categoryNotes[cat.id]?.text||''} onChange={e=>onCategoryNote?.(cat.id,e.target.value,categoryNotes[cat.id]?.internal||false)} placeholder="Observations covering this entire process category…"/></label>{!presenter&&<label className="dw-internal"><input type="checkbox" checked={!!categoryNotes[cat.id]?.internal} onChange={e=>onCategoryNote?.(cat.id,categoryNotes[cat.id]?.text||'',e.target.checked)}/> Internal note</label>}</div>}
   {list.map(p=>{const e=entries[p.id]||{},shown=e.status==='valid'||e.status==='clarify',q=e.answers||{}
    return <article key={p.id} className={`dw-process-row dw-process-${e.status||'unanswered'}`}><div className="dw-process-head">
     <div className="dw-process-title"><strong>{p.title}</strong><p>{p.plain}</p></div>
