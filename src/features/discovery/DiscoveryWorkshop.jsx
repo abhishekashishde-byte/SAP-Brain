@@ -9,6 +9,8 @@ import ProcessJobs from './ProcessJobs.jsx'
 import {LegacyImportPanel,LegacyHintsPanel} from './LegacyImport.jsx'
 import {processCatalog} from './processCatalog.js'
 import {exportCSV,exportJSON,exportMarkdown,exportXLSX,printReport} from './exports.js'
+import FirstCall,{FIRST_CALL_SECTIONS} from './FirstCall.jsx'
+import {loadFirstCall,addFirstCall,removeFirstCall,createFirstCallQueue} from './firstCallData.js'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
 const emptyForm=()=>({client_name:'',title:'SAP PM Discovery Workshop',project_name:'',consultant_name:'',call_date:today(),start_time:'',end_time:'',participants:'',legacy_system:'',scope_areas:discoveryCatalog.areas.map(a=>a.id)})
@@ -46,6 +48,11 @@ export default function DiscoveryWorkshop({session}) {
  const [objectSources,setObjectSources]=useState({})
  const [legacyFields,setLegacyFields]=useState([])
  const [legacyHints,setLegacyHints]=useState([])
+ const [firstCall,setFirstCall]=useState({stakeholders:[],drivers:[],sizing:[],requests:[],parking:[]})
+ const [firstTab,setFirstTab]=useState(null)
+ const [firstPending,setFirstPending]=useState(0)
+ const [parkOpen,setParkOpen]=useState(false)
+ const [parkText,setParkText]=useState('')
  const [processEntries,setProcessEntries]=useState({})
  const [showProcesses,setShowProcesses]=useState(false)
  const [processPending,setProcessPending]=useState(0)
@@ -79,6 +86,7 @@ export default function DiscoveryWorkshop({session}) {
  const [minutesAudience,setMinutesAudience]=useState('client')
  const queue=useRef(null)
  const processQueue=useRef(null)
+ const firstQueue=useRef(null)
  const userId=session?.user?.id
  const scoped=useMemo(()=>discoveryCatalog.objects.filter(o=>workshop?.scope_areas?.length?workshop.scope_areas.includes(o.area):true),[workshop])
  const objects=useMemo(()=>scoped.filter(o=>(scope==='all'||o.area===scope)&&(o.title.toLowerCase().includes(search.toLowerCase())||o.plain.toLowerCase().includes(search.toLowerCase())||o.tcodes.some(t=>t.toLowerCase().includes(search.toLowerCase())))),[scoped,scope,search])
@@ -98,16 +106,16 @@ export default function DiscoveryWorkshop({session}) {
  },[scoped,entries])
  const refresh=useCallback(async()=>{if(!userId)return;setLoading(true);try{setWorkshops(await loadWorkshops(userId));setError('')}catch(e){setError(e.message)}finally{setLoading(false)}},[userId])
  useEffect(()=>{refresh()},[refresh])
- useEffect(()=>()=>{queue.current?.close();processQueue.current?.close()},[])
+ useEffect(()=>()=>{queue.current?.close();processQueue.current?.close();firstQueue.current?.close()},[])
  async function openWorkshop(w) {
-  queue.current?.close();queue.current=null;processQueue.current?.close();processQueue.current=null;setLoading(true);setError('')
+  queue.current?.close();queue.current=null;processQueue.current?.close();processQueue.current=null;firstQueue.current?.close();firstQueue.current=null;setLoading(true);setError('')
   try {
-   const [rows,taskRows,sources,objectRows,extraRows,procRows,hintRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id),loadProcessEntries(w.id),loadHints(w.id)])
+   const [rows,taskRows,sources,objectRows,extraRows,procRows,hintRows,firstRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id),loadProcessEntries(w.id),loadHints(w.id),loadFirstCall(w.id)])
    const q=createEntryQueue(w.id,userId,setPending)
    const map={};for(const row of rows)map[eKey(row.object_id,row.item_type,row.item_id)]=row
    for(const row of q.pending.values())map[eKey(row.object_id,row.item_type,row.item_id)]=row
-   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);setLegacyHints(hintRows);const pq=createProcessQueue(w.id,userId,setProcessPending);const procMap=Object.fromEntries(procRows.map(r=>[r.process_id,r]));for(const row of pq.pending.values())procMap[row.process_id]=row;setProcessEntries(procMap);processQueue.current=pq;pq.start();queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
-   setMode('workshop');setShowProcesses(false);setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
+   setEntries(map);setTodos(taskRows);setSourceSystems(sources);setObjectSources(Object.fromEntries(objectRows.map(r=>[r.object_id,r])));setLegacyFields(extraRows);setLegacyHints(hintRows);setFirstCall(firstRows);const fq=createFirstCallQueue(w.id,userId,setFirstPending);firstQueue.current=fq;for(const edit of fq.pending.values())firstRows[edit.kind]=firstRows[edit.kind].map(row=>(row.id||row.metric_id)===edit.id?{...row,...edit.values}:row);setFirstCall({...firstRows});fq.start();const pq=createProcessQueue(w.id,userId,setProcessPending);const procMap=Object.fromEntries(procRows.map(r=>[r.process_id,r]));for(const row of pq.pending.values())procMap[row.process_id]=row;setProcessEntries(procMap);processQueue.current=pq;pq.start();queue.current=q;q.start();setWorkshop(w);setSelectedId(discoveryCatalog.objects.find(o=>!w.scope_areas?.length||w.scope_areas.includes(o.area))?.id||discoveryCatalog.objects[0].id)
+   setMode('workshop');setFirstTab(null);setShowProcesses(false);setShowSummary(false);setScope('all');setSearch('');setAiAnswer('');setFollowups([]);setMinutes('');setAiQuestion('')
   }catch(e){setError(e.message)}finally{setLoading(false)}
  }
  async function create(e) {
@@ -182,6 +190,34 @@ export default function DiscoveryWorkshop({session}) {
   try{await reviewHint(id,accepted);setLegacyHints(rows=>rows.map(h=>h.id===id?{...h,accepted}:h))}
   catch(e){setError('Hint review could not be saved: '+e.message)}
  }
+ async function addFirst(kind,values){
+  const id=kind==='sizing'?values.metric_id:crypto.randomUUID()
+  const row={...values,workshop_id:workshop.id,...(kind==='sizing'?{}:{id})}
+  setFirstCall(prev=>({...prev,[kind]:[...(prev[kind]||[]),row]}))
+  try{const stored=await addFirstCall(kind,row);setFirstCall(prev=>({...prev,[kind]:prev[kind].map(x=>(x.id||x.metric_id)===id?stored:x)}))}
+  catch(e){setFirstCall(prev=>({...prev,[kind]:prev[kind].filter(x=>(x.id||x.metric_id)!==id)}));setError('Could not create '+kind+': '+e.message)}
+ }
+ function editFirst(kind,row,patch){
+  const id=row.id||row.metric_id
+  const updated={...row,...patch}
+  setFirstCall(prev=>({...prev,[kind]:(prev[kind]||[]).some(x=>(x.id||x.metric_id)===id)?prev[kind].map(x=>(x.id||x.metric_id)===id?updated:x):[...prev[kind],updated]}))
+  firstQueue.current?.enqueue(kind,id,updated)
+ }
+ async function deleteFirst(kind,id){
+  try{await removeFirstCall(kind,id,workshop.id);setFirstCall(prev=>({...prev,[kind]:prev[kind].filter(x=>(x.id||x.metric_id)!==id)}))}
+  catch(e){setError('Could not delete '+kind+': '+e.message)}
+ }
+ async function moveParkToTodo(row){
+  try{const todo=await createTodo({workshop_id:workshop.id,object_id:row.context_id||null,text:row.text,owner:'',done:false});setTodos(prev=>[...prev,todo]);editFirst('parking',row,{status:'moved',todo_id:todo.id})}
+  catch(e){setError('Could not move parked point: '+e.message)}
+ }
+ function openFirst(section){setFirstTab(section);setShowProcesses(false);setShowSummary(false);setMobileNav(false)}
+ async function quickPark(){if(!parkText.trim())return;await addFirst('parking',{text:parkText.trim(),context_id:firstTab||showProcesses?null:selected?.id,status:'parked'});setParkText('');setParkOpen(false)}
+ useEffect(()=>{
+  if(mode!=='workshop')return
+  const key=e=>{const target=e.target;if(target instanceof HTMLElement&&(target.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(target.tagName)))return;if(e.shiftKey&&e.key.toLowerCase()==='p'){e.preventDefault();setParkOpen(true)}}
+  window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)
+ },[mode])
  async function addTodo() {
   if(!newTodo.trim())return
   try {const task=await createTodo({workshop_id:workshop.id,object_id:selected.id,text:newTodo.trim(),owner:'',done:false});setTodos(x=>[...x,task]);setNewTodo('')}catch(e){setError(e.message)}
@@ -209,7 +245,7 @@ export default function DiscoveryWorkshop({session}) {
    await refresh()
   }catch(e){setError('Workshop deletion could not complete: '+e.message)}
  }
- function selectObject(id){setSelectedId(id);setShowProcesses(false);setShowSummary(false);setShowOptional(false);setMobileNav(false);setCustomLabel('');setCustomQuestion('');setFollowups([]);setAiAnswer('')}
+ function selectObject(id){setFirstTab(null);setSelectedId(id);setShowProcesses(false);setShowSummary(false);setShowOptional(false);setMobileNav(false);setCustomLabel('');setCustomQuestion('');setFollowups([]);setAiAnswer('')}
  function addCustom(type,label) {
   if(!label.trim()||!selected)return
   const id=crypto.randomUUID()
@@ -254,11 +290,11 @@ export default function DiscoveryWorkshop({session}) {
   if(!minutes.trim())return
   try{await saveMinutes({workshop_id:workshop.id,content_md:minutes,audience:minutesAudience,model:'claude-sonnet-5-5'});setError('');alert('Minutes saved.')}catch(e){setError(e.message)}
  }
- function goBack(){queue.current?.flush();queue.current?.close();queue.current=null;processQueue.current?.flush();processQueue.current?.close();processQueue.current=null;setWorkshop(null);setMode('list');setShowSummary(false);refresh()}
+ function goBack(){firstQueue.current?.flush();firstQueue.current?.close();firstQueue.current=null;queue.current?.flush();queue.current?.close();queue.current=null;processQueue.current?.flush();processQueue.current?.close();processQueue.current=null;setWorkshop(null);setMode('list');setShowSummary(false);refresh()}
  const covered={objects:scoped.length,fields:scoped.reduce((n,o)=>n+o.fields.length,0),questions:scoped.reduce((n,o)=>n+o.questions.length,0),decisions:scoped.reduce((n,o)=>n+o.decisions.length,0)}
  return <main className={`dw ${presenter?'dw-presenter':''}`}>
   <header className="dw-header"><div className="dw-brand"><button className="dw-back" onClick={mode==='workshop'?goBack:()=>window.location.assign('/')} aria-label="Go back">←</button><span className="dw-logo">W</span><span>Wani <span className="dw-slash">/</span> Discovery Workshop</span></div>
-   {mode==='workshop'&&<div className="dw-actions"><span className="dw-save" aria-live="polite">{pending+processPending?(pending+processPending)+' pending sync':savingMeta?'Saving…':'Saved'}</span><button className="dw-button" onClick={()=>setPresenter(x=>!x)}>{presenter?'Work mode':'Presenter mode'}</button><button className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)}>Objects</button></div>}
+   {mode==='workshop'&&<div className="dw-actions"><span className="dw-save" aria-live="polite">{pending+processPending+firstPending?(pending+processPending+firstPending)+' pending sync':savingMeta?'Saving…':'Saved'}</span><button className="dw-button" onClick={()=>setPresenter(x=>!x)}>{presenter?'Work mode':'Presenter mode'}</button><button className="dw-button" onClick={()=>setParkOpen(x=>!x)}>Parking ({firstCall.parking.filter(x=>x.status==='parked').length})</button><button className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)}>Objects</button></div>}
   </header>
   <div className="dw-container">
   {error&&<div role="alert" className="dw-alert">{error}<button className="dw-close" onClick={()=>setError('')}>×</button></div>}
@@ -270,7 +306,8 @@ export default function DiscoveryWorkshop({session}) {
    </div><fieldset className="dw-scope-fields"><legend>SAP process areas in scope</legend>{discoveryCatalog.areas.map(a=><label key={a.id}><input type="checkbox" checked={form.scope_areas.includes(a.id)} onChange={e=>setForm(x=>({...x,scope_areas:e.target.checked?[...x.scope_areas,a.id]:x.scope_areas.filter(k=>k!==a.id)}))}/>{a.title}</label>)}</fieldset>
    <p className="dw-caption">Customer information and workshop notes are confidential and are not included in Wani's shared knowledge base.</p><button type="submit" disabled={loading||!form.scope_areas.length} className="dw-button dw-primary">Create workshop</button></form></div>}
   {mode==='workshop'&&workshop&&<>
-   <section className="dw-intro"><div className="dw-kicker">SAP PM · {discoveryCatalog.version}</div><div className="dw-list-heading"><div><h1>{workshop.client_name}</h1><p>{workshop.title} · {workshop.project_name||'Discovery workshop'}</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>{setShowSummary(s=>!s);setShowProcesses(false)}}>{showSummary?'Back to objects':'Summary & exports'}</button></div></div>
+   {parkOpen&&<div className="dw-quick dw-inline"><input autoFocus placeholder="Park this topic…" value={parkText} onChange={e=>setParkText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')quickPark();if(e.key==='Escape')setParkOpen(false)}}/><button className="dw-button" onClick={quickPark}>Save</button><button className="dw-button" onClick={()=>setParkOpen(false)}>Cancel</button></div>}
+   <section className="dw-intro"><div className="dw-kicker">SAP PM · {discoveryCatalog.version}</div><div className="dw-list-heading"><div><h1>{workshop.client_name}</h1><p>{workshop.title} · {workshop.project_name||'Discovery workshop'}</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>{setShowSummary(s=>!s);setShowProcesses(false);setFirstTab(null)}}>{showSummary?'Back to objects':'Summary & exports'}</button></div></div>
     <div className="dw-metadata">{[['Customer',workshop.client_name],['Meeting date',workshop.call_date],['Consultant',workshop.consultant_name||'—'],['Catalog coverage',`${covered.objects} objects · ${covered.fields} fields · ${covered.questions} questions · ${covered.decisions} decisions`]].map(([k,v])=><div key={k}><span>{k}</span><strong>{v}</strong></div>)}</div>
     {!presenter&&<details className="dw-meta-edit"><summary>Edit workshop details</summary><div className="dw-form-grid">{[['client_name','Customer'],['call_date','Meeting date'],['title','Title'],['project_name','Project'],['consultant_name','Consultant'],['participants','Participants'],['legacy_system','Legacy system'],['start_time','Start time'],['end_time','End time']].map(([k,l])=><label key={k}>{l}<input type={k==='call_date'?'date':k.endsWith('_time')?'time':'text'} defaultValue={workshop[k]||''} onBlur={e=>{if(e.target.value!==(workshop[k]||''))changeWorkshop(k,e.target.value||((k.endsWith('_time'))?null:''))}}/></label>)}</div></details>}
     {quickOpen&&!presenter&&<div className="dw-inline dw-quick"><input autoFocus className="dw-input" value={quickText} onChange={e=>setQuickText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){quickCapture()}if(e.key==='Escape')setQuickOpen(false)}} placeholder="Quick capture note; todo: for an action item"/><button className="dw-button" onClick={quickCapture}>Save note</button><button className="dw-button" onClick={()=>setQuickOpen(false)}>Cancel</button></div>}
@@ -283,7 +320,7 @@ export default function DiscoveryWorkshop({session}) {
  {minutes&&<><textarea rows="14" aria-label="Editable meeting minutes" value={minutes} onChange={e=>setMinutes(e.target.value)}/><button className="dw-button" onClick={storeMinutes}>Save reviewed minutes</button></>}</div>
  <div className="dw-export-actions"><button className="dw-button dw-primary" onClick={()=>exportXLSX(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>Download Excel (.xlsx)</button><button className="dw-button" onClick={()=>printReport(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>Print / Save PDF</button><button className="dw-button" onClick={()=>exportCSV(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>CSV ZIP</button><button className="dw-button" onClick={()=>exportMarkdown(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>Markdown</button><button className="dw-button" onClick={()=>exportJSON(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints})}>JSON</button></div>
  <div className="dw-summary-extra">
- <h3>Legacy manual mapping hints</h3><p>{legacyHints.length} suggestions · {legacyHints.filter(x=>x.accepted===true).length} accepted · {legacyHints.filter(x=>x.accepted==null).length} awaiting review</p><h3>Source systems</h3><p>{sourceSystems.length} sources registered</p>
+ <h3>Workshop essentials</h3><p>{firstCall.stakeholders.length} stakeholders · {firstCall.drivers.length} pain points/goals · {firstCall.sizing.length} sizing values · {firstCall.requests.filter(x=>x.status==='open').length} open requests · {firstCall.parking.filter(x=>x.status==='parked').length} parked topics</p><h3>Legacy manual mapping hints</h3><p>{legacyHints.length} suggestions · {legacyHints.filter(x=>x.accepted===true).length} accepted · {legacyHints.filter(x=>x.accepted==null).length} awaiting review</p><h3>Source systems</h3><p>{sourceSystems.length} sources registered</p>
  {sourceSystems.map(x=><p key={x.id}><strong>{x.name}</strong> · {x.system_type} · {x.version||'Version not specified'} · {x.owner||'Owner not assigned'}</p>)}
  <h3>Extra fields from source</h3><p>{legacyFields.length} extra source fields · {legacyFields.filter(x=>!x.sap_handling||x.sap_handling==='clarify').length} still open</p>
  {legacyFields.map(f=><p key={f.id}><strong>{discoveryCatalog.objects.find(o=>o.id===f.object_id)?.title||f.object_id}: {f.source_field}</strong> · {f.sap_handling||'Not mapped'} · {f.sap_target||'Target open'}</p>)}
@@ -294,9 +331,9 @@ export default function DiscoveryWorkshop({session}) {
  <div className="dw-stats"><strong>Completeness check</strong><span>{covered.fields-counts.fields} unmarked fields</span><span>{covered.questions-counts.questions} unanswered questions</span><span>{covered.decisions-counts.decisions} undecided decisions</span><span>{counts.clarify} clarifications</span></div>
  <div className="dw-inline"><label>Show <select value={summaryFilter} onChange={e=>setSummaryFilter(e.target.value)}><option value="all">All objects</option><option value="open">With unresolved points</option><option value="decisions">With decisions</option><option value="todos">With action items</option></select></label></div>
  {scoped.filter(o=>summaryFilter==='all'||summaryFilter==='open'&&(o.fields.some(f=>!val(o.id,'field',f.id).mark||val(o.id,'field',f.id).mark==='clarify')||o.questions.some(q=>val(o.id,'question',q.id).answer===undefined)||o.decisions.some(d=>val(o.id,'decision',d.id).status!=='decided'))||summaryFilter==='decisions'&&o.decisions.some(d=>val(o.id,'decision',d.id).status==='decided')||summaryFilter==='todos'&&todos.some(t=>t.object_id===o.id)).map(o=><div key={o.id} className="dw-summary-object"><h3>{o.title}</h3><p>Fields marked: {o.fields.filter(f=>val(o.id,'field',f.id).mark).length}/{o.fields.length} · Answers: {o.questions.filter(q=>val(o.id,'question',q.id).answer!==undefined).length}/{o.questions.length} · Decisions: {o.decisions.filter(d=>val(o.id,'decision',d.id).status==='decided').length}/{o.decisions.length}</p><button className="dw-inline-button" onClick={()=>{selectObject(o.id);setShowSummary(false)}}>Review object →</button></div>)}</div>:
-   <div className="dw-workspace"><aside className={`dw-sidebar ${mobileNav?'dw-open':''}`}><div className="dw-sidebar-top"><strong>Workshop catalog</strong><span>{objects.length}/{scoped.length}</span></div><input className="dw-search" placeholder="Search objects or T-codes" value={search} onChange={e=>setSearch(e.target.value)}/><select className="dw-scope" value={scope} onChange={e=>setScope(e.target.value)}><option value="all">All areas</option>{discoveryCatalog.areas.filter(a=>scoped.some(o=>o.area===a.id)).map(a=><option value={a.id} key={a.id}>{a.title}</option>)}</select>
-    {discoveryCatalog.areas.map(a=>{const children=objects.filter(o=>o.area===a.id);return children.length?<div key={a.id} className="dw-nav-group"><div className="dw-nav-heading">{a.title}</div><NoteInput label="Area notes" value={val(a.id,'area_note','main').text} onChange={v=>writeNote(a.id,'area_note','main',v)} internal={entry(a.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(a.id,'area_note','main',val(a.id,'area_note','main').text||'',v)}/>{children.map(o=><button className={`dw-nav-item ${o.id===selected?.id?'dw-active':''}`} key={o.id} onClick={()=>selectObject(o.id)}>{o.title}<span>{objectSources[o.id]?.not_maintained?'None':(objectSources[o.id]?.source_system_ids||[]).map(id=>sourceSystems.find(x=>x.id===id)?.system_type||'').filter(Boolean).map(type=>type==='sap_ecc'||type==='sap_s4'?'SAP':type==='excel_access'?'Excel':type==='paper'?'Paper':type.startsWith('non_sap_')?'Non-SAP':'Other').filter((x,i,a)=>a.indexOf(x)===i).join('+')||'—'} · {labels[val(o.id,'object_status','main').status]||'Not started'}</span></button>)}</div>:null})}<div className="dw-nav-group"><div className="dw-nav-heading">Additional discovery</div><button className={`dw-nav-item ${showProcesses?'dw-active':''}`} onClick={()=>{setShowProcesses(true);setShowSummary(false);setMobileNav(false)}}>Processes & jobs <span>{processCatalog.processes.length}</span></button></div></aside>
-   <div className="dw-main">{showProcesses?<ProcessJobs workshopId={workshop.id} entries={processEntries} onChange={changeProcess} presenter={presenter} onJump={selectObject} onTask={createProcessTask} categoryNotes={Object.fromEntries(processCatalog.categories.map(cat=>[cat.id,{text:val('process:'+cat.id,'area_note','main').text||'',internal:!!entry('process:'+cat.id,'area_note','main')?.is_internal}]))} onCategoryNote={(id,text,internal)=>writeNote('process:'+id,'area_note','main',text,internal)}/>:selected&&<div className="dw-card"><div className="dw-object-heading"><div><div className="dw-kicker">{area?.title} · {selectedIndex+1} / {objects.length}</div><h2>{selected.title}</h2></div><select aria-label="Object status" value={val(selected.id,'object_status','main').status||'not_started'} onChange={e=>writeEntry(selected.id,'object_status','main',{status:e.target.value})}>{statuses.map(x=><option key={x} value={x}>{labels[x]}</option>)}</select></div>
+   <div className="dw-workspace"><aside className={`dw-sidebar ${mobileNav?'dw-open':''}`}><div className="dw-nav-group"><div className="dw-nav-heading">Workshop</div>{FIRST_CALL_SECTIONS.map(([id,title])=><button key={id} className={`dw-nav-item ${firstTab===id?'dw-active':''}`} onClick={()=>openFirst(id)}>{title}<span>{(firstCall[id]||[]).length}</span></button>)}</div><div className="dw-sidebar-top"><strong>Workshop catalog</strong><span>{objects.length}/{scoped.length}</span></div><input className="dw-search" placeholder="Search objects or T-codes" value={search} onChange={e=>setSearch(e.target.value)}/><select className="dw-scope" value={scope} onChange={e=>setScope(e.target.value)}><option value="all">All areas</option>{discoveryCatalog.areas.filter(a=>scoped.some(o=>o.area===a.id)).map(a=><option value={a.id} key={a.id}>{a.title}</option>)}</select>
+    {discoveryCatalog.areas.map(a=>{const children=objects.filter(o=>o.area===a.id);return children.length?<div key={a.id} className="dw-nav-group"><div className="dw-nav-heading">{a.title}</div><NoteInput label="Area notes" value={val(a.id,'area_note','main').text} onChange={v=>writeNote(a.id,'area_note','main',v)} internal={entry(a.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(a.id,'area_note','main',val(a.id,'area_note','main').text||'',v)}/>{children.map(o=><button className={`dw-nav-item ${o.id===selected?.id?'dw-active':''}`} key={o.id} onClick={()=>selectObject(o.id)}>{o.title}<span>{objectSources[o.id]?.not_maintained?'None':(objectSources[o.id]?.source_system_ids||[]).map(id=>sourceSystems.find(x=>x.id===id)?.system_type||'').filter(Boolean).map(type=>type==='sap_ecc'||type==='sap_s4'?'SAP':type==='excel_access'?'Excel':type==='paper'?'Paper':type.startsWith('non_sap_')?'Non-SAP':'Other').filter((x,i,a)=>a.indexOf(x)===i).join('+')||'—'} · {labels[val(o.id,'object_status','main').status]||'Not started'}</span></button>)}</div>:null})}<div className="dw-nav-group"><div className="dw-nav-heading">Additional discovery</div><button className={`dw-nav-item ${showProcesses?'dw-active':''}`} onClick={()=>{setShowProcesses(true);setFirstTab(null);setShowSummary(false);setMobileNav(false)}}>Processes & jobs <span>{processCatalog.processes.length}</span></button></div></aside>
+   <div className="dw-main">{firstTab?<FirstCall key={firstTab} section={firstTab} rows={firstCall} workshopId={workshop.id} add={addFirst} edit={editFirst} remove={deleteFirst} onTodo={moveParkToTodo} objectId={selected?.id} presenter={presenter}/>:showProcesses?<ProcessJobs workshopId={workshop.id} entries={processEntries} onChange={changeProcess} presenter={presenter} onJump={selectObject} onTask={createProcessTask} categoryNotes={Object.fromEntries(processCatalog.categories.map(cat=>[cat.id,{text:val('process:'+cat.id,'area_note','main').text||'',internal:!!entry('process:'+cat.id,'area_note','main')?.is_internal}]))} onCategoryNote={(id,text,internal)=>writeNote('process:'+id,'area_note','main',text,internal)}/>:selected&&<div className="dw-card"><div className="dw-object-heading"><div><div className="dw-kicker">{area?.title} · {selectedIndex+1} / {objects.length}</div><h2>{selected.title}</h2></div><select aria-label="Object status" value={val(selected.id,'object_status','main').status||'not_started'} onChange={e=>writeEntry(selected.id,'object_status','main',{status:e.target.value})}>{statuses.map(x=><option key={x} value={x}>{labels[x]}</option>)}</select></div>
     <button className="dw-inline-button" onClick={()=>setShowProcesses(true)}>Related processes: {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='valid').length} valid · {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='clarify').length} clarify</button><div className="dw-caption">{legacyFields.filter(x=>x.object_id===selected.id).length} extra source fields · {legacyFields.filter(x=>x.object_id===selected.id&&(!x.sap_handling||x.sap_handling==='clarify')).length} open</div><div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div><p className="dw-description">{selected.plain}</p>
     {val(selected.id,'object_status','main').status!=='out_of_scope'&&<>
     <ObjectSourcePicker workshopId={workshop.id} objectId={selected.id} systems={sourceSystems} value={objectSources[selected.id]} onSave={updateObjectSources} presenter={presenter}/>
