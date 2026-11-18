@@ -1,18 +1,62 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "functions": {
-    "api/chat.js":             { "maxDuration": 300 },
-    "api/external-chat.js":    { "maxDuration": 60  },
-    "api/extract.js":          { "maxDuration": 15  },
-    "api/recall.js":           { "maxDuration": 10  },
-    "api/categorise.js":       { "maxDuration": 15  },
-    "api/summarise.js":        { "maxDuration": 30  },
-    "api/reference-search.js": { "maxDuration": 300 },
-    "api/generate-fs-doc.js":  { "maxDuration": 60  },
-    "api/generate-ppt.js":     { "maxDuration": 60  },
-    "api/Notify.js":           { "maxDuration": 30  }
-  }
+    "api/chat.js": {
+      "maxDuration": 300
+    },
+    "api/external-chat.js": {
+      "maxDuration": 60
+    },
+    "api/extract.js": {
+      "maxDuration": 15
+    },
+    "api/recall.js": {
+      "maxDuration": 10
+    },
+    "api/categorise.js": {
+      "maxDuration": 15
+    },
+    "api/summarise.js": {
+      "maxDuration": 30
+    },
+    "api/reference-search.js": {
+      "maxDuration": 300
+    },
+    "api/generate-fs-doc.js": {
+      "maxDuration": 60
+    },
+    "api/generate-ppt.js": {
+      "maxDuration": 60
+    },
+    "api/Notify.js": {
+      "maxDuration": 30
+    },
+    "api/discovery-ai.js": {
+      "maxDuration": 120
+    },
+    "api/discovery-import.js": {
+      "maxDuration": 300
+    },
+    "api/discovery-transcript.js": {
+      "maxDuration": 300
+    },
+    "api/discovery-retention.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/discovery-retention",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }
