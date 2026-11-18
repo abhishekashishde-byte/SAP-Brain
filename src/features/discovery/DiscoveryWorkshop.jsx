@@ -226,8 +226,8 @@ export default function DiscoveryWorkshop({session}) {
   const id=kind==='sizing'?values.metric_id:crypto.randomUUID()
   const row={...values,workshop_id:workshop.id,...(kind==='sizing'?{}:{id})}
   setFirstCall(prev=>({...prev,[kind]:[...(prev[kind]||[]),row]}))
-  try{const stored=await addFirstCall(kind,row);setFirstCall(prev=>({...prev,[kind]:prev[kind].map(x=>(x.id||x.metric_id)===id?stored:x)}))}
-  catch(e){setFirstCall(prev=>({...prev,[kind]:prev[kind].filter(x=>(x.id||x.metric_id)!==id)}));setError('Could not create '+kind+': '+e.message)}
+  try{const stored=await addFirstCall(kind,row);setFirstCall(prev=>({...prev,[kind]:prev[kind].map(x=>(x.id||x.metric_id)===id?stored:x)}));return stored}
+  catch(e){setFirstCall(prev=>({...prev,[kind]:prev[kind].filter(x=>(x.id||x.metric_id)!==id)}));setError('Could not create '+kind+': '+e.message);return null}
  }
  function editFirst(kind,row,patch){
   const id=row.id||row.metric_id
@@ -251,7 +251,7 @@ export default function DiscoveryWorkshop({session}) {
   window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)
  },[mode])
  async function createGap(values){
-  try{const g=await addGap(workshop.id,values);setGaps(rows=>[...rows,g])}catch(e){setError('Gap could not be created: '+e.message)}
+  try{const g=await addGap(workshop.id,values);setGaps(rows=>[...rows,g]);return g}catch(e){setError('Gap could not be created: '+e.message);return null}
  }
  async function changeGap(row,changes){
   setGaps(rows=>rows.map(g=>g.id===row.id?{...g,...changes}:g))
@@ -269,8 +269,8 @@ export default function DiscoveryWorkshop({session}) {
  }
  function openScoping(tab){setScopingTab(tab);setFirstTab(null);setShowProcesses(false);setShowSummary(false);setMobileNav(false)}
  async function newInventory(kind,values){
-  try{const row=await addInventory(kind,{...values,workshop_id:workshop.id});setInventories(v=>({...v,[kind]:[...v[kind],row]}))}
-  catch(e){setError('Could not create '+kind+': '+e.message)}
+  try{const row=await addInventory(kind,{...values,workshop_id:workshop.id});setInventories(v=>({...v,[kind]:[...v[kind],row]}));return row}
+  catch(e){setError('Could not create '+kind+': '+e.message);return null}
  }
  async function changeInventory(kind,row,patch){
   setInventories(v=>({...v,[kind]:v[kind].map(x=>x.id===row.id?{...x,...patch}:x)}))
@@ -368,7 +368,7 @@ export default function DiscoveryWorkshop({session}) {
   if(s.kind==='decision'){
    const o=discoveryCatalog.objects.find(o=>o.decisions.some(d=>d.id===id))
    if(!o||!p.choice)throw Error('Invalid decision suggestion')
-   writeEntry(o.id,'decision',id,{...val(o.id,'decision',id),choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open'});return
+   writeEntry(o.id,'decision',id,{...val(o.id,'decision',id),choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open'}))throw Error('Request save failed');return
   }
   if(s.kind==='process'){
    if(!processCatalog.processes.some(x=>x.id===id)||!['valid','not_valid','later','clarify'].includes(p.status))throw Error('Invalid process suggestion')
@@ -376,11 +376,11 @@ export default function DiscoveryWorkshop({session}) {
   }
   if(s.kind==='stakeholder'){
    if(!p.name?.trim())throw Error('Missing stakeholder name')
-   await addFirst('stakeholders',{name:p.name.trim(),organisation:['client','consultant','partner','vendor'].includes(p.organisation)?p.organisation:'client',function_role:p.function_role||'',project_role:'other',present:false});return
+   if(!await addFirst('stakeholders',{name:p.name.trim(),organisation:['client','consultant','partner','vendor'].includes(p.organisation)?p.organisation:'client',function_role:p.function_role||'',project_role:'other',present:false}))throw Error('Stakeholder save failed');return
   }
   if(s.kind==='driver'){
    if(!p.text?.trim()||!['pain','goal'].includes(p.kind))throw Error('Invalid pain point or goal')
-   await addFirst('drivers',{kind:p.kind,text:p.text.trim(),priority:['must','should','could'].includes(p.priority)?p.priority:'should'});return
+   if(!await addFirst('drivers',{kind:p.kind,text:p.text.trim(),priority:['must','should','could'].includes(p.priority)?p.priority:'should'}))throw Error('Driver save failed');return
   }
   if(s.kind==='sizing'){
    if(!p.metric_id||p.value===undefined||!Number.isFinite(Number(p.value)))throw Error('Invalid sizing suggestion')
@@ -388,7 +388,7 @@ export default function DiscoveryWorkshop({session}) {
   }
   if(s.kind==='request'){
    if(!p.item?.trim())throw Error('Missing request text')
-   await addFirst('requests',{item:p.item.trim(),related_id:p.related_id||null,status:'open'});return
+   if(!await addFirst('requests',{item:p.item.trim(),related_id:p.related_id||null,status:'open'});return
   }
   if(s.kind==='todo'){
    if(!p.text?.trim())throw Error('Missing action-item text')
@@ -396,11 +396,11 @@ export default function DiscoveryWorkshop({session}) {
   }
   if(s.kind==='risk'){
    if(!p.text?.trim())throw Error('Missing risk text')
-   await newInventory('raid',{kind:'risk',text:p.text.trim(),related_id:p.related_id||null,probability:['low','medium','high'].includes(p.probability)?p.probability:null,impact:['low','medium','high'].includes(p.impact)?p.impact:null,status:'open'});return
+   if(!await newInventory('raid',{kind:'risk',text:p.text.trim(),related_id:p.related_id||null,probability:['low','medium','high'].includes(p.probability)?p.probability:null,impact:['low','medium','high'].includes(p.impact)?p.impact:null,status:'open'}))throw Error('Risk save failed');return
   }
   if(s.kind==='gap'){
    if(!p.title?.trim())throw Error('Missing gap title')
-   await createGap({title:p.title.trim(),description:p.description||'',related_id:p.related_id||null,origin:'ai',gap_type:null,status:'open'});return
+   if(!await createGap({title:p.title.trim(),description:p.description||'',related_id:p.related_id||null,origin:'ai',gap_type:null,status:'open'}))throw Error('Gap save failed');return
   }
   throw Error('Unsupported transcript proposal kind')
  }
