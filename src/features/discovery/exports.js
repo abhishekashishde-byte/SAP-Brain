@@ -66,7 +66,14 @@ function download(blob,filename){const url=URL.createObjectURL(blob),a=document.
 const filename=w=>(w.client_name||'customer').replace(/[^a-z0-9_-]+/gi,'_').slice(0,35)+'_'+(w.call_date||'undated')
 const tab=v=>String(v??'').replace(/\t/g,' ').replace(/\r?\n/g,' ')
 const csvLine=a=>a.map(v=>'"'+tab(valueText(v)).replace(/"/g,'""')+'"').join(',')
-export function exportCSV(w,e,t,audience,extras){const {rows}=gather(w,e,t,audience,extras);const width=Math.max(...Object.values(rows).flatMap(data=>data.map(line=>line.length)));let out=csvLine(['Sheet',...Array.from({length:width},(_,i)=>'Column'+(i+1))])+'\r\n';for(const [name,data] of Object.entries(rows))for(const line of data)out+=csvLine([name,...line])+'\r\n';download(new Blob(['\ufeff'+out],{type:'text/csv;charset=utf-8'}),filename(w)+'.csv')}
+export function exportCSV(w,e,t,audience,extras){
+ const {rows}=gather(w,e,t,audience,extras)
+ const files=Object.entries(rows).map(([name,data])=>[
+  name.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'.csv',
+  '\ufeff'+data.map(csvLine).join('\r\n')+'\r\n'
+ ])
+ download(zip(files,'application/zip'),filename(w)+'_CSV.zip')
+}
 export function exportJSON(w,e,t,audience,extras){const {rows}=gather(w,e,t,audience,extras);download(new Blob([JSON.stringify({workshop:w,audience,sheets:rows},null,2)],{type:'application/json'}),filename(w)+'.json')}
 export function exportMarkdown(w,e,t,audience,extras){const {rows}=gather(w,e,t,audience,extras);let md='# '+w.client_name+' — '+(w.title||'Discovery Workshop')+'\n\nMeeting date: '+w.call_date+'\n\n';for(const [sheet,data] of Object.entries(rows)){md+='## '+sheet+'\n\n';md+='| '+data[0].map(tab).join(' | ')+' |\n|'+data[0].map(()=>'---').join('|')+'|\n';for(const line of data.slice(1))md+='| '+line.map(x=>tab(valueText(x)).replace(/\|/g,'\\|')).join(' | ')+' |\n';md+='\n'}download(new Blob([md],{type:'text/markdown;charset=utf-8'}),filename(w)+'.md')}
 
@@ -77,13 +84,13 @@ const u16=(a,n)=>{a.push(n&255,(n>>>8)&255)}
 const u32=(a,n)=>{a.push(n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255)}
 const crcTable=Array.from({length:256},(_,n)=>{let c=n;for(let i=0;i<8;i++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0})
 function crc(bytes){let c=0xffffffff;for(const b of bytes)c=crcTable[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0}
-function zip(files){const local=[],central=[];let offset=0
+function zip(files,mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'){const local=[],central=[];let offset=0
  for(const [name,body] of files){const nameBytes=te.encode(name),data=te.encode(body),sum=crc(data),lh=[];u32(lh,0x04034b50);u16(lh,20);u16(lh,0);u16(lh,0);u16(lh,0);u16(lh,0);u32(lh,sum);u32(lh,data.length);u32(lh,data.length);u16(lh,nameBytes.length);u16(lh,0);local.push(new Uint8Array(lh),nameBytes,data)
  const ch=[];u32(ch,0x02014b50);u16(ch,20);u16(ch,20);u16(ch,0);u16(ch,0);u16(ch,0);u16(ch,0);u32(ch,sum);u32(ch,data.length);u32(ch,data.length);u16(ch,nameBytes.length);u16(ch,0);u16(ch,0);u16(ch,0);u16(ch,0);u32(ch,0);u32(ch,offset);central.push(new Uint8Array(ch),nameBytes)
  offset+=lh.length+nameBytes.length+data.length
  }
  const centre=central.reduce((n,a)=>n+a.length,0),tail=[];u32(tail,0x06054b50);u16(tail,0);u16(tail,0);u16(tail,files.length);u16(tail,files.length);u32(tail,centre);u32(tail,offset);u16(tail,0)
- return new Blob([...local,...central,new Uint8Array(tail)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+ return new Blob([...local,...central,new Uint8Array(tail)],{type:mime})
 }
 const letters=n=>{let s='';for(n++;n;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s}
 function sheetXML(data){const size=Math.max(1,...data.map(x=>x.length)),last=letters(size-1)
