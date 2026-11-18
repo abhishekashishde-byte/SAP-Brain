@@ -47,3 +47,25 @@ export function collectGapCandidates({entries={},legacyFields=[],processEntries=
  for(const row of legacyHints){if(row.accepted===true&&row.gap_type==='missing_in_sap')add('legacy_hint',row.id,row.legacy_feature,row.object_id,row.hint)}
  return out
 }
+
+const INVENTORY_TABLES={interfaces:'discovery_interfaces',forms_reports:'discovery_forms_reports',raid:'discovery_raid'}
+export async function loadScopingInventories(workshopId){
+ const pairs=await Promise.all(Object.entries(INVENTORY_TABLES).map(async([key,table])=>{
+  const result=await supabase.from(table).select('*').eq('workshop_id',workshopId).order('updated_at',{ascending:false})
+  if(result.error)throw result.error
+  return [key,result.data]
+ }))
+ return Object.fromEntries(pairs)
+}
+export async function addInventory(kind,values){
+ const r=await supabase.from(INVENTORY_TABLES[kind]).insert(values).select('*').single()
+ if(r.error)throw r.error;return r.data
+}
+export async function editInventory(kind,id,values,workshopId){
+ const r=await supabase.from(INVENTORY_TABLES[kind]).update({...values,updated_at:new Date().toISOString()}).eq('id',id).eq('workshop_id',workshopId).select('*').single()
+ if(r.error)throw r.error;return r.data
+}
+export async function deleteInventory(kind,id,workshopId){
+ const r=await supabase.from(INVENTORY_TABLES[kind]).delete().eq('id',id).eq('workshop_id',workshopId)
+ if(r.error)throw r.error
+}
