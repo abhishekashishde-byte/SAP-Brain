@@ -73,3 +73,29 @@ export const loadLegacyFields = id => supabase.from('discovery_legacy_fields').s
 export const createLegacyField = values => supabase.from('discovery_legacy_fields').insert(values).select('*').single().then(requireData)
 export const updateLegacyField = (id,values) => supabase.from('discovery_legacy_fields').update({...values,updated_at:new Date().toISOString()}).eq('id',id).select('*').single().then(requireData)
 export const deleteLegacyField = id => supabase.from('discovery_legacy_fields').delete().eq('id',id).then(requireData)
+
+export const loadProcessEntries = id => supabase.from('discovery_process_entries').select('*').eq('workshop_id',id).then(requireData)
+export const saveProcessEntry = row => supabase.from('discovery_process_entries').upsert({...row,updated_at:new Date().toISOString()},{onConflict:'workshop_id,process_id'}).then(requireData)
+export const deleteProcessEntry = (workshopId,processId) => supabase.from('discovery_process_entries').delete().eq('workshop_id',workshopId).eq('process_id',processId).then(requireData)
+
+export function createProcessQueue(workshopId,userId,onChange) {
+ const key='wani-discovery-process-pending:'+userId+':'+workshopId
+ const pending=new Map()
+ try{for(const r of JSON.parse(localStorage.getItem(key)||'[]'))pending.set(r.process_id,r)}catch{}
+ let timer=null,inFlight=false,closed=false,delay=800
+ function persist(){try{localStorage.setItem(key,JSON.stringify([...pending.values()]))}catch{};onChange?.(pending.size)}
+ function schedule(ms=600){if(timer)clearTimeout(timer);timer=setTimeout(flush,ms)}
+ async function flush(){
+  if(closed||inFlight||!pending.size)return
+  inFlight=true
+  for(const [id,row] of [...pending]){
+   try {await saveProcessEntry(row);if(pending.get(id)===row)pending.delete(id);delay=800;persist()}
+   catch {inFlight=false;schedule(delay);delay=Math.min(delay*2,30000);return}
+  }
+  inFlight=false;if(pending.size)schedule()
+ }
+ function enqueue(row){pending.set(row.process_id,row);persist();schedule()}
+ function start(){window.addEventListener('online',flush);persist();if(pending.size)schedule()}
+ function close(){closed=true;if(timer)clearTimeout(timer);window.removeEventListener('online',flush);persist()}
+ return {pending,enqueue,start,close,flush}
+}
