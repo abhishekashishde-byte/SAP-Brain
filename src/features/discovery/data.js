@@ -61,3 +61,10 @@ export function createEntryQueue(workshopId,userId,onChange) {
   function close() { closed=true;if(timer)clearTimeout(timer);window.removeEventListener('online',flush);persist() }
   return {enqueue,start,close,flush,pending}
 }
+
+export const loadSourceSystems = id => supabase.from('discovery_source_systems').select('*').eq('workshop_id',id).order('created_at').then(requireData)
+export const addSourceSystem = values => supabase.from('discovery_source_systems').insert(values).select('*').single().then(requireData)
+export const changeSourceSystem = (id,values) => supabase.from('discovery_source_systems').update(values).eq('id',id).select('*').single().then(requireData)
+export const deleteSourceSystem = id => supabase.from('discovery_source_systems').delete().eq('id',id).then(requireData)
+export const loadObjectSources = id => supabase.from('discovery_object_sources').select('*').eq('workshop_id',id).then(requireData)
+export const saveObjectSources = row => supabase.from('discovery_object_sources').upsert({...row,updated_at:new Date().toISOString()},{onConflict:'workshop_id,object_id'}).select('*').single().then(requireData)
