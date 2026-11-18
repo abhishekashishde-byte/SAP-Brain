@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js'
 import { requireApprovedUser,requireJsonBody,sendAuthError } from './_auth.js'
 import { discoveryCatalog } from '../src/features/discovery/catalog.js'
 import { processCatalog } from '../src/features/discovery/processCatalog.js'
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const KINDS=new Set(['field_mark','answer','decision','process','stakeholder','driver','sizing','request','todo','risk','gap'])
 const EXTENSIONS=new Set(['txt','vtt','docx','mp3','m4a','wav'])
 const AUDIO=new Set(['mp3','m4a','wav'])
