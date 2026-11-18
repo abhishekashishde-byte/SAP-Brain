@@ -42,6 +42,9 @@
     },
     "api/discovery-ai.js": {
       "maxDuration": 120
+    },
+    "api/discovery-import.js": {
+      "maxDuration": 300
     }
   }
 }
