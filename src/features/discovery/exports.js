@@ -20,6 +20,10 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
   const a=get(area.id,'area_note','main')
   if(can(a)&&a?.value?.text)rows.Notes.push(['Area',area.title,'',a.value.text,!!a.is_internal])
  }
+ for(const category of processCatalog.categories){
+  const n=get('process:'+category.id,'area_note','main')
+  if(can(n)&&n?.value?.text)rows.Notes.push(['Process category',category.title,'',n.value.text,!!n.is_internal])
+ }
  const coverage={fields:0,marked:0,questions:0,answered:0,decisions:0,decided:0,clarify:0}
  for(const o of objects){
   const a=labels[o.area],tc=o.tcodes.join(', '),status=get(o.id,'object_status','main')?.value?.status||'not_started'
