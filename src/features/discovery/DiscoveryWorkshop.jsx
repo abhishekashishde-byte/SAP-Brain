@@ -440,7 +440,13 @@ export default function DiscoveryWorkshop({session}) {
   if(s.kind==='sizing'){
    if(!p.metric_id||p.value===undefined||!Number.isFinite(Number(p.value)))throw Error('Invalid sizing suggestion')
    const current=firstCall.sizing.find(x=>x.metric_id===p.metric_id)
-   if(current?.value!==undefined&&current.value!==null&&current.value!==''){
+   const linkedAnswered=Object.entries(SIZING_LINKS).some(([questionId,metricId])=>{
+    if(metricId!==p.metric_id)return false
+    const object=discoveryCatalog.objects.find(o=>o.questions.some(q=>q.id===questionId))
+    const answer=object&&val(object.id,'question',questionId).answer
+    return answer!==undefined&&answer!==null&&answer!==''&&(!Array.isArray(answer)||answer.length>0)
+   })
+   if(linkedAnswered||(current?.value!==undefined&&current.value!==null&&current.value!=='')){
     const note=val('workshop','workshop_note','main').text||''
     const evidence=['[Transcript sizing suggestion]',p.metric_id+': '+p.value,s.quote||''].join(' · ')
     if(!note.includes(evidence))writeNote('workshop','workshop_note','main',[note,evidence].filter(Boolean).join('\n'))
