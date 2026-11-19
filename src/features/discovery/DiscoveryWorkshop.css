@@ -130,3 +130,66 @@
  .dw-compact-list,.dw-compact-field,.dw-compact-status{background:#fff!important;color:#111!important;border-color:#aaa!important}
  .dw-compact-name,.dw-compact-preview{color:#111!important}
 }
+
+
+/* Small status lights. Symbols reinforce meaning for colour-blind users. */
+.dw-field-toolbar{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:5px;margin-bottom:9px}
+.dw-field-legend{display:flex;flex-wrap:wrap;align-items:center;gap:7px 17px;font-size:11px;color:#ccd0d8}
+.dw-field-legend-item{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dw-field-help{color:#999ea9;font-size:10px;line-height:1.4}
+.dw-status-light{box-sizing:border-box;width:19px;height:19px;border-radius:50%;display:inline-grid;place-items:center;flex-shrink:0;line-height:1;font-size:12px;font-weight:850;border:1px solid transparent;box-shadow:inset 0 1px 1px #ffffff26}
+.dw-status-light-needed{background:#138857;border-color:#31b980;color:#f5fff9}
+.dw-status-light-not_needed{background:#b63d48;border-color:#ed7780;color:#fff7f8}
+.dw-status-light-clarify{background:#e6b33c;border-color:#ffcf6e;color:#302304}
+.dw-status-light-none{background:#464b54;border-color:#747985;color:#f1f2f5}
+.dw-compact-status,.dw-compact-status-needed,.dw-compact-status-not_needed,.dw-compact-status-clarify,.dw-compact-status-none{
+  width:32px;min-width:32px;height:32px;flex:0 0 32px;padding:0;border:1px solid transparent;
+  background:transparent;color:inherit;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+}
+.dw-compact-status .dw-status-light{width:21px;height:21px}
+.dw-compact-status:hover{background:#30343c;border-color:#585e68}
+.dw-compact-status:focus-visible{outline:2px solid #d5d8df;outline-offset:2px}
+.dw-compact-row{gap:8px;min-height:39px;padding:4px 8px}
+.dw-compact-name{font-size:12px;line-height:1.35}
+.dw-compact-note-toggle{width:27px;height:27px;min-width:27px}
+.dw-compact-editor{margin-left:48px}
+.dw-field-legend .dw-status-light{font-size:11px}
+
+/* Hide infrequently used setup tools under one compact disclosure. */
+.dw-intro-compact .dw-kicker{font-size:10px;letter-spacing:.08em}
+.dw-intro-compact h1{font-size:clamp(21px,2.5vw,27px);margin:2px 0 3px;line-height:1.2}
+.dw-intro-compact .dw-list-heading{margin:0;gap:10px}
+.dw-intro-compact .dw-list-heading p{font-size:12px;margin:0;color:#a9a9ba;line-height:1.4}
+.dw-intro-compact .dw-list-heading .dw-actions .dw-button{padding:8px 12px;font-size:12px}
+.dw-overview-stats{margin:9px 0}
+.dw-overview-stats span{padding:4px 9px;background:#1c1e25;border-color:#383b45;border-radius:7px;font-size:11px}
+.dw-workshop-setup{border:1px solid #3b3e47;background:#181a21;border-radius:11px;margin:8px 0 14px;overflow:hidden}
+.dw-workshop-setup>summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:11px 14px;min-height:44px}
+.dw-workshop-setup>summary::-webkit-details-marker{display:none}
+.dw-workshop-setup>summary::before{content:'▸';color:#b7bac2;font-size:12px;transition:transform .15s}
+.dw-workshop-setup[open]>summary::before{transform:rotate(90deg)}
+.dw-workshop-setup>summary:hover{background:#22252c}
+.dw-workshop-setup>summary:focus-visible{outline:2px solid #e1e4e9;outline-offset:-2px}
+.dw-setup-title{font-size:12px;font-weight:750;color:#e6e7ea}
+.dw-setup-caption{font-size:11px;color:#a9adb7;min-width:0;flex:1;text-align:right;line-height:1.4}
+.dw-setup-body{border-top:1px solid #383b44;padding:11px 14px 16px}
+.dw-setup-body .dw-metadata{margin:8px 0 15px}
+.dw-setup-body .dw-metadata>div{padding:10px 12px}
+.dw-setup-body .dw-sources{margin:10px 0}
+@media(max-width:700px){
+ .dw-compact-status,.dw-compact-status-needed,.dw-compact-status-not_needed,.dw-compact-status-clarify,.dw-compact-status-none{width:30px;min-width:30px;height:30px;flex-basis:30px}
+ .dw-compact-status .dw-status-light{width:20px;height:20px}
+ .dw-compact-row{gap:6px;padding:4px 6px}
+ .dw-compact-editor{margin-left:7px}
+ .dw-intro-compact .dw-list-heading{align-items:center}
+ .dw-setup-caption{flex-basis:100%;text-align:left;padding-left:20px}
+ .dw-workshop-setup>summary{gap:3px 7px}
+ .dw-field-legend{gap:6px 10px;font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){.dw-workshop-setup>summary::before{transition:none}}
+@media print{
+ .dw-workshop-setup{background:white!important;color:#111!important;border-color:#bbb!important}
+ .dw-setup-body{display:block!important}
+ .dw-field-help{display:none}
+ .dw-status-light{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
