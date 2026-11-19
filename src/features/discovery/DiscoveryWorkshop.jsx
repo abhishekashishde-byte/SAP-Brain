@@ -39,9 +39,11 @@ function CompactField({field, value={}, onChange, presenter}) {
  useEffect(()=>{if(editing)noteRef.current?.focus()},[editing])
  return <div className={`dw-compact-field ${value.mark?'dw-compact-'+value.mark:''}`}>
   <div className="dw-compact-row">
-   <button type="button" className={`dw-compact-status dw-compact-status-${value.mark||'none'}`} title="Cycle: Needed → Not needed → Clarify → Unmarked" aria-label={`${field.label}: ${value.mark?labels[value.mark]:'Unmarked'}. Change status`} onClick={cycle}>
-    <span aria-hidden="true">{value.mark==='needed'?'✓':value.mark==='not_needed'?'−':value.mark==='clarify'?'?':'○'}</span><span className="dw-compact-status-text">{value.mark?labels[value.mark]:'Unmarked'}</span>
-   </button>
+   <button type="button" className={`dw-compact-status dw-compact-status-${value.mark||'none'}`}
+     title={`${value.mark?labels[value.mark]:'Unmarked'} — click to change status`}
+     aria-label={`${field.label}: ${value.mark?labels[value.mark]:'Unmarked'}. Click to change status`} onClick={cycle}>
+     <span className={`dw-status-light dw-status-light-${value.mark||'none'}`} aria-hidden="true">{value.mark==='needed'?'✓':value.mark==='not_needed'?'×':value.mark==='clarify'?'?':'·'}</span>
+    </button>
    <div className="dw-compact-name"><span>{field.label}</span>{value.note?.trim()&&<small className="dw-compact-preview" title={value.note}>{value.note}</small>}</div>
    <span className="dw-compact-tier">{field.tier==='optional'?'Optional':''}</span>
    {!presenter&&<button type="button" className={`dw-compact-note-toggle ${value.note?.trim()?'dw-note-saved':''}`} onClick={()=>setEditing(x=>!x)} aria-expanded={editing} aria-label={`${editing?'Close':'Edit'} note for ${field.label}`} title="Field note">
@@ -588,7 +590,9 @@ export default function DiscoveryWorkshop({session}) {
     </nav>
     {!presenter&&<Section title="Current legacy process" count="Notes" open={false}><NoteInput label="How the customer works today" value={val(selected.id,'legacy_today','main').text} onChange={v=>writeNote(selected.id,'legacy_today','main',v)}/></Section>}
     <Section id="dw-fields" title="Key fields" count={selected.fields.length} summary={`${selected.fields.filter(f=>!!val(selected.id,'field',f.id).mark).length} marked`}>
-     <div className="dw-field-toolbar"><span>Click a status to change it. Use the pencil for notes.</span><div className="dw-field-legend"><span>✓ Needed</span><span>− Not needed</span><span>? Clarify</span><span>○ Unmarked</span></div></div>
+     <div className="dw-field-toolbar"><div className="dw-field-legend" aria-label="Field status colours">
+      {[['needed','✓','Needed'],['not_needed','×','Not needed'],['clarify','?','Clarify'],['none','·','Unmarked']].map(([mark,symbol,title])=><span className="dw-field-legend-item" key={mark}><span className={`dw-status-light dw-status-light-${mark}`} aria-hidden="true">{symbol}</span>{title}</span>)}
+     </div><small className="dw-field-help">Click a light to change status · pencil to add a note</small></div>
      <div className="dw-compact-list">{displaySelected.fields.filter(f=>showOptional||f.tier==='core').map(f=><CompactField key={selected.id+':'+f.id} field={f} presenter={presenter} value={val(selected.id,'field',f.id)} onChange={v=>writeEntry(selected.id,'field',f.id,v)}/>)}
      {Object.values(entries).filter(x=>x.object_id===selected.id&&x.item_type==='custom_field').map(x=><CompactField key={selected.id+':custom:'+x.item_id} field={{label:x.value?.label||'Custom field',tier:'optional'}} presenter={presenter} value={x.value||{}} onChange={v=>writeEntry(selected.id,'custom_field',x.item_id,v)}/>)}</div>
      <div className="dw-compact-footer">
