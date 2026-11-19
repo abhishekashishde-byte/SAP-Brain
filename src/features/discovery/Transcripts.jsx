@@ -61,7 +61,7 @@ export default function Transcripts({workshop,session,transcripts,suggestions,on
  }
  const pending=suggestions.filter(s=>s.status==='pending'||s.status==='edited')
  const groups=pending.reduce((acc,s)=>{const name=s.payload?.object_id||s.payload?.process_id||s.target_ref||'General';(acc[name]??=[]).push(s);return acc},{})
- return <div className="dw-card dw-transcripts"><div className="dw-kicker">Optional · Consent-gated</div><h2>Workshop transcript</h2>
+ return <div className="dw-card dw-transcripts"><div className="dw-kicker">Optional · Consent-gated</div><h2>Paste & Analyse Workshop Transcript <small style={{fontSize:11,opacity:.65}}>v2026.11.19</small></h2>
  <p className="dw-caption">Paste your full workshop conversation below, including long multilingual SAP PM discussions. Original text is retained; review AI interpretations before accepting.</p>
  <details open className="dw-section"><summary>Paste meeting transcript</summary><div className="dw-section-body"><textarea aria-label="Paste workshop transcript" rows="14" style={{width:'100%',minHeight:260,resize:'vertical'}} placeholder="Paste the complete workshop transcript here (English, German, Hinglish, SAP terminology, transaction codes such as VA01, IW31, IL01…)" value={pastedText} onChange={e=>setPastedText(e.target.value)}/><p className="dw-caption">{pastedText.length.toLocaleString()} characters · No browser-side truncation. Large uploads depend on storage and analysis service limits.</p></div></details>
  <p className="dw-caption">Participant consent is mandatory. Upload TXT, VTT, DOCX or audio (MP3/M4A/WAV, if a speech-to-text API is configured). Nothing is analysed automatically. Suggestions require explicit acceptance.</p>
