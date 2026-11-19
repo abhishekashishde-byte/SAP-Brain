@@ -9,8 +9,11 @@ function ensure(test, detail) {
 
 function requireId(id, context) {
   ensure(typeof id === 'string' && id.trim().length > 0, context + ' has no ID')
-  ensure(!ids.has(id), 'duplicate ID ' + id)
-  ids.add(id)
+  // Identifiers are unique within each catalog kind. An area and an object
+  // may both be named e.g. "org" without colliding.
+  const key = context + ':' + id
+  ensure(!ids.has(key), 'duplicate ' + context + ' ID ' + id)
+  ids.add(key)
 }
 
 export function validateDiscoveryCatalog(data) {

@@ -80,7 +80,7 @@ function SignInForm({ onSwitch }) {
   const [error, setError]       = useState('')
 
   const handleGoogle = () =>
-    supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
+    supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin + window.location.pathname } })
 
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) return setError('Please enter email and password.')
@@ -137,7 +137,7 @@ function SignUpForm({ onSwitch }) {
   const [success, setSuccess]   = useState('')
 
   const handleGoogle = () =>
-    supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
+    supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin + window.location.pathname } })
 
   const handleSignUp = async () => {
     if (!email.trim() || !password.trim()) return setError('Please fill in all fields.')
