@@ -1,6 +1,6 @@
-// Staging only. Cloudflare serves Vite static assets; Vercel still runs the API.
+// Staging only. Cloudflare serves Vite static assets; the separate Vercel PREVIEW deployment runs the API.
 // Do NOT point the primary Wani domain here until the APIs are migrated and tested.
-const API_ORIGIN = 'https://ask-wani.vercel.app';
+const API_ORIGIN = 'https://ask-wani-git-deploy-clou-a8fd14-abhishekashishde-3716s-projects.vercel.app';
 
 export default {
   async fetch(request, env) {
