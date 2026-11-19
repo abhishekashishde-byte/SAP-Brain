@@ -398,24 +398,35 @@ export default function DiscoveryWorkshop({session}) {
  }
  async function acceptTranscriptSuggestion(s){
   const p=s.payload||{},id=s.target_ref
+  const evidence=['[Transcript finding'+(s.ts?' · '+s.ts:'')+']',s.quote?'Source: '+s.quote:'', 'Transcript interpretation: '+JSON.stringify(p)].filter(Boolean).join('\n')
+  const append=(old)=>old&&old.includes(evidence)?old:[old,evidence].filter(Boolean).join('\n\n')
   if(s.kind==='field_mark'){
    const o=discoveryCatalog.objects.find(o=>o.fields.some(f=>f.id===id))
    if(!o||!['needed','not_needed','clarify'].includes(p.mark))throw Error('Invalid SAP field suggestion')
-   writeEntry(o.id,'field',id,{...val(o.id,'field',id),mark:p.mark});return
+   const current=val(o.id,'field',id)
+   writeEntry(o.id,'field',id,{...current,mark:current.mark||p.mark,note:append(current.note)})
+   return
   }
   if(s.kind==='answer'){
    const o=discoveryCatalog.objects.find(o=>o.questions.some(q=>q.id===id))
    if(!o||p.answer===undefined)throw Error('Invalid question suggestion')
-   writeEntry(o.id,'question',id,{...val(o.id,'question',id),answer:p.answer});return
+   const current=val(o.id,'question',id)
+   const hasExisting=Array.isArray(current.answer)?current.answer.length>0:current.answer!==undefined&&current.answer!==null&&String(current.answer).trim()!==''
+   writeEntry(o.id,'question',id,{...current,answer:hasExisting?current.answer:p.answer,note:append(current.note)})
+   return
   }
   if(s.kind==='decision'){
    const o=discoveryCatalog.objects.find(o=>o.decisions.some(d=>d.id===id))
    if(!o||!p.choice)throw Error('Invalid decision suggestion')
-   writeEntry(o.id,'decision',id,{...val(o.id,'decision',id),choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open'});return
+   const current=val(o.id,'decision',id)
+   writeEntry(o.id,'decision',id,{...current,choice:current.choice||p.choice,status:current.status||'open',rationale:append(current.rationale)})
+   return
   }
   if(s.kind==='process'){
-   if(!processCatalog.processes.some(x=>x.id===id)||!['valid','not_valid','later','clarify'].includes(p.status))throw Error('Invalid process suggestion')
-   changeProcess(id,{...processEntries[id],status:p.status,frequency:processCatalog.frequencies.includes(p.frequency)?p.frequency:null});return
+   if(!processCatalog.processes.some(x=>x.id===id))throw Error('Invalid process suggestion')
+   const current=processEntries[id]||{}
+   changeProcess(id,{...current,status:current.status||p.status||'clarify',frequency:current.frequency||p.frequency||null,answers:{...(current.answers||{}),transcript_evidence:append(current.answers?.transcript_evidence)}})
+   return
   }
   if(s.kind==='stakeholder'){
    if(!p.name?.trim())throw Error('Missing stakeholder name')
