@@ -272,3 +272,22 @@
 .dw-transcript-import summary{cursor:pointer;font-size:12px;font-weight:650}
 .dw-transcript-review-note{font-size:11px;color:#c3cad3}
 @media(max-width:700px){.dw-question-summary{display:block}.dw-question-preview{display:block;max-width:100%;margin-top:2px}.dw-question-editor{padding-left:10px}}
+
+
+/* Transcript review is a compact hierarchy rather than a wall of findings. */
+.dw-transcript-group{border:1px solid #353943;border-radius:10px;overflow:hidden;margin:7px 0;background:#1b1e25}
+.dw-transcript-group-heading{padding:11px 12px;cursor:pointer;font-size:12px;font-weight:650;color:#ebedf1;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dw-transcript-group-heading span{font-size:10px;font-weight:500;color:#afb3be}
+.dw-transcript-group[open]>.dw-transcript-group-heading{border-bottom:1px solid #343943}
+.dw-transcript-suggestion{margin:0!important;padding:0!important;border:0!important;border-bottom:1px solid #323641!important;background:transparent!important;border-radius:0!important}
+.dw-transcript-finding-summary{list-style:none;cursor:pointer;display:flex;gap:8px;align-items:center;padding:8px 11px;color:#dadddf}
+.dw-transcript-finding-summary::-webkit-details-marker{display:none}
+.dw-transcript-finding-summary strong{font-size:11px;flex:0 0 30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-transcript-finding-summary>small{font-size:10px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#a9b0bb}
+.dw-transcript-pill{font-size:9px;color:#b3d6bc;padding:3px 6px;border:1px solid #3f7253;border-radius:6px;white-space:nowrap}
+.dw-transcript-pill-conflict{border-color:#b18d41;color:#f7ce73}
+.dw-transcript-finding-detail{padding:10px 14px 12px;background:#1e2229;border-top:1px solid #363943}
+.dw-transcript-values{margin:9px 0}
+.dw-transcript-values>summary{cursor:pointer;font-size:11px;color:#b4beca}
+.dw-transcript-values pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;font-size:10px}
+@media(max-width:700px){.dw-transcript-finding-summary{flex-wrap:wrap}.dw-transcript-finding-summary strong{flex-basis:100%}.dw-transcript-finding-summary>small{flex:1}}
