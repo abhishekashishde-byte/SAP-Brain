@@ -1,4 +1,4 @@
-import catalog from './catalog/sap-pm-process-catalog.json'
+import catalog from './catalog/sap-pm-process-catalog.json' with { type: 'json' }
 import { discoveryCatalog } from './catalog.js'
 export function validateProcessCatalog(d){
  if(!d||typeof d.catalogId!=='string'||typeof d.version!=='string'||!Array.isArray(d.categories)||!Array.isArray(d.processes))throw new Error('Invalid process catalog')
