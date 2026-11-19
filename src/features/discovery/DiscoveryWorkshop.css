@@ -248,3 +248,27 @@
  .dw-compact-status .dw-status-light{width:20px!important;height:20px!important;min-width:20px!important}
 }
 @media print{.dw-sidebar-reopen,.dw-sidebar-collapse{display:none!important}}
+
+
+/* Dense, readable Implementation/Discovery question rows */
+.dw-question-row{border-bottom:1px solid #30333b;min-width:0}
+.dw-question-head{display:flex;align-items:center;gap:9px;padding:7px 9px;min-height:40px}
+.dw-question-indicator{flex:0 0 20px;width:20px;height:20px;display:grid;place-items:center;border:1px solid #555963;border-radius:50%;font-size:12px;color:#b5b7c1;background:#22252c}
+.dw-question-indicator-done{color:#d1f6df;background:#165536;border-color:#398c63;font-weight:750}
+.dw-question-summary{min-width:0;flex:1;display:flex;align-items:baseline;gap:9px;background:none;border:0;color:#e7e8ea;text-align:left;cursor:pointer;padding:3px 0;font:inherit}
+.dw-question-text{font-size:12px;line-height:1.45;flex:0 1 auto}
+.dw-question-preview{font-size:10px;min-width:0;max-width:42%;color:#aeb9b0;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.dw-question-sizing{font-size:10px;color:#aaaeb8}
+.dw-question-edit{flex-shrink:0;background:#272a32;border:1px solid #424750;border-radius:7px;color:#cfd4dd;padding:5px 9px;font-size:10px;cursor:pointer}
+.dw-question-complete .dw-question-text{color:#d0e3d8}
+.dw-question-editor{padding:9px 12px 13px 39px;background:#1d2027;border-top:1px solid #343943}
+.dw-question-editor .dw-choice{margin:5px 0}
+.dw-question-editor textarea{width:100%;box-sizing:border-box}
+.dw-object-context{margin:5px 0 10px;border:1px solid #363941;border-radius:9px}
+.dw-object-context>summary{cursor:pointer;font-size:11px;padding:8px 10px;color:#b9bfcb}
+.dw-object-context-body{padding:9px 11px;border-top:1px solid #343943}
+.dw-transcript-paste{width:100%;box-sizing:border-box;min-height:280px;resize:vertical;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;background:#15171d;color:#eceef1;border:1px solid #444852;border-radius:9px;padding:13px}
+.dw-transcript-import{margin:10px 0;border:1px solid #41454f;border-radius:11px;padding:10px}
+.dw-transcript-import summary{cursor:pointer;font-size:12px;font-weight:650}
+.dw-transcript-review-note{font-size:11px;color:#c3cad3}
+@media(max-width:700px){.dw-question-summary{display:block}.dw-question-preview{display:block;max-width:100%;margin-top:2px}.dw-question-editor{padding-left:10px}}
