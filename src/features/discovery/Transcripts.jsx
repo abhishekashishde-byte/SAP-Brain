@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { discoveryCatalog } from './catalog.js'
 import { uploadTranscript,deleteTranscript,updateTranscriptSuggestion } from './transcriptData.js'
 const consentText='All participants agreed to recording/transcription'
 const pretty=s=>String(s||'').replaceAll('_',' ')
+const humanLabel=Object.fromEntries(discoveryCatalog.objects.flatMap(o=>[[o.id,o.title],...o.fields.map(f=>[f.id,f.label]),...o.questions.map(q=>[q.id,q.text]),...o.decisions.map(d=>[d.id,d.text])]))
 export default function Transcripts({workshop,session,transcripts,suggestions,onRefresh,onAccept,onExisting,presenter}){
  const [consent,setConsent]=useState(false)
  const [file,setFile]=useState(null)
@@ -84,10 +86,18 @@ export default function Transcripts({workshop,session,transcripts,suggestions,on
  {notice&&<p role="status" className="dw-caption">{notice}</p>}
  {transcripts.map(t=><div className="dw-hint-row" key={t.id}><div><strong>{t.file_path?.split('/').at(-1)||t.audio_path?.split('/').at(-1)||'Transcript'}</strong><p>Status: {t.status} · Consent: {new Date(t.consent_given_at).toLocaleDateString()} · Delete: {t.delete_after||'Manually'}</p></div><div className="dw-actions"><button className="dw-button dw-primary" disabled={busy||t.status==='analysed'} onClick={()=>analyse(t)}>Analyse transcript</button><button className="dw-button" disabled={busy} onClick={()=>remove(t)}>Delete transcript & audio</button></div></div>)}
  <div className="dw-object-heading"><h3>Review suggestions ({pending.length} pending)</h3><button className="dw-button" onClick={acceptHighConfidence} disabled={busy||!pending.some(s=>s.confidence==='high')}>Accept all high-confidence (no conflicts)</button></div>
- {Object.entries(groups).map(([group,items])=><section className="dw-transcript-group" key={group}><h4>{group}</h4>{items.map(s=><div className="dw-transcript-suggestion" key={s.id}><div className="dw-inline"><strong>{pretty(s.kind)}</strong><span className="dw-status">{s.confidence} confidence</span>{conflict(s)&&<span className="dw-status">Conflict</span>}</div>
- <blockquote>“{s.quote||'No quotation captured'}”</blockquote><small>Timestamp: {s.ts||'not available in source'}</small>
- <div className="dw-form-grid"><div><strong>Proposed value</strong><pre>{JSON.stringify(s.payload,null,2)}</pre></div>{conflict(s)&&<div><strong>Current saved value</strong><pre>{JSON.stringify(onExisting(s),null,2)}</pre></div>}</div>
- {editId===s.id?<><textarea rows="6" value={editJSON} onChange={e=>setEditJSON(e.target.value)}/><div className="dw-actions"><button className="dw-button" onClick={()=>saveEdit(s)}>Save edits</button><button className="dw-button" onClick={()=>setEditId(null)}>Cancel</button></div></>:<div className="dw-actions"><button className="dw-button dw-primary" disabled={processing===s.id} onClick={()=>accept(s)}>Accept</button><button className="dw-button" onClick={()=>{setEditId(s.id);setEditJSON(JSON.stringify(s.payload,null,2))}}>Edit</button><button className="dw-button" onClick={()=>review(s,'rejected')}>Reject</button></div>}</div>)}</section>)}
+ {Object.entries(groups).map(([group,items])=><details className="dw-transcript-group" key={group}>
+  <summary className="dw-transcript-group-heading">{humanLabel[group]||group} <span>{items.length} findings</span></summary>
+  {items.map(s=><details className="dw-transcript-suggestion" key={s.id}>
+   <summary className="dw-transcript-finding-summary"><strong>{humanLabel[s.target_ref]||pretty(s.kind)}</strong><small>{s.quote||'Transcript finding'}</small><span className={`dw-transcript-pill ${conflict(s)?'dw-transcript-pill-conflict':''}`}>{conflict(s)?'Review conflict':s.confidence+' confidence'}</span></summary>
+   <div className="dw-transcript-finding-detail">
+    <p className="dw-transcript-review-note">Existing user answer and status are protected. Accepting adds the transcript finding and source as notes.</p>
+    <blockquote>“{s.quote||'No quotation captured'}”</blockquote><small>Timestamp: {s.ts||'not available in source'}</small>
+    <details className="dw-transcript-values"><summary>Compare existing answer and transcript proposal</summary><div className="dw-form-grid"><div><strong>Transcript finding</strong><pre>{JSON.stringify(s.payload,null,2)}</pre></div>{onExisting(s)&&<div><strong>Existing user answer (protected)</strong><pre>{JSON.stringify(onExisting(s),null,2)}</pre></div>}</div></details>
+    {editId===s.id?<><textarea rows="6" value={editJSON} onChange={e=>setEditJSON(e.target.value)}/><div className="dw-actions"><button className="dw-button" onClick={()=>saveEdit(s)}>Save edits</button><button className="dw-button" onClick={()=>setEditId(null)}>Cancel</button></div></>:<div className="dw-actions"><button className="dw-button dw-primary" disabled={processing===s.id} onClick={()=>accept(s)}>Accept finding</button><button className="dw-button" onClick={()=>{setEditId(s.id);setEditJSON(JSON.stringify(s.payload,null,2))}}>Edit</button><button className="dw-button" onClick={()=>review(s,'rejected')}>Reject</button></div>}
+   </div>
+  </details>)}
+ </details>)}
  {!pending.length&&<p className="dw-caption">No pending suggestions.</p>}
  </div>
 }
