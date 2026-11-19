@@ -5,6 +5,7 @@ const pretty=s=>String(s||'').replaceAll('_',' ')
 export default function Transcripts({workshop,session,transcripts,suggestions,onRefresh,onAccept,onExisting,presenter}){
  const [consent,setConsent]=useState(false)
  const [file,setFile]=useState(null)
+ const [pastedText,setPastedText]=useState('')
  const [retention,setRetention]=useState('30')
  const [busy,setBusy]=useState(false)
  const [notice,setNotice]=useState('')
@@ -13,9 +14,9 @@ export default function Transcripts({workshop,session,transcripts,suggestions,on
  const [processing,setProcessing]=useState(null)
  if(presenter)return <p className="dw-caption">Transcript controls are hidden in presenter mode.</p>
  async function upload(){
-  if(!consent||!file)return
+  if(!consent||(!file&&!pastedText.trim()))return
   setBusy(true);setNotice('')
-  try{await uploadTranscript(workshop,session.user,file,Number(retention)||null,consentText);await onRefresh();setConsent(false);setFile(null);setNotice('Private upload saved. Press Analyse transcript to request AI suggestions.')}
+  try{const source=pastedText.trim()?new File([pastedText],'workshop-transcript-'+Date.now()+'.txt',{type:'text/plain'}):file;await uploadTranscript(workshop,session.user,source,Number(retention)||null,consentText);await onRefresh();setConsent(false);setFile(null);setPastedText('');setNotice('Private transcript saved. Select Analyse transcript below to request AI suggestions.')}
   catch(e){setNotice('Upload failed: '+e.message)}finally{setBusy(false)}
  }
  async function analyse(t){
@@ -60,17 +61,19 @@ export default function Transcripts({workshop,session,transcripts,suggestions,on
  }
  const pending=suggestions.filter(s=>s.status==='pending'||s.status==='edited')
  const groups=pending.reduce((acc,s)=>{const name=s.payload?.object_id||s.payload?.process_id||s.target_ref||'General';(acc[name]??=[]).push(s);return acc},{})
- return <div className="dw-card dw-transcripts"><div className="dw-kicker">Optional · Consent-gated</div><h2>Transcript → suggestions</h2>
+ return <div className="dw-card dw-transcripts"><div className="dw-kicker">Optional · Consent-gated</div><h2>Workshop transcript</h2>
+ <p className="dw-caption">Paste your full workshop conversation below, including long multilingual SAP PM discussions. Original text is retained; review AI interpretations before accepting.</p>
+ <details open className="dw-section"><summary>Paste meeting transcript</summary><div className="dw-section-body"><textarea aria-label="Paste workshop transcript" rows="14" style={{width:'100%',minHeight:260,resize:'vertical'}} placeholder="Paste the complete workshop transcript here (English, German, Hinglish, SAP terminology, transaction codes such as VA01, IW31, IL01…)" value={pastedText} onChange={e=>setPastedText(e.target.value)}/><p className="dw-caption">{pastedText.length.toLocaleString()} characters · No browser-side truncation. Large uploads depend on storage and analysis service limits.</p></div></details>
  <p className="dw-caption">Participant consent is mandatory. Upload TXT, VTT, DOCX or audio (MP3/M4A/WAV, if a speech-to-text API is configured). Nothing is analysed automatically. Suggestions require explicit acceptance.</p>
  <label className="dw-mini-checkbox"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>{consentText}</label>
- <div className="dw-inline"><input type="file" accept=".txt,.vtt,.docx,.mp3,.m4a,.wav" onChange={e=>setFile(e.target.files?.[0]||null)}/><label>Delete after <select value={retention} onChange={e=>setRetention(e.target.value)}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="0">Manual deletion</option></select></label><button className="dw-button dw-primary" onClick={upload} disabled={!consent||!file||busy}>Upload privately</button></div>
+ <details className="dw-section"><summary>Or upload a transcript file</summary><div className="dw-section-body"><div className="dw-inline"><input type="file" accept=".txt,.vtt,.docx,.mp3,.m4a,.wav" onChange={e=>setFile(e.target.files?.[0]||null)}/><label>Delete after <select value={retention} onChange={e=>setRetention(e.target.value)}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="0">Manual deletion</option></select></label></div></div></details><div className="dw-actions"><button className="dw-button dw-primary" onClick={upload} disabled={!consent||(!file&&!pastedText.trim())||busy}>Save transcript privately</button></div>
  {notice&&<p role="status" className="dw-caption">{notice}</p>}
- {transcripts.map(t=><div className="dw-hint-row" key={t.id}><div><strong>{t.file_path?.split('/').at(-1)||t.audio_path?.split('/').at(-1)||'Transcript'}</strong><p>Status: {t.status} · Consent: {new Date(t.consent_given_at).toLocaleDateString()} · Delete: {t.delete_after||'Manually'}</p></div><div className="dw-actions"><button className="dw-button dw-primary" disabled={busy||t.status==='analysed'} onClick={()=>analyse(t)}>Analyse transcript</button><button className="dw-button" disabled={busy} onClick={()=>remove(t)}>Delete transcript & audio</button></div></div>)}
- <div className="dw-object-heading"><h3>Review suggestions ({pending.length} pending)</h3><button className="dw-button" onClick={acceptHighConfidence} disabled={busy||!pending.some(s=>s.confidence==='high')}>Accept all high-confidence (no conflicts)</button></div>
+ <details className="dw-section" open><summary>Saved transcripts and analysis ({transcripts.length})</summary><div className="dw-section-body">{transcripts.map(t=><div className="dw-hint-row" key={t.id}><div><strong>{t.file_path?.split('/').at(-1)||t.audio_path?.split('/').at(-1)||'Transcript'}</strong><p>Status: {t.status} · Consent: {new Date(t.consent_given_at).toLocaleDateString()} · Delete: {t.delete_after||'Manually'}</p></div><div className="dw-actions"><button className="dw-button dw-primary" disabled={busy||t.status==='analysed'} onClick={()=>analyse(t)}>Analyse transcript</button><button className="dw-button" disabled={busy} onClick={()=>remove(t)}>Delete transcript & audio</button></div></div>)}
+ </div></details><details className="dw-section"><summary>Review AI suggestions ({pending.length})</summary><div className="dw-section-body"><div className="dw-object-heading"><h3>Review suggestions ({pending.length} pending)</h3><button className="dw-button" onClick={acceptHighConfidence} disabled={busy||!pending.some(s=>s.confidence==='high')}>Accept all high-confidence (no conflicts)</button></div>
  {Object.entries(groups).map(([group,items])=><section className="dw-transcript-group" key={group}><h4>{group}</h4>{items.map(s=><div className="dw-transcript-suggestion" key={s.id}><div className="dw-inline"><strong>{pretty(s.kind)}</strong><span className="dw-status">{s.confidence} confidence</span>{conflict(s)&&<span className="dw-status">Conflict</span>}</div>
  <blockquote>“{s.quote||'No quotation captured'}”</blockquote><small>Timestamp: {s.ts||'not available in source'}</small>
  <div className="dw-form-grid"><div><strong>Proposed value</strong><pre>{JSON.stringify(s.payload,null,2)}</pre></div>{conflict(s)&&<div><strong>Current saved value</strong><pre>{JSON.stringify(onExisting(s),null,2)}</pre></div>}</div>
  {editId===s.id?<><textarea rows="6" value={editJSON} onChange={e=>setEditJSON(e.target.value)}/><div className="dw-actions"><button className="dw-button" onClick={()=>saveEdit(s)}>Save edits</button><button className="dw-button" onClick={()=>setEditId(null)}>Cancel</button></div></>:<div className="dw-actions"><button className="dw-button dw-primary" disabled={processing===s.id} onClick={()=>accept(s)}>Accept</button><button className="dw-button" onClick={()=>{setEditId(s.id);setEditJSON(JSON.stringify(s.payload,null,2))}}>Edit</button><button className="dw-button" onClick={()=>review(s,'rejected')}>Reject</button></div>}</div>)}</section>)}
- {!pending.length&&<p className="dw-caption">No pending suggestions.</p>}
+ {!pending.length&&<p className="dw-caption">No pending suggestions.</p>}</div></details>
  </div>
 }
