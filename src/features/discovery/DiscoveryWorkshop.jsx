@@ -399,12 +399,13 @@ export default function DiscoveryWorkshop({session}) {
  async function acceptTranscriptSuggestion(s){
   const p=s.payload||{},id=s.target_ref
   const evidence=['[Transcript finding'+(s.ts?' · '+s.ts:'')+']',s.quote?'Source: '+s.quote:'', 'Transcript interpretation: '+JSON.stringify(p)].filter(Boolean).join('\n')
-  const append=(old)=>old&&old.includes(evidence)?old:[old,evidence].filter(Boolean).join('\n\n')
+  const append=(old,context='')=>old&&old.includes(evidence)?old:[old,[context,evidence].filter(Boolean).join('')].filter(Boolean).join('\n\n')
   if(s.kind==='field_mark'){
    const o=discoveryCatalog.objects.find(o=>o.fields.some(f=>f.id===id))
    if(!o||!['needed','not_needed','clarify'].includes(p.mark))throw Error('Invalid SAP field suggestion')
    const current=val(o.id,'field',id)
-   writeEntry(o.id,'field',id,{...current,mark:current.mark||p.mark,note:append(current.note)})
+   const previous=current.mark?'User status (preserved): '+labels[current.mark]+'\n':''
+   writeEntry(o.id,'field',id,{...current,mark:current.mark||p.mark,note:append(current.note,previous)})
    return
   }
   if(s.kind==='answer'){
@@ -412,14 +413,14 @@ export default function DiscoveryWorkshop({session}) {
    if(!o||p.answer===undefined)throw Error('Invalid question suggestion')
    const current=val(o.id,'question',id)
    const hasExisting=Array.isArray(current.answer)?current.answer.length>0:current.answer!==undefined&&current.answer!==null&&String(current.answer).trim()!==''
-   writeEntry(o.id,'question',id,{...current,answer:hasExisting?current.answer:p.answer,note:append(current.note)})
+   writeEntry(o.id,'question',id,{...current,answer:hasExisting?current.answer:p.answer,note:append(current.note,hasExisting?'User answer (preserved): '+JSON.stringify(current.answer)+'\n':'')})
    return
   }
   if(s.kind==='decision'){
    const o=discoveryCatalog.objects.find(o=>o.decisions.some(d=>d.id===id))
    if(!o||!p.choice)throw Error('Invalid decision suggestion')
    const current=val(o.id,'decision',id)
-   writeEntry(o.id,'decision',id,{...current,choice:current.choice||p.choice,status:current.status||'open',rationale:append(current.rationale)})
+   writeEntry(o.id,'decision',id,{...current,choice:current.choice||p.choice,status:current.status||'open',rationale:append(current.rationale,current.choice?'User decision (preserved): '+current.choice+'\n':'')})
    return
   }
   if(s.kind==='process'){
