@@ -38,33 +38,33 @@ function ImplementationHub() {
   return (
     <main className="wani-implementation" aria-label="SAP S/4HANA implementation phases">
       <style>{`
-        .wani-implementation{min-height:100dvh;overflow-y:auto;background:radial-gradient(ellipse 85% 45% at 50% -20%,#282044 0%,transparent 85%),#090910;color:#f6f4ff;font-family:Inter,system-ui,sans-serif;padding:22px max(18px,calc((100vw - 1120px)/2)) 80px}
+        .wani-implementation{min-height:100dvh;overflow-y:auto;background:radial-gradient(ellipse 85% 45% at 50% -20%,#25262c 0%,transparent 85%),#090b0e;color:#f3f4f6;font-family:Inter,system-ui,sans-serif;padding:22px max(18px,calc((100vw - 1120px)/2)) 80px}
         .wani-impl-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0 48px}
-        .wani-impl-back{color:#c7c1dc;font-weight:650;font-size:13px;border:1px solid #39344b;background:#1a1727;border-radius:11px;padding:10px 13px}
-        .wani-impl-brand{font-size:13px;letter-spacing:.03em;font-weight:780;color:#eeeaff}
+        .wani-impl-back{color:#c5c8ce;font-weight:650;font-size:13px;border:1px solid #44474d;background:#16181b;border-radius:11px;padding:10px 13px}
+        .wani-impl-brand{font-size:13px;letter-spacing:.03em;font-weight:780;color:#e7e9ec}
         .wani-impl-hero{margin-bottom:28px}
-        .wani-impl-eyebrow{color:#ab96ff;font-size:11px;font-weight:780;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px}
+        .wani-impl-eyebrow{color:#d0d3d9;font-size:11px;font-weight:780;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px}
         .wani-impl-hero h1{font-size:clamp(29px,5.7vw,47px);line-height:1.08;letter-spacing:-.045em;margin:0 0 14px;font-weight:780}
-        .wani-impl-hero p{font-size:14px;line-height:1.7;color:#b5afc7;max-width:670px;margin:0}
-        .wani-impl-progress{margin:24px 0 28px;display:flex;align-items:center;gap:11px;color:#a9a3ba;font-size:12px}
-        .wani-impl-progress strong{color:#d8cffb}
-        .wani-impl-progress-line{height:5px;background:#2c263a;flex:1;border-radius:99px;overflow:hidden}
-        .wani-impl-progress-line::before{content:'';display:block;height:100%;width:16.6667%;background:linear-gradient(90deg,#7460e6,#bb9cff);border-radius:inherit}
+        .wani-impl-hero p{font-size:14px;line-height:1.7;color:#aeb1b9;max-width:670px;margin:0}
+        .wani-impl-progress{margin:24px 0 28px;display:flex;align-items:center;gap:11px;color:#aeb1ba;font-size:12px}
+        .wani-impl-progress strong{color:#ecedf0}
+        .wani-impl-progress-line{height:5px;background:#303238;flex:1;border-radius:99px;overflow:hidden}
+        .wani-impl-progress-line::before{content:'';display:block;height:100%;width:16.6667%;background:linear-gradient(90deg,#8e929b,#e1e3e8);border-radius:inherit}
         .wani-impl-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-        .wani-impl-phase{position:relative;display:flex;flex-direction:column;min-height:222px;gap:12px;text-align:left;padding:23px;border-radius:17px;border:1px solid #302b3c;background:#15131d;color:inherit;text-decoration:none;transition:transform .18s,border-color .18s,background .18s}
+        .wani-impl-phase{position:relative;display:flex;flex-direction:column;min-height:222px;gap:12px;text-align:left;padding:23px;border-radius:17px;border:1px solid #3b3d43;background:#14161a;color:inherit;text-decoration:none;transition:transform .18s,border-color .18s,background .18s}
         .wani-impl-phase:not(a){opacity:.74}
-        a.wani-impl-phase:hover{transform:translateY(-3px);border-color:#a28eff;background:#211b34}
-        a.wani-impl-phase:focus-visible{outline:3px solid #aa96ff;outline-offset:3px}
-        .wani-impl-phase.active{background:linear-gradient(145deg,#292044,#181422 70%);border-color:#8f72e7;box-shadow:0 9px 28px #0005}
+        a.wani-impl-phase:hover{transform:translateY(-3px);border-color:#c8cbd1;background:#24262b;box-shadow:0 10px 24px #0007}
+        a.wani-impl-phase:focus-visible{outline:3px solid #f0f1f3;outline-offset:3px}
+        .wani-impl-phase.active{background:linear-gradient(145deg,#282a2f,#16181c 70%);border-color:#9fa2ab;box-shadow:0 9px 28px #0005}
         .wani-impl-phase-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
-        .wani-impl-num{font-size:12px;font-weight:750;color:#b7a3e6}
-        .wani-impl-status{font-size:10px;font-weight:750;padding:6px 9px;border:1px solid #51436f;background:#29213b;border-radius:99px;color:#d6c9fa}
-        .wani-impl-phase:not(.active) .wani-impl-status{color:#a7a1b4;border-color:#393443;background:#211d29}
+        .wani-impl-num{font-size:12px;font-weight:750;color:#c7cad1}
+        .wani-impl-status{font-size:10px;font-weight:750;padding:6px 9px;border:1px solid #5c5e67;background:#2b2d33;border-radius:99px;color:#e3e5e9}
+        .wani-impl-phase:not(.active) .wani-impl-status{color:#aaaeb7;border-color:#3b3f46;background:#22252b}
         .wani-impl-phase h2{font-size:23px;letter-spacing:-.03em;margin:0;font-weight:750}
-        .wani-impl-subtitle{font-size:12px;color:#c5b7ed;font-weight:640}
-        .wani-impl-phase p{font-size:12px;line-height:1.65;color:#afa9bc;margin:0;flex:1}
-        .wani-impl-open{color:#d0beff;font-size:12px;font-weight:760;margin-top:5px}
-        .wani-impl-foot{margin-top:24px;padding:14px 17px;border:1px solid #292638;background:#11101a;border-radius:13px;color:#aaa4b9;font-size:12px;line-height:1.6}
+        .wani-impl-subtitle{font-size:12px;color:#c8cbd1;font-weight:640}
+        .wani-impl-phase p{font-size:12px;line-height:1.65;color:#b0b3ba;margin:0;flex:1}
+        .wani-impl-open{color:#f0f1f3;font-size:12px;font-weight:760;margin-top:5px}
+        .wani-impl-foot{margin-top:24px;padding:14px 17px;border:1px solid #32353a;background:#101216;border-radius:13px;color:#aaaeb6;font-size:12px;line-height:1.6}
         @media(max-width:900px){.wani-impl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
         @media(max-width:620px){.wani-implementation{padding:14px 15px 75px}.wani-impl-top{padding-bottom:32px}.wani-impl-grid{grid-template-columns:1fr;gap:11px}.wani-impl-phase{min-height:177px;padding:19px;gap:9px}.wani-impl-phase h2{font-size:21px}.wani-impl-hero p{font-size:13px}.wani-impl-progress{font-size:11px}}
         @media(prefers-reduced-motion:reduce){.wani-impl-phase{transition:none}}
