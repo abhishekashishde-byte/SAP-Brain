@@ -193,3 +193,101 @@
  .dw-field-help{display:none}
  .dw-status-light{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+
+/* Discovery navigation is optional screen real-estate, not a permanently open panel. */
+.dw-workspace.dw-sidebar-collapsed{grid-template-columns:minmax(0,1fr)}
+.dw-sidebar-collapsed>.dw-sidebar{display:none!important}
+.dw-sidebar-collapse{display:flex;align-items:center;justify-content:flex-end;gap:6px;width:100%;background:none;border:0;color:#bac0c9;font-size:11px;font-weight:650;padding:1px 3px 9px;cursor:pointer}
+.dw-sidebar-collapse:hover{color:#fff}
+.dw-sidebar-reopen{display:none;align-items:center;gap:6px;background:#22252b;color:#e1e3e7;border:1px solid #484c55;border-radius:8px;padding:7px 11px;font:650 11px Inter,system-ui,sans-serif;margin:0 0 10px}
+.dw-sidebar-collapsed .dw-sidebar-reopen{display:inline-flex}
+.dw-nav-disclosure{margin:4px 0 12px}
+.dw-nav-disclosure>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 4px;margin:0;color:#c6c9d0!important}
+.dw-nav-disclosure>summary::-webkit-details-marker{display:none}
+.dw-nav-disclosure>summary::before{content:'▸';font-size:11px;color:#aeb4be}
+.dw-nav-disclosure[open]>summary::before{content:'▾'}
+.dw-nav-area-notes{margin:0 5px 7px;border-bottom:1px solid #373a43;padding:0 0 3px}
+.dw-nav-area-notes>summary{font-size:10px;line-height:1.5;color:#a6abb7;cursor:pointer;padding:2px 4px}
+.dw-nav-area-notes .dw-note{margin:4px 0 8px!important}
+.dw-sidebar .dw-nav-item{font-size:11px;line-height:1.35;padding:7px 8px;gap:9px}
+.dw-sidebar .dw-nav-item>span{font-size:10px;color:#9fa4ae;line-height:1.4;overflow-wrap:anywhere}
+.dw-sidebar .dw-nav-heading{font-size:9px;line-height:1.4}
+.dw-sidebar .dw-sidebar-top{font-size:12px}
+.dw-sidebar .dw-search,.dw-sidebar .dw-scope{font-size:11px;padding:8px 10px}
+.dw-main{min-width:0}
+.dw-brand{gap:7px!important}
+.dw-brand img{max-height:28px;object-fit:contain}
+.dw-brand-subtitle{font-size:12px;color:#d2d3d7;font-weight:600}
+.dw-slash{margin:0 1px!important}
+.dw-compact-status,.dw-compact-status-needed,.dw-compact-status-not_needed,.dw-compact-status-clarify,.dw-compact-status-none{
+ display:grid!important;place-items:center!important;align-items:center!important;justify-items:center!important;
+ width:34px!important;min-width:34px!important;max-width:34px!important;height:34px!important;flex:0 0 34px!important;
+ padding:0!important;margin:0!important;border-radius:50%!important;line-height:1!important;
+}
+.dw-compact-status .dw-status-light{
+ display:grid!important;place-items:center!important;justify-content:center!important;align-content:center!important;
+ width:22px!important;height:22px!important;min-width:22px!important;line-height:1!important;
+ padding:0!important;margin:0 auto!important;transform:none!important;text-align:center!important;
+}
+.dw-field-legend .dw-status-light{display:inline-grid!important;place-items:center!important}
+.dw-object-heading h2{font-size:clamp(18px,1.8vw,23px)!important;line-height:1.25}
+.dw-description{font-size:12px!important;line-height:1.5!important;padding:10px 12px!important;margin:9px 0 12px!important}
+.dw-section>summary{font-size:12px!important;padding:10px 13px!important}
+.dw-item-title{font-size:12px!important}
+.dw-field-legend{font-size:10px!important}
+.dw-workflow-nav button{font-size:10px}
+.dw-compact-name{font-size:11px}
+@media(max-width:700px){
+ .dw-sidebar-reopen{display:inline-flex}
+ .dw-workspace.dw-sidebar-collapsed{display:block}
+ .dw-brand img{max-height:22px}
+ .dw-brand-subtitle{font-size:11px}
+ .dw-compact-status,.dw-compact-status-needed,.dw-compact-status-not_needed,.dw-compact-status-clarify,.dw-compact-status-none{
+ width:30px!important;min-width:30px!important;max-width:30px!important;height:30px!important;flex-basis:30px!important}
+ .dw-compact-status .dw-status-light{width:20px!important;height:20px!important;min-width:20px!important}
+}
+@media print{.dw-sidebar-reopen,.dw-sidebar-collapse{display:none!important}}
+
+
+/* Dense, readable Implementation/Discovery question rows */
+.dw-question-row{border-bottom:1px solid #30333b;min-width:0}
+.dw-question-head{display:flex;align-items:center;gap:9px;padding:7px 9px;min-height:40px}
+.dw-question-indicator{flex:0 0 20px;width:20px;height:20px;display:grid;place-items:center;border:1px solid #555963;border-radius:50%;font-size:12px;color:#b5b7c1;background:#22252c}
+.dw-question-indicator-done{color:#d1f6df;background:#165536;border-color:#398c63;font-weight:750}
+.dw-question-summary{min-width:0;flex:1;display:flex;align-items:baseline;gap:9px;background:none;border:0;color:#e7e8ea;text-align:left;cursor:pointer;padding:3px 0;font:inherit}
+.dw-question-text{font-size:12px;line-height:1.45;flex:0 1 auto}
+.dw-question-preview{font-size:10px;min-width:0;max-width:42%;color:#aeb9b0;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.dw-question-sizing{font-size:10px;color:#aaaeb8}
+.dw-question-edit{flex-shrink:0;background:#272a32;border:1px solid #424750;border-radius:7px;color:#cfd4dd;padding:5px 9px;font-size:10px;cursor:pointer}
+.dw-question-complete .dw-question-text{color:#d0e3d8}
+.dw-question-editor{padding:9px 12px 13px 39px;background:#1d2027;border-top:1px solid #343943}
+.dw-question-editor .dw-choice{margin:5px 0}
+.dw-question-editor textarea{width:100%;box-sizing:border-box}
+.dw-object-context{margin:5px 0 10px;border:1px solid #363941;border-radius:9px}
+.dw-object-context>summary{cursor:pointer;font-size:11px;padding:8px 10px;color:#b9bfcb}
+.dw-object-context-body{padding:9px 11px;border-top:1px solid #343943}
+.dw-transcript-paste{width:100%;box-sizing:border-box;min-height:280px;resize:vertical;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;background:#15171d;color:#eceef1;border:1px solid #444852;border-radius:9px;padding:13px}
+.dw-transcript-import{margin:10px 0;border:1px solid #41454f;border-radius:11px;padding:10px}
+.dw-transcript-import summary{cursor:pointer;font-size:12px;font-weight:650}
+.dw-transcript-review-note{font-size:11px;color:#c3cad3}
+@media(max-width:700px){.dw-question-summary{display:block}.dw-question-preview{display:block;max-width:100%;margin-top:2px}.dw-question-editor{padding-left:10px}}
+
+
+/* Transcript review is a compact hierarchy rather than a wall of findings. */
+.dw-transcript-group{border:1px solid #353943;border-radius:10px;overflow:hidden;margin:7px 0;background:#1b1e25}
+.dw-transcript-group-heading{padding:11px 12px;cursor:pointer;font-size:12px;font-weight:650;color:#ebedf1;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dw-transcript-group-heading span{font-size:10px;font-weight:500;color:#afb3be}
+.dw-transcript-group[open]>.dw-transcript-group-heading{border-bottom:1px solid #343943}
+.dw-transcript-suggestion{margin:0!important;padding:0!important;border:0!important;border-bottom:1px solid #323641!important;background:transparent!important;border-radius:0!important}
+.dw-transcript-finding-summary{list-style:none;cursor:pointer;display:flex;gap:8px;align-items:center;padding:8px 11px;color:#dadddf}
+.dw-transcript-finding-summary::-webkit-details-marker{display:none}
+.dw-transcript-finding-summary strong{font-size:11px;flex:0 0 30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-transcript-finding-summary>small{font-size:10px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#a9b0bb}
+.dw-transcript-pill{font-size:9px;color:#b3d6bc;padding:3px 6px;border:1px solid #3f7253;border-radius:6px;white-space:nowrap}
+.dw-transcript-pill-conflict{border-color:#b18d41;color:#f7ce73}
+.dw-transcript-finding-detail{padding:10px 14px 12px;background:#1e2229;border-top:1px solid #363943}
+.dw-transcript-values{margin:9px 0}
+.dw-transcript-values>summary{cursor:pointer;font-size:11px;color:#b4beca}
+.dw-transcript-values pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;font-size:10px}
+@media(max-width:700px){.dw-transcript-finding-summary{flex-wrap:wrap}.dw-transcript-finding-summary strong{flex-basis:100%}.dw-transcript-finding-summary>small{flex:1}}
