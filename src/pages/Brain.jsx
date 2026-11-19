@@ -47,6 +47,13 @@ const IconBook = ({ size=16, color='currentColor' }) => (
     <path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20"/>
   </svg>
 )
+const IconLayers = ({ size=16, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m12 2 9 5-9 5-9-5 9-5Z"/>
+    <path d="m3 12 9 5 9-5"/>
+    <path d="m3 17 9 5 9-5"/>
+  </svg>
+)
 const IconHome = ({ size=16, color='currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 10.5 12 3l9 7.5"/>
@@ -3216,7 +3223,7 @@ export default function Brain({ session }) {
           ].map(tab=>(
             <button key={tab.key} onClick={tab.onClick}
               style={{
-                display:'flex', alignItems:'center', gap:7, padding:'8px 16px', borderRadius:10, border:'none',
+                display:'flex', alignItems:'center', gap:7, padding:isMobile?'8px 9px':'8px 16px', borderRadius:10, border:'none',
                 cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif", fontSize:13, fontWeight:600,
                 background: tab.active ? '#4F46E5' : 'transparent',
                 color: tab.active ? '#fff' : t.text3,
@@ -3226,9 +3233,20 @@ export default function Brain({ session }) {
               onMouseLeave={e=>{ if(!tab.active) e.currentTarget.style.background = 'transparent' }}
             >
               <tab.Icon size={15}/>
-              {tab.label}
+              {isMobile && tab.key === 'home' ? 'Chat' : tab.label}
             </button>
           ))}
+          {/* Implementation belongs to the main navigation, not as a floating home-screen CTA. */}
+          <a href="/implementation" title="SAP S/4HANA Implementation workspace" aria-label="Open Implementation workspace"
+            style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7,
+              padding:isMobile?'8px 9px':'8px 16px', borderRadius:10, whiteSpace:'nowrap',
+              fontFamily:"'Inter','DM Sans',sans-serif", fontSize:isMobile?12:13, fontWeight:600,
+              color:t.text3, textDecoration:'none', border:'1px solid transparent',
+              transition:'background .15s,color .15s' }}
+            onMouseEnter={e=>{e.currentTarget.style.background=t.hoverBg||'rgba(79,70,229,.10)';e.currentTarget.style.color=t.text}}
+            onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color=t.text3}}>
+            <IconLayers size={15}/>{isMobile?'Implement':'Implementation'}
+          </a>
 
           <div style={{ flex:1 }} />
 
@@ -3241,7 +3259,7 @@ export default function Brain({ session }) {
           }}>
             {(profile?.name || session?.user?.email || '?').charAt(0).toUpperCase()}
           </button>
-          <button onClick={signOut} title="Sign out" style={{ width:32,height:32,borderRadius:10,border:`1.5px solid ${t.border}`,background:'none',color:t.text3,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }}
+          <button onClick={signOut} title="Sign out" style={{ display:isMobile?'none':'flex', width:32,height:32,borderRadius:10,border:`1.5px solid ${t.border}`,background:'none',color:t.text3,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }}
             onMouseEnter={e=>{e.currentTarget.style.borderColor='#EF4444';e.currentTarget.style.color='#EF4444'}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}
           >
