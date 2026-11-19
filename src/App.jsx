@@ -281,7 +281,6 @@ export default function App() {
                   ? <DiscoveryErrorBoundary><Suspense fallback={<div role="status" style={{background:'#0a0a12',color:'#e8e3ff',minHeight:'100dvh',display:'grid',placeItems:'center',fontFamily:'Inter,sans-serif'}}>Loading Discovery Workshop…</div>}><DiscoveryWorkshop session={session}/></Suspense></DiscoveryErrorBoundary>
                   : <>
                   <Brain session={session}/>
-                  <a href="/implementation" aria-label="Open SAP S/4HANA Implementation" title="Open SAP S/4HANA Implementation" style={{position:'fixed',left:16,top:76,zIndex:2147483001,display:'inline-flex',alignItems:'center',gap:8,border:'1px solid #9f90ff',borderRadius:12,padding:'12px 16px',background:'#4f46e5',color:'#fff',textDecoration:'none',boxShadow:'0 8px 24px #0008',fontWeight:750,fontSize:13,letterSpacing:'.01em',maxWidth:'calc(100vw - 32px)'}}>◈ Implementation</a>
                 </>}
                 {adminAvailable && !window.location.pathname.startsWith('/discovery') && !window.location.pathname.startsWith('/implementation') && (
                   <button
