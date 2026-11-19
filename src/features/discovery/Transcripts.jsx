@@ -13,10 +13,10 @@ export default function Transcripts({workshop,session,transcripts,suggestions,on
  const [editJSON,setEditJSON]=useState('')
  const [processing,setProcessing]=useState(null)
  if(presenter)return <p className="dw-caption">Transcript controls are hidden in presenter mode.</p>
- async function upload(){
+ async function upload(analyseAfter=false){
   if(!consent||(!file&&!pastedText.trim()))return
   setBusy(true);setNotice('')
-  try{const source=pastedText.trim()?new File([pastedText],'workshop-transcript-'+Date.now()+'.txt',{type:'text/plain'}):file;await uploadTranscript(workshop,session.user,source,Number(retention)||null,consentText);await onRefresh();setConsent(false);setFile(null);setPastedText('');setNotice('Private transcript saved. Select Analyse transcript below to request AI suggestions.')}
+  try{const source=pastedText.trim()?new File([pastedText],'workshop-transcript-'+Date.now()+'.txt',{type:'text/plain'}):file;const saved=await uploadTranscript(workshop,session.user,source,Number(retention)||null,consentText);await onRefresh();setConsent(false);setFile(null);setPastedText('');if(analyseAfter){await analyse(saved)}else{setNotice('Private transcript saved. Select Analyse transcript below to request AI suggestions.')}}
   catch(e){setNotice('Upload failed: '+e.message)}finally{setBusy(false)}
  }
  async function analyse(t){
