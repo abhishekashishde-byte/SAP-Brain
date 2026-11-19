@@ -1,4 +1,4 @@
-import catalog from './catalog/sap-pm-discovery-catalog.json'
+import catalog from './catalog/sap-pm-discovery-catalog.json' with { type: 'json' }
 
 const QUESTION_TYPES = new Set(['yesno', 'single', 'multi', 'number', 'text'])
 const ids = new Set()
