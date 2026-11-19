@@ -1,0 +1,42 @@
+name: Discovery Workshop validation
+on:
+  push:
+    branches:
+      - 'feature/discovery-*'
+  pull_request:
+    paths:
+      - 'src/features/discovery/**'
+      - 'api/discovery-ai.js'
+      - 'supabase/migrations/0*_discovery*.sql'
+      - '.github/workflows/discovery-validation.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Catalog integrity
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const m=JSON.parse(fs.readFileSync('src/features/discovery/catalog/sap-pm-discovery-catalog.json','utf8'));
+          const p=JSON.parse(fs.readFileSync('src/features/discovery/catalog/sap-pm-process-catalog.json','utf8'));
+          assert.equal(m.areas.length,7);
+          assert.equal(m.objects.length,19);
+          assert.equal(m.objects.reduce((n,o)=>n+o.fields.length,0),214);
+          assert.equal(m.objects.reduce((n,o)=>n+o.questions.length,0),101);
+          assert.equal(m.objects.reduce((n,o)=>n+o.decisions.length,0),41);
+          assert.equal(p.categories.length,8);
+          assert.equal(p.processes.length,55);
+          assert.equal(p.processes.reduce((n,o)=>n+o.questions.length,0),18);
+          const ids=new Set(m.objects.map(o=>o.id));
+          for(const proc of p.processes)for(const id of proc.relatedObjects.split(','))assert.ok(ids.has(id),id);
+          NODE
+      - name: Production build
+        run: npm run build

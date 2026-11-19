@@ -1,9 +1,28 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, createContext, useContext, lazy, Suspense, Component } from 'react'
 import { supabase, signOut } from './supabaseClient'
 import Login from './pages/Login.jsx'
 import { WaniLogo, WaniWordmark } from './pages/Login.jsx'
 import Brain from './pages/Brain.jsx'
+const DiscoveryWorkshop = lazy(() => import('./features/discovery/DiscoveryWorkshop.jsx'))
 import AdminDashboard from './pages/AdminDashboard.jsx'
+
+
+// Discovery is isolated so an unexpected catalog/rendering error cannot blank Wani chat.
+class DiscoveryErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { failed: false } }
+  static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(error, info) { console.error('Discovery UI error', error, info) }
+  render() {
+    if (this.state.failed) return (
+      <main role="alert" style={{ minHeight:'100dvh',background:'#0a0a12',color:'#f5f3fa',padding:'max(48px,8vh) 20px',fontFamily:'Inter,system-ui,sans-serif',textAlign:'center' }}>
+        <h1 style={{ fontSize:24 }}>Discovery could not open</h1>
+        <p style={{ maxWidth:520,margin:'16px auto',lineHeight:1.6,color:'#bdb5ce' }}>The workshop encountered an error. Your Wani chat is unaffected. Please report this screen so we can fix the workshop.</p>
+        <a href="/" style={{ display:'inline-block',padding:'12px 18px',borderRadius:10,background:'#5947cf',color:'white',textDecoration:'none',fontWeight:700 }}>Return to Wani</a>
+      </main>
+    )
+    return this.props.children
+  }
+}
 
 export const ThemeContext = createContext({ dark: false, toggle: () => {} })
 export const useTheme = () => useContext(ThemeContext)
@@ -179,8 +198,13 @@ export default function App() {
           ? adminView
             ? <AdminDashboard session={session} onClose={() => setAdminView(false)} />
             : <>
-                <Brain session={session}/>
-                {adminAvailable && (
+                {window.location.pathname.startsWith('/discovery')
+                  ? <DiscoveryErrorBoundary><Suspense fallback={<div role="status" style={{background:'#0a0a12',color:'#e8e3ff',minHeight:'100dvh',display:'grid',placeItems:'center',fontFamily:'Inter,sans-serif'}}>Loading Discovery Workshop…</div>}><DiscoveryWorkshop session={session}/></Suspense></DiscoveryErrorBoundary>
+                  : <>
+                  <Brain session={session}/>
+                  <a href="/discovery" aria-label="Open SAP PM Discovery Workshop" title="Open SAP PM Discovery Workshop" style={{position:'fixed',left:16,top:76,zIndex:2147483001,display:'inline-flex',alignItems:'center',gap:8,border:'1px solid #9f90ff',borderRadius:12,padding:'12px 16px',background:'#4f46e5',color:'#fff',textDecoration:'none',boxShadow:'0 8px 24px #0008',fontWeight:750,fontSize:13,letterSpacing:'.01em',maxWidth:'calc(100vw - 32px)'}}>◈ PM Discovery</a>
+                </>}
+                {adminAvailable && !window.location.pathname.startsWith('/discovery') && (
                   <button
                     onClick={() => setAdminView(true)}
                     title="Open Wani admin dashboard"
