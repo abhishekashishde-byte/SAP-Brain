@@ -24,7 +24,7 @@ export default function Transcripts({workshop,session,transcripts,suggestions,on
   try{
    const response=await fetch('/api/discovery-transcript',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({workshopId:workshop.id,transcriptId:t.id})})
    const data=await response.json();if(!response.ok)throw Error(data.error||'Transcript analysis failed')
-   await onRefresh();setNotice(data.count+' suggestions await review. '+(data.warnings||[]).join(' '))
+   await onRefresh();setNotice(data.count+' suggestions from '+(data.segmentsAnalysed||'?')+' transcript segments await review. '+(data.warnings||[]).join(' '))
   }catch(e){setNotice('Analysis failed: '+e.message);await onRefresh()}finally{setBusy(false)}
  }
  async function remove(t){
@@ -37,7 +37,19 @@ export default function Transcripts({workshop,session,transcripts,suggestions,on
   try{const updated=await updateTranscriptSuggestion(s.id,{status,...(payload?{payload}:{})});await onRefresh();return updated}
   catch(e){setNotice('Suggestion update failed: '+e.message);throw e}finally{setProcessing(null)}
  }
- function conflict(s){const existing=onExisting(s);return existing!==undefined&&existing!==null&&existing!==''&&JSON.stringify(existing)!==JSON.stringify(s.payload)}
+ function conflict(s){
+  const saved=onExisting(s),proposed=s.payload||{}
+  if(!saved)return false
+  if(s.kind==='field_mark')return !!saved.mark&&saved.mark!==proposed.mark
+  if(s.kind==='answer'){
+   const current=saved.answer
+   if(current==null||current===''||(Array.isArray(current)&&!current.length))return false
+   return JSON.stringify(current)!==JSON.stringify(proposed.answer)
+  }
+  if(s.kind==='decision')return !!saved.choice&&saved.choice!==proposed.choice
+  if(s.kind==='process')return !!saved.status&&saved.status!==proposed.status
+  return false
+ }
  async function accept(s,{batch=false}={}){
   if(batch&&conflict(s))return false
   if(!batch&&conflict(s)&&!window.confirm('The existing user answer will be preserved. Add this transcript finding to the notes for review?'))return false
