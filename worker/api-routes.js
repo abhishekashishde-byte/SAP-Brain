@@ -13,6 +13,7 @@ const HANDLERS = {
   'generate-ppt': () => import('../api/generate-ppt.js'),
   'external-chat': () => import('../api/external-chat.js'),
   discovery: () => import('../api/discovery.js'),
+  integrations: () => import('../api/integrations.js'),
 }
 
 // Same limits middleware.js enforced on Vercel.
@@ -20,6 +21,9 @@ const MAX_BODY_BYTES = {
   'discovery-transcript': 15_000,
   'discovery-find': 4_000,
   'discovery-correct': 8_000,
+  'integration-keys': 2_000,
+  'integration-workshops': 1_000,
+  'integration-ingest': 1_000_000,
   chat: 2_000_000,
   categorise: 30_000,
   extract: 50_000,
@@ -38,6 +42,13 @@ const DISCOVERY_ALIASES = {
   'discovery-transcript': 'transcript',
   'discovery-find': 'find',
   'discovery-correct': 'correct',
+}
+
+// /api/integration-<x> → /api/integrations?route=<x>
+const INTEGRATION_ALIASES = {
+  'integration-keys': 'keys',
+  'integration-workshops': 'workshops',
+  'integration-ingest': 'ingest',
 }
 
 let envCopied = false
@@ -75,6 +86,9 @@ export async function routeApi(request, env, ctx) {
   } else if (DISCOVERY_ALIASES[name]) {
     url.searchParams.set('route', DISCOVERY_ALIASES[name])
     name = 'discovery'
+  } else if (INTEGRATION_ALIASES[name]) {
+    url.searchParams.set('route', INTEGRATION_ALIASES[name])
+    name = 'integrations'
   }
 
   const load = HANDLERS[name]

@@ -5,6 +5,7 @@ import { processCatalog } from './processCatalog.js'
 import { SIZING_METRICS } from './firstCallData.js'
 import { MARK, KIND, human, useCatalogLookup, describeTarget, describeValue } from './txDescribe.js'
 import Correction from './Correction.jsx'
+import AnaConnection from './AnaConnection.jsx'
 export { describeValue }
 
 const consentText = 'All participants agreed to recording/transcription'
@@ -78,7 +79,7 @@ function AnalysisPanel({ run, L, onClose, onReview }) {
 }
 
 function when(t) {
-  const d = new Date(t.created_at || t.consent_given_at || Date.now())
+  const d = new Date(t.source_started_at || t.created_at || t.consent_given_at || Date.now())
   return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
@@ -254,6 +255,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
           {!consent && hasInput && <span className="dw-caption">Confirm participant consent to continue.</span>}
         </div>
       </details>
+      <AnaConnection session={session} />
 
       {transcripts.length > 0 && (
         <section className="dw-ts-block" aria-labelledby="ts-saved">
@@ -268,7 +270,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
                 <li key={t.id}>
                   <div className="dw-ts-item">
                     <div className="dw-ts-item-main">
-                      <strong>Transcript · {when(t)}</strong>
+                      <strong>{t.source === 'ana' ? `From Ana · ${t.source_title || 'Meeting'}` : 'Transcript'} · {when(t)}</strong>
                       <small>{(t.audio_path ? 'Audio' : (t.file_path || '').split('.').at(-1)?.toUpperCase() || 'Text')}{t.transcript_text ? ` · ${t.transcript_text.length.toLocaleString()} characters` : ''} · {count} suggestions · {applied} applied · {t.delete_after ? `deletes ${t.delete_after}` : 'kept until deleted'}</small>
                     </div>
                     <span className={`dw-ts-state dw-ts-state-${state[0]}`}>{state[1]}</span>
