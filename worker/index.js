@@ -74,8 +74,65 @@ async function runDiscoveryRetention(env) {
  return {deleted,skipped};
 }
 
+
+const escapeNotify=(s)=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+async function notifyEmail(env,to,subject,html){
+ if(!env.RESEND_API_KEY||!env.WANI_EMAIL_FROM)throw Error('Resend API key or verified sender missing');
+ const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+env.RESEND_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:env.WANI_EMAIL_FROM,to:[to],subject,html})});
+ if(!response.ok)throw Error('Resend failed with HTTP '+response.status);
+}
+async function handleNotify(request,env){
+ if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_KEY)return json({error:'Notification database unavailable'},503);
+ const db=createClient(env.SUPABASE_URL,env.SUPABASE_SERVICE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+ const url=new URL(request.url);
+ if(request.method==='GET'){
+  const action=url.searchParams.get('action'),email=url.searchParams.get('email'),token=url.searchParams.get('token');
+  if(!['approve','reject'].includes(action)||!email||!token)return json({error:'Invalid link'},400);
+  const {data:applicant,error}=await db.from('waitlist').select('token,full_name,status').eq('email',email).single();
+  if(error||!applicant)return json({error:'Application not found'},404);
+  if(applicant.token!==token)return json({error:'Invalid link'},401);
+  if(applicant.status!=='pending')return json({status:applicant.status});
+  if(action==='approve'){
+   const {error:approveError}=await db.from('approved_emails').insert({email,full_name:applicant.full_name,approved_at:new Date().toISOString()});
+   if(approveError&&approveError.code!=='23505')throw approveError;
+  }
+  const {error:updateError}=await db.from('waitlist').update({status:action==='approve'?'approved':'rejected'}).eq('email',email).eq('status','pending');
+  if(updateError)throw updateError;
+  if(action==='approve')await notifyEmail(env,email,'Your Wani access is approved','<p>Your Wani access is approved.</p><p><a href="https://ask-wani.com">Open Wani</a></p>');
+  return json({status:action==='approve'?'approved':'rejected'});
+ }
+ if(request.method!=='POST')return json({error:'Method not allowed'},405);
+ // Never accept anonymous service-role database writes or unverified auth webhook payloads.
+ if(!env.SUPABASE_WEBHOOK_SECRET)return json({error:'Webhook secret not configured'},503);
+ if(request.headers.get('x-webhook-secret')!==env.SUPABASE_WEBHOOK_SECRET)return json({error:'Unauthorized'},401);
+ const body=await request.json();
+ const record=body?.record||{};
+ const email=String(record.email||'').trim().toLowerCase();
+ if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return json({error:'Valid email required'},400);
+ const name=String(record.full_name||record.raw_user_meta_data?.full_name||record.raw_user_meta_data?.name||'Not provided').slice(0,150);
+ const admin=env.NOTIFY_TO||env.ADMIN_EMAIL_1;
+ if(!admin)return json({error:'Notification recipient missing'},503);
+ const signup=body.type==='INSERT'||body.type==='WAITLIST';
+ if(!signup){
+  const age=Date.now()-new Date(record.last_sign_in_at||0).getTime();
+  if(!Number.isFinite(age)||age>10000)return json({ok:true,skipped:true});
+ }else{
+  const token=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
+  const {error:insertError}=await db.from('waitlist').insert({full_name:name,email,sap_experience:record.sap_experience||'unknown',sap_module:record.sap_module||'unknown',status:'pending',token,created_at:new Date().toISOString()});
+  if(insertError&&insertError.code!=='23505')throw insertError;
+  const {data:entry}=await db.from('waitlist').select('token,status').eq('email',email).single();
+  if(entry?.status!=='pending')return json({ok:true,skipped:true});
+  const base='https://ask-wani.com/api/Notify?email='+encodeURIComponent(email)+'&token='+encodeURIComponent(entry.token);
+  await notifyEmail(env,admin,'Wani signup awaiting approval: '+email,'<p><strong>'+escapeNotify(name)+'</strong> ('+escapeNotify(email)+') requested access.</p><p><a href="'+base+'&action=approve">Approve</a> | <a href="'+base+'&action=reject">Reject</a></p>');
+  return json({ok:true});
+ }
+ await notifyEmail(env,admin,'Wani user login: '+email,'<p>'+escapeNotify(name)+' ('+escapeNotify(email)+') logged in.</p>');
+ return json({ok:true});
+}
+
 export default {async scheduled(event,env,ctx){ctx.waitUntil(runDiscoveryRetention(env).catch(e=>console.error('Discovery retention failed',e.message)))},async fetch(request,env){
  const url=new URL(request.url);
+ if(url.pathname==='/api/Notify'||url.pathname==='/api/notify')return handleNotify(request,env).catch(e=>{console.error('Notify error',e.message);return json({error:'Notification failed'},500)});
  if(url.pathname==='/api/discovery-transcript')return handle(request,env).catch(e=>json({error:e.message||'Analysis failed'},500));
  return env.ASSETS.fetch(request);
 }};
