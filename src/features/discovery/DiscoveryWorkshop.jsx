@@ -378,8 +378,8 @@ export default function DiscoveryWorkshop({session}) {
  }
  async function refreshTranscriptData(){
   if(!workshop)return
-  try{const [ts,ss]=await Promise.all([loadTranscripts(workshop.id),loadTranscriptSuggestions(workshop.id)]);setTranscripts(ts);setTranscriptSuggestions(ss)}
-  catch(e){setError('Transcript refresh failed: '+e.message)}
+  try{const [ts,ss]=await Promise.all([loadTranscripts(workshop.id),loadTranscriptSuggestions(workshop.id)]);setTranscripts(ts);setTranscriptSuggestions(ss);return {transcripts:ts,suggestions:ss}}
+  catch(e){setError('Transcript refresh failed: '+e.message);return null}
  }
  function existingTranscriptValue(s){
   const p=s.payload||{},id=s.target_ref
@@ -404,26 +404,33 @@ export default function DiscoveryWorkshop({session}) {
   }
   return undefined
  }
+ // Every value written from a transcript carries a dated note, so the workshop shows where it came from.
+ function transcriptStamp(extra){
+  const date=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+  return 'Updated '+date+' via transcript'+(extra?.trim()?': '+extra.trim():'')
+ }
+ const withStamp=(old,extra)=>[old?.trim(),transcriptStamp(extra)].filter(Boolean).join('\n')
  async function acceptTranscriptSuggestion(s){
   const p=s.payload||{},id=s.target_ref
+  const source={via:'transcript',transcript_id:s.transcript_id,suggestion_id:s.id,at:new Date().toISOString()}
   if(s.kind==='field_mark'){
    const o=discoveryCatalog.objects.find(o=>o.fields.some(f=>f.id===id))
    if(!o||!['needed','not_needed','clarify'].includes(p.mark))throw Error('Invalid SAP field suggestion')
-   writeEntry(o.id,'field',id,{...val(o.id,'field',id),mark:p.mark});return
+   const cur=val(o.id,'field',id);writeEntry(o.id,'field',id,{...cur,mark:p.mark,note:withStamp(cur.note,p.note),source});return
   }
   if(s.kind==='answer'){
    const o=discoveryCatalog.objects.find(o=>o.questions.some(q=>q.id===id))
    if(!o||p.answer===undefined)throw Error('Invalid question suggestion')
-   writeEntry(o.id,'question',id,{...val(o.id,'question',id),answer:p.answer});return
+   const cur=val(o.id,'question',id);writeEntry(o.id,'question',id,{...cur,answer:p.answer,note:withStamp(cur.note,p.note),source});return
   }
   if(s.kind==='decision'){
    const o=discoveryCatalog.objects.find(o=>o.decisions.some(d=>d.id===id))
    if(!o||!p.choice)throw Error('Invalid decision suggestion')
-   writeEntry(o.id,'decision',id,{...val(o.id,'decision',id),choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open'});return
+   const cur=val(o.id,'decision',id);writeEntry(o.id,'decision',id,{...cur,choice:p.choice,status:['open','decided'].includes(p.status)?p.status:'open',rationale:withStamp(cur.rationale,p.rationale),source});return
   }
   if(s.kind==='process'){
    if(!processCatalog.processes.some(x=>x.id===id)||!['valid','not_valid','later','clarify'].includes(p.status))throw Error('Invalid process suggestion')
-   changeProcess(id,{...processEntries[id],status:p.status,frequency:processCatalog.frequencies.includes(p.frequency)?p.frequency:null});return
+   changeProcess(id,{...processEntries[id],status:p.status,frequency:processCatalog.frequencies.includes(p.frequency)?p.frequency:null,note:withStamp(processEntries[id]?.note,p.note)});return
   }
   if(s.kind==='stakeholder'){
    if(!p.name?.trim())throw Error('Missing stakeholder name')

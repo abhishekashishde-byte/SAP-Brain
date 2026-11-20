@@ -83,6 +83,47 @@ function SuggestionEditor({ s, L, onSave, onCancel }) {
   return <div className="dw-ts-editor">{body}<div className="dw-actions"><button type="button" className="dw-button dw-primary" onClick={() => onSave(p)}>Save changes</button><button type="button" className="dw-button" onClick={onCancel}>Cancel</button></div></div>
 }
 
+function AnalysisPanel({ run, L, onClose, onReview }) {
+  const r = run.result
+  const pct = run.total ? Math.min(100, Math.round((Math.max(run.part, 0) / run.total) * 100)) : 0
+  return (
+    <section className={`dw-ts-run ${run.error ? 'is-failed' : r ? 'is-done' : 'is-busy'}`} aria-live="polite">
+      <header>
+        <strong>{run.error ? 'Analysis stopped' : r ? 'Analysis complete' : 'Analysing transcript…'}</strong>
+        {(r || run.error) && <button type="button" className="dw-button dw-button-quiet" onClick={onClose}>Close</button>}
+      </header>
+      <ol className="dw-ts-run-steps">
+        {run.stages.map(st => (
+          <li key={st.key} className={`is-${st.state}`}>
+            <span className="dw-ts-run-icon" aria-hidden="true">{st.state === 'done' ? '✓' : st.state === 'failed' ? '!' : ''}</span>
+            <span>{st.label}
+              {st.key === 'analyse' && st.state === 'active' && run.total > 0 && <small> · part {Math.min(run.part + 1, run.total)} of {run.total} · {run.found} finding{run.found === 1 ? '' : 's'} so far</small>}
+              {st.key === 'apply' && st.state === 'active' && run.applying && <small> · {run.applying.done} of {run.applying.total}</small>}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {!r && !run.error && run.total > 0 && <div className="dw-progress-bar dw-ts-run-bar"><span style={{ width: pct + '%' }} /></div>}
+      {run.error && <div className="dw-ts-error"><strong>The analysis could not finish.</strong> Your transcript is saved — try again in a moment.<details><summary>Technical details</summary><code>{run.error}</code></details></div>}
+      {r && <div className="dw-ts-result">
+        <div className="dw-ts-result-col">
+          <h4>Updated automatically <span>{r.applied.length}</span></h4>
+          {r.applied.length ? <ul>{r.applied.map(x => { const t = describeTarget(x, L); return <li key={x.id}><strong>{t.group === t.label ? t.label : `${t.group} › ${t.label}`}</strong><span>{describeValue(x.kind, x.payload, L)}</span></li> })}</ul>
+            : <p className="dw-caption">No high-confidence findings to apply.</p>}
+          {r.applied.length > 0 && <p className="dw-caption">Each updated item is noted “Updated {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} via transcript”.</p>}
+        </div>
+        <div className="dw-ts-result-col">
+          <h4>Needs your approval <span>{r.waiting.length}</span></h4>
+          {r.waiting.length ? <><p className="dw-caption">{r.waiting.filter(x => x.confidence === 'medium').length} medium · {r.waiting.filter(x => x.confidence === 'low').length} low confidence{r.conflicts.length ? ` · ${r.conflicts.length} would change a value you already saved` : ''}</p>
+            <button type="button" className="dw-button dw-primary" onClick={onReview}>Review {r.waiting.length} suggestion{r.waiting.length === 1 ? '' : 's'}</button></>
+            : <p className="dw-caption">Nothing left to review.</p>}
+        </div>
+        {r.warnings.length > 0 && <p className="dw-caption dw-ts-result-warn">{r.warnings.join(' ')}</p>}
+      </div>}
+    </section>
+  )
+}
+
 function when(t) {
   const d = new Date(t.created_at || t.consent_given_at || Date.now())
   return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -102,6 +143,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
   const [analysingId, setAnalysingId] = useState(null)
   const [failures, setFailures] = useState({})
   const [filter, setFilter] = useState('pending')
+  const [run, setRun] = useState(null) // live analysis: {id, stages:[], part, total, found, applying, result}
   if (presenter) return <p className="dw-caption">Transcript controls are hidden in presenter mode.</p>
 
   const hasInput = source === 'paste' ? !!pastedText.trim() : !!file
@@ -117,15 +159,68 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
     } catch (e) { setNotice('Could not save the transcript: ' + e.message) } finally { setBusy(false) }
   }
   async function analyse(t) {
+    const stages = []
+    const push = (key, label, state = 'done') => {
+      const i = stages.findIndex(x => x.key === key)
+      if (i >= 0) stages[i] = { key, label, state }; else stages.push({ key, label, state })
+    }
+    const update = patch => setRun(r => ({ ...(r || {}), id: t.id, stages: [...stages], ...patch }))
     setBusy(true); setAnalysingId(t.id); setFailures(f => ({ ...f, [t.id]: null })); setNotice('')
+    push('start', 'Sending transcript to Wani', 'active'); update({ part: 0, total: 0, found: 0, result: null, error: null })
     try {
-      const response = await fetch('/api/discovery-transcript', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify({ workshopId: workshop.id, transcriptId: t.id }) })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) throw Error(data.error || 'The analysis service returned an error (' + response.status + ')')
+      const response = await fetch('/api/discovery-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+        body: JSON.stringify({ workshopId: workshop.id, transcriptId: t.id, stream: true, reanalyse: t.status === 'analysed' }),
+      })
+      let final = null
+      if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
+        const reader = response.body.getReader(); const dec = new TextDecoder(); let buf = ''
+        for (;;) {
+          const { value, done } = await reader.read(); if (done) break
+          buf += dec.decode(value, { stream: true })
+          let cut
+          while ((cut = buf.indexOf('\n\n')) >= 0) {
+            const line = buf.slice(0, cut); buf = buf.slice(cut + 2)
+            if (!line.startsWith('data:')) continue
+            const e = JSON.parse(line.slice(5))
+            if (e.type === 'stage' && e.stage === 'reading') { push('start', 'Transcript sent'); push('read', e.message, 'active'); update({}) }
+            if (e.type === 'stage' && e.stage === 'read') { push('read', `Transcript read · ${e.chars.toLocaleString()} characters`); update({}) }
+            if (e.type === 'plan') { push('analyse', `Analysing ${e.total} part${e.total === 1 ? '' : 's'} with AI`, 'active'); update({ total: e.total }) }
+            if (e.type === 'segment') update({ part: e.state === 'done' ? e.index : e.index - 1, total: e.total, found: e.found })
+            if (e.type === 'stage' && e.stage === 'saving') { push('analyse', `Analysed · ${e.found} finding${e.found === 1 ? '' : 's'}`); push('save', 'Saving findings', 'active'); update({ found: e.found }) }
+            if (e.type === 'done' || e.type === 'error') final = e
+          }
+        }
+      } else {
+        const data = await response.json().catch(() => ({}))
+        final = response.ok ? { type: 'done', ...data } : { type: 'error', error: data.error || 'The analysis service returned an error (' + response.status + ')' }
+      }
+      if (!final) throw Error('The connection closed before the analysis finished.')
+      if (final.type === 'error') throw Error(final.error)
+      push('start', 'Transcript sent'); push('read', stages.find(x => x.key === 'read')?.label || 'Transcript read'); push('save', 'Findings saved')
+      push('apply', 'Applying high-confidence updates', 'active'); update({})
+
+      // High confidence → applied automatically (never overwriting a different saved value). Medium/low → your approval.
+      const fresh = await onRefresh()
+      const mine = (fresh?.suggestions || []).filter(x => x.transcript_id === t.id && (x.status === 'pending' || x.status === 'edited'))
+      const auto = mine.filter(x => x.confidence === 'high' && !conflict(x))
+      const applied = []
+      for (const [i, x] of auto.entries()) {
+        update({ applying: { done: i, total: auto.length } })
+        if (await accept(x, { batch: true, quiet: true })) applied.push(x)
+      }
       await onRefresh()
+      const waiting = mine.filter(x => !applied.includes(x))
+      push('apply', `Applied ${applied.length} update${applied.length === 1 ? '' : 's'} automatically`)
+      push('done', waiting.length ? `${waiting.length} need${waiting.length === 1 ? 's' : ''} your approval` : 'Done — nothing left to review')
+      update({ applying: null, result: { applied, waiting, conflicts: mine.filter(x => x.confidence === 'high' && conflict(x)), warnings: final.warnings || [] } })
       setFilter('pending')
-      setNotice(`${data.count || 0} suggestions found. Review them below — nothing changes in the workshop until you accept.${(data.warnings || []).length ? ' ' + data.warnings.join(' ') : ''}`)
-    } catch (e) { setFailures(f => ({ ...f, [t.id]: e.message })); await onRefresh() } finally { setBusy(false); setAnalysingId(null) }
+    } catch (e) {
+      const i = stages.findIndex(x => x.state === 'active'); if (i >= 0) stages[i] = { ...stages[i], state: 'failed' }
+      update({ error: e.message })
+      setFailures(f => ({ ...f, [t.id]: e.message })); await onRefresh()
+    } finally { setBusy(false); setAnalysingId(null) }
   }
   async function remove(t) {
     if (!window.confirm('Delete this transcript, its file and all its suggestions permanently?')) return
@@ -137,17 +232,26 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
     try { const updated = await updateTranscriptSuggestion(s.id, { status, ...(payload ? { payload } : {}) }); await onRefresh(); return updated }
     catch (e) { setNotice('Could not update the suggestion: ' + e.message); throw e } finally { setProcessing(null) }
   }
-  function conflict(s) { const existing = onExisting(s); return existing !== undefined && existing !== null && existing !== '' && JSON.stringify(existing) !== JSON.stringify(s.payload) }
-  async function accept(s, { batch = false } = {}) {
+  function conflict(s) {
+    const e = onExisting(s), p = s.payload || {}
+    if (e === undefined || e === null || e === '') return false
+    if (s.kind === 'field_mark') return !!e.mark && e.mark !== p.mark
+    if (s.kind === 'answer') return JSON.stringify(e.answer) !== JSON.stringify(p.answer)
+    if (s.kind === 'decision') return !!e.choice && e.choice !== p.choice
+    if (s.kind === 'process') return !!e.status && e.status !== p.status
+    return false
+  }
+  async function accept(s, { batch = false, quiet = false } = {}) {
     if (batch && conflict(s)) return false
     if (!batch && conflict(s) && !window.confirm('This replaces a value already saved in the workshop. Apply it anyway?')) return false
     setProcessing(s.id)
-    try { await onAccept(s); await review(s, 'accepted'); return true }
+    try { await onAccept(s); await updateTranscriptSuggestion(s.id, { status: 'accepted' }); if (!quiet) await onRefresh(); return true }
     catch (e) { setNotice('Could not apply the suggestion: ' + e.message); return false } finally { setProcessing(null) }
   }
   async function acceptMany(list) {
     let n = 0, skipped = 0
-    for (const s of list) { if (await accept(s, { batch: true })) n++; else skipped++ }
+    for (const s of list) { if (await accept(s, { batch: true, quiet: true })) n++; else skipped++ }
+    await onRefresh()
     setNotice(`${n} applied.${skipped ? ` ${skipped} skipped because they would overwrite saved values — review those one by one.` : ''}`)
   }
 
@@ -162,7 +266,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
     <div className="dw-card dw-transcripts">
       <div className="dw-kicker">AI capture</div>
       <h2>Transcript analysis</h2>
-      <p className="dw-caption dw-ts-intro">Paste or upload the meeting transcript. Wani reads it and proposes updates to fields, answers and decisions, each with the quote it is based on. Nothing changes in the workshop until you accept.</p>
+      <p className="dw-caption dw-ts-intro">Paste or upload the meeting transcript. Wani reads it and fills in fields, answers and decisions. High-confidence findings are applied automatically and marked “Updated … via transcript”; medium and low ones wait for your approval.</p>
 
       <ol className="dw-ts-steps" aria-label="Progress">
         {['Add transcript', 'Analyse', 'Review suggestions'].map((label, i) => (
@@ -222,6 +326,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
         </section>
       )}
 
+      {run && <AnalysisPanel run={run} L={L} onClose={() => setRun(null)} onReview={() => { setRun(null); document.getElementById('ts-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />}
       {notice && <p role="status" className="dw-ts-notice">{notice}</p>}
 
       {suggestions.length > 0 && (
