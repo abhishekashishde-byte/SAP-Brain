@@ -1,3 +1,4 @@
+import { routeApi } from './api-routes.js';
 import { createClient } from '@supabase/supabase-js';
 
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
@@ -130,9 +131,17 @@ async function handleNotify(request,env){
  return json({ok:true});
 }
 
-export default {async scheduled(event,env,ctx){ctx.waitUntil(runDiscoveryRetention(env).catch(e=>console.error('Discovery retention failed',e.message)))},async fetch(request,env){
+export default {async scheduled(event,env,ctx){ctx.waitUntil(runDiscoveryRetention(env).catch(e=>console.error('Discovery retention failed',e.message)))},async fetch(request,env,ctx){
  const url=new URL(request.url);
  if(url.pathname==='/api/Notify'||url.pathname==='/api/notify')return handleNotify(request,env).catch(e=>{console.error('Notify error',e.message);return json({error:'Notification failed'},500)});
  if(url.pathname==='/api/discovery-transcript')return handle(request,env).catch(e=>json({error:e.message||'Analysis failed'},500));
+ if(url.pathname.startsWith('/api/')){
+  try{
+   const response=await routeApi(request,env,ctx);
+   if(response)return response;
+  }catch(e){console.error('API route error',url.pathname,e?.stack||e?.message);return json({error:'Internal server error'},500)}
+  // Never fall through to the SPA for unknown API paths.
+  return json({error:'Not found'},404);
+ }
  return env.ASSETS.fetch(request);
 }};

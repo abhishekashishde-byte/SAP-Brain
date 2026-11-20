@@ -2,12 +2,20 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "sap-brain",
   "compatibility_date": "2026-11-19",
+  // Needed by the Vercel-era handlers (Buffer, node:crypto, docx, pptxgenjs).
+  // With this compat date, process.env is also populated from vars and secrets.
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // API calls must always reach the Worker, never the SPA fallback.
+    "run_worker_first": ["/api/*"]
   },
   "main": "worker/index.js",
+  "observability": {
+    "enabled": true
+  },
   "triggers": {
     "crons": [
       "0 3 * * *"
