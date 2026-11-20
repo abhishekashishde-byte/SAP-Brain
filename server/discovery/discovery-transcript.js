@@ -30,7 +30,9 @@ async function extract(file,ext){
  }
  if(ext==='docx'){
   const module=await import('mammoth');const m=module.default||module
-  const value=await m.extractRawText({buffer:Buffer.from(await file.arrayBuffer())})
+  // arrayBuffer: mammoth's browser build (used when bundled for Cloudflare Workers); buffer: Node build.
+  const ab=await file.arrayBuffer()
+  const value=await m.extractRawText({arrayBuffer:ab,buffer:Buffer.from(ab)})
   return {text:value.value||'',timestamps:''}
  }
  return {text:new TextDecoder().decode(await file.arrayBuffer()),timestamps:''}
