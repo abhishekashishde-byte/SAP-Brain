@@ -43,7 +43,38 @@ async function handle(req,env){
   return json({count:existing.length,segments:done,warnings:[],model:env.DISCOVERY_AI_MODEL||'claude-sonnet-4-5'});
  }catch(e){await db.from('discovery_transcripts').update({status:'failed'}).eq('id',transcriptId);return json({error:'Analysis stopped after '+done+'/'+chunks.length+' segments: '+e.message},500)}
 }
-export default {async fetch(request,env){
+
+async function runDiscoveryRetention(env) {
+ const url=env.SUPABASE_URL||env.VITE_SUPABASE_URL;
+ const key=env.SUPABASE_SERVICE_KEY||env.SUPABASE_SERVICE_ROLE_KEY;
+ if(!url||!key)throw Error('Retention Supabase configuration missing');
+ const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+ const today=new Date().toISOString().slice(0,10);
+ const {data:rows,error}=await db.from('discovery_transcripts')
+  .select('id,workshop_id,file_path,audio_path').lte('delete_after',today).order('delete_after').limit(200);
+ if(error)throw Error('Retention lookup failed: '+error.message);
+ let deleted=0,skipped=0;
+ for(const t of rows||[]){
+  try{
+   const {data:w,error:ownerError}=await db.from('discovery_workshops').select('owner_id').eq('id',t.workshop_id).single();
+   if(ownerError||!w?.owner_id){skipped++;continue}
+   const prefix=w.owner_id+'/'+t.workshop_id+'/';
+   const paths=[...new Set([t.file_path,t.audio_path].filter(Boolean))];
+   if(paths.some(p=>!p.startsWith(prefix))){skipped++;continue}
+   if(paths.length){
+    const {error:storageError}=await db.storage.from('discovery-transcripts').remove(paths);
+    if(storageError){skipped++;continue}
+   }
+   const {error:deleteError}=await db.from('discovery_transcripts').delete().eq('id',t.id).eq('workshop_id',t.workshop_id);
+   if(deleteError){skipped++;continue}
+   deleted++;
+  }catch(e){console.error('Retention item failed',t.id,e?.message);skipped++}
+ }
+ console.log('Discovery retention finished',{deleted,skipped});
+ return {deleted,skipped};
+}
+
+export default {async scheduled(event,env,ctx){ctx.waitUntil(runDiscoveryRetention(env).catch(e=>console.error('Discovery retention failed',e.message)))},async fetch(request,env){
  const url=new URL(request.url);
  if(url.pathname==='/api/discovery-transcript')return handle(request,env).catch(e=>json({error:e.message||'Analysis failed'},500));
  return env.ASSETS.fetch(request);
