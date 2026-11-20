@@ -40,8 +40,8 @@ Authentication → Providers → Email:
 - Turn OFF "Confirm email" (for easy testing)
 
 Authentication → URL Configuration:
-- Site URL: https://brain.ask-wani.com
-- Redirect URLs: https://brain.ask-wani.com, https://brain.ask-wani.com/**
+- Site URL: https://ask-wani.com
+- Redirect URLs: https://ask-wani.com, https://ask-wani.com/**
 
 For Google Login (optional):
 - Authentication → Providers → Google → Enable
@@ -50,7 +50,9 @@ For Google Login (optional):
 
 ---
 
-## STEP 3 — Vercel Environment Variables
+## STEP 3 — Cloudflare Worker secrets (sap-brain → Settings → Variables and Secrets)
+
+Hosting: Cloudflare Worker `sap-brain` (see wrangler.jsonc). Pushes to `main` build and deploy automatically. `VITE_*` values must also be set as Build variables.
 
 | Variable | Value |
 |---|---|
