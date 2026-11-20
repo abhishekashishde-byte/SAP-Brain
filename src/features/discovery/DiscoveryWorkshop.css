@@ -433,3 +433,48 @@
 .dw-ts-result-warn{grid-column:1/-1}
 @media(max-width:700px){.dw-ts-result{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.dw-ts-run-steps li.is-active .dw-ts-run-icon{animation:none}}
+.dw-ts-row-run{padding:0 12px 12px}
+.dw-ts-row-run .dw-ts-run{margin:0}
+.dw-ts-topics{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;font-size:11px;color:var(--dim)}
+.dw-ts-topics span{margin-right:2px}
+.dw-ts-topics em{font-style:normal;padding:3px 8px;border-radius:99px;background:#1a2530;border:1px solid #2d4152;color:#cfe3f3;animation:dwpop .25s ease}
+@keyframes dwpop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+/* Transcript findings in the object list and at the item */
+.dw-nav-tx{flex-shrink:0;min-width:18px;height:18px;padding:0 5px;border-radius:99px;display:inline-grid;place-items:center;font-size:10px;font-weight:800}
+.dw-nav-tx-wait{background:#f0b44c;color:#1d1504}
+.dw-nav-tx-ok{background:#123024;color:#9fe0c2;border:1px solid #2c6b52}
+.dw-nav-tx-applied{color:#bff0d6}
+.dw-tx-hints{display:flex;flex-direction:column;gap:6px;margin:4px 0 8px 10px}
+.dw-tx-hint{display:flex;align-items:center;gap:12px;padding:9px 11px;border-radius:10px;border:1px dashed #6e5523;background:#1c170d}
+.dw-tx-hint.dw-tx-low{border-color:#5a3a3d;background:#1a1112}
+.dw-tx-hint-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.dw-tx-label{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#d8b46a}
+.dw-tx-low .dw-tx-label{color:#e09aa1}
+.dw-tx-hint-text strong{font-size:12.5px;font-weight:600;color:var(--text)}
+.dw-tx-hint-text em{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-tx-hint-actions{display:flex;gap:4px;flex-shrink:0}
+@media(max-width:700px){.dw-tx-hint{flex-direction:column;align-items:stretch}.dw-tx-hint-text em{white-space:normal}}
+/* Mobile: one simple mode — dropdown navigation instead of the sidebar, no presenter mode */
+.dw-mobile-pickers{display:none}
+@media(max-width:860px){
+ .dw-workspace{grid-template-columns:1fr}
+ .dw-sidebar,.dw-sidebar.dw-open{display:none!important}
+ .dw-mobile-pickers{display:flex;flex-direction:column;gap:8px;position:sticky;top:0;z-index:20;margin:-4px 0 12px;padding:10px;border-radius:12px;background:#121418f2;border:1px solid var(--border);backdrop-filter:blur(8px)}
+ .dw-mobile-pickers label{display:flex;align-items:center;gap:10px}
+ .dw-mobile-pickers label span{width:58px;flex-shrink:0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+ .dw .dw-mobile-pickers select{flex:1;min-width:0;font-size:15px;padding:10px 12px;border-radius:10px;background:#1a1d22;border:1px solid var(--line2);color:var(--text)}
+ .dw-desktop-only{display:none!important}
+ .dw-presenter-toggle{display:none!important}
+}
+.dw-ts-cover{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.dw .dw-ts-cover-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(60px,1fr) auto auto;align-items:center;gap:12px;padding:10px 12px;background:transparent;border:0;border-bottom:1px solid var(--border);color:var(--text);text-align:left;cursor:pointer;font-size:12.5px}
+.dw-ts-cover-row:last-child{border-bottom:0}
+.dw-ts-cover-row:hover{background:#1a1d22}
+.dw-ts-cover-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-ts-cover-bar{height:5px;border-radius:99px;background:#2a2410;overflow:hidden}
+.dw-ts-cover-row.is-ok .dw-ts-cover-bar{background:#1f3d30}
+.dw-ts-cover-bar i{display:block;height:100%;background:#3ccf91;border-radius:inherit}
+.dw-ts-cover-num{font-size:11.5px;color:#9fe0c2;white-space:nowrap}
+.dw-ts-cover-wait{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:#f0b44c;color:#1d1504;white-space:nowrap}
+.dw-ts-cover-wait.is-zero{background:#123024;color:#9fe0c2}
+@media(max-width:700px){.dw .dw-ts-cover-row{grid-template-columns:1fr auto;row-gap:6px}.dw-ts-cover-bar{grid-column:1/-1;order:3}.dw-ts-cover-num{display:none}}

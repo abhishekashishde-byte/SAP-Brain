@@ -38,7 +38,7 @@ function describeTarget(s, L) {
   return { group: related ? related.title : 'Actions, risks & gaps', label: KIND[s.kind] || human(s.kind) }
 }
 
-function describeValue(kind, p, L) {
+export function describeValue(kind, p, L) {
   if (!p || typeof p !== 'object') return '—'
   switch (kind) {
     case 'field_mark': return `Mark as ${MARK[p.mark] || human(p.mark)}${p.note ? ` — ${p.note}` : ''}`
@@ -89,7 +89,7 @@ function AnalysisPanel({ run, L, onClose, onReview }) {
   return (
     <section className={`dw-ts-run ${run.error ? 'is-failed' : r ? 'is-done' : 'is-busy'}`} aria-live="polite">
       <header>
-        <strong>{run.error ? 'Analysis stopped' : r ? 'Analysis complete' : 'Analysing transcript…'}</strong>
+        <strong>{run.error ? 'Analysis stopped' : r ? 'Analysis complete' : 'Wani is analysing this transcript…'}</strong>
         {(r || run.error) && <button type="button" className="dw-button dw-button-quiet" onClick={onClose}>Close</button>}
       </header>
       <ol className="dw-ts-run-steps">
@@ -104,6 +104,7 @@ function AnalysisPanel({ run, L, onClose, onReview }) {
         ))}
       </ol>
       {!r && !run.error && run.total > 0 && <div className="dw-progress-bar dw-ts-run-bar"><span style={{ width: pct + '%' }} /></div>}
+      {run.topics?.length > 0 && <div className="dw-ts-topics"><span>Topics recognised</span>{run.topics.map(x => <em key={x}>{x}</em>)}</div>}
       {run.error && <div className="dw-ts-error"><strong>The analysis could not finish.</strong> Your transcript is saved — try again in a moment.<details><summary>Technical details</summary><code>{run.error}</code></details></div>}
       {r && <div className="dw-ts-result">
         <div className="dw-ts-result-col">
@@ -129,7 +130,7 @@ function when(t) {
   return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function Transcripts({ workshop, session, transcripts, suggestions, onRefresh, onAccept, onExisting, presenter }) {
+export default function Transcripts({ workshop, session, transcripts, suggestions, onRefresh, onAccept, onExisting, presenter, onOpenObject }) {
   const L = useCatalogLookup()
   const [consent, setConsent] = useState(false)
   const [source, setSource] = useState('paste')
@@ -166,7 +167,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
     }
     const update = patch => setRun(r => ({ ...(r || {}), id: t.id, stages: [...stages], ...patch }))
     setBusy(true); setAnalysingId(t.id); setFailures(f => ({ ...f, [t.id]: null })); setNotice('')
-    push('start', 'Sending transcript to Wani', 'active'); update({ part: 0, total: 0, found: 0, result: null, error: null })
+    push('prep', 'Preparing the transcript', 'active'); update({ part: 0, total: 0, found: 0, topics: [], result: null, error: null })
     try {
       const response = await fetch('/api/discovery-transcript', {
         method: 'POST',
@@ -184,11 +185,11 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
             const line = buf.slice(0, cut); buf = buf.slice(cut + 2)
             if (!line.startsWith('data:')) continue
             const e = JSON.parse(line.slice(5))
-            if (e.type === 'stage' && e.stage === 'reading') { push('start', 'Transcript sent'); push('read', e.message, 'active'); update({}) }
-            if (e.type === 'stage' && e.stage === 'read') { push('read', `Transcript read · ${e.chars.toLocaleString()} characters`); update({}) }
-            if (e.type === 'plan') { push('analyse', `Analysing ${e.total} part${e.total === 1 ? '' : 's'} with AI`, 'active'); update({ total: e.total }) }
-            if (e.type === 'segment') update({ part: e.state === 'done' ? e.index : e.index - 1, total: e.total, found: e.found })
-            if (e.type === 'stage' && e.stage === 'saving') { push('analyse', `Analysed · ${e.found} finding${e.found === 1 ? '' : 's'}`); push('save', 'Saving findings', 'active'); update({ found: e.found }) }
+            if (e.type === 'stage' && e.stage === 'reading') { push('prep', e.message === 'Transcribing audio' ? 'Transcribing the recording' : 'Preparing the transcript', 'active'); update({}) }
+            if (e.type === 'stage' && e.stage === 'read') { push('prep', `Transcript ready · ${e.chars.toLocaleString()} characters`); update({}) }
+            if (e.type === 'plan') { push('analyse', 'Understanding the conversation', 'active'); update({ total: e.total }) }
+            if (e.type === 'segment') setRun(r => ({ ...(r || {}), id: t.id, stages: [...stages], part: e.state === 'done' ? e.index : e.index - 1, total: e.total, found: e.found, topics: [...new Set([...(r?.topics || []), ...(e.topics || [])])] }))
+            if (e.type === 'stage' && e.stage === 'saving') { push('analyse', `Conversation understood · ${e.found} finding${e.found === 1 ? '' : 's'}`); push('save', 'Recording the findings', 'active'); update({ found: e.found }) }
             if (e.type === 'done' || e.type === 'error') final = e
           }
         }
@@ -198,8 +199,8 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
       }
       if (!final) throw Error('The connection closed before the analysis finished.')
       if (final.type === 'error') throw Error(final.error)
-      push('start', 'Transcript sent'); push('read', stages.find(x => x.key === 'read')?.label || 'Transcript read'); push('save', 'Findings saved')
-      push('apply', 'Applying high-confidence updates', 'active'); update({})
+      push('save', 'Findings recorded')
+      push('apply', 'Updating your workshop with high-confidence findings', 'active'); update({})
 
       // High confidence → applied automatically (never overwriting a different saved value). Medium/low → your approval.
       const fresh = await onRefresh()
@@ -212,7 +213,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
       }
       await onRefresh()
       const waiting = mine.filter(x => !applied.includes(x))
-      push('apply', `Applied ${applied.length} update${applied.length === 1 ? '' : 's'} automatically`)
+      push('apply', `Workshop updated · ${applied.length} change${applied.length === 1 ? '' : 's'} applied`)
       push('done', waiting.length ? `${waiting.length} need${waiting.length === 1 ? 's' : ''} your approval` : 'Done — nothing left to review')
       update({ applying: null, result: { applied, waiting, conflicts: mine.filter(x => x.confidence === 'high' && conflict(x)), warnings: final.warnings || [] } })
       setFilter('pending')
@@ -261,6 +262,11 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
   const shown = filter === 'pending' ? pending : filter === 'accepted' ? accepted : rejected
   const groups = shown.reduce((acc, s) => { const g = describeTarget(s, L).group; (acc[g] ??= []).push(s); return acc }, {})
   const step = pending.length ? 3 : transcripts.length ? 2 : 1
+  // Coverage: which SAP objects the transcripts touched, and where each stands.
+  const coverage = discoveryCatalog.objects.map(o => {
+    const mine = suggestions.filter(x => (L.item.get(x.target_ref)?.object.id || x.payload?.related_id || x.payload?.object_id) === o.id)
+    return { o, total: mine.length, applied: mine.filter(x => x.status === 'accepted').length, waiting: mine.filter(x => x.status === 'pending' || x.status === 'edited').length }
+  }).filter(c => c.total)
 
   return (
     <div className="dw-card dw-transcripts">
@@ -304,7 +310,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
               const count = suggestions.filter(s => s.transcript_id === t.id).length
               const applied = suggestions.filter(s => s.transcript_id === t.id && s.status === 'accepted').length
               const failed = failures[t.id] || (t.status === 'failed' ? 'The last analysis did not finish.' : null)
-              const state = analysingId === t.id ? ['busy', 'Analysing…'] : failed ? ['bad', 'Failed'] : t.status === 'analysed' ? ['ok', 'Analysed'] : ['idle', 'Not analysed']
+              const state = analysingId === t.id ? ['busy', 'Analysing…'] : run?.id === t.id && run.result ? ['ok', 'Analysed'] : failed ? ['bad', 'Failed'] : t.status === 'analysed' ? ['ok', 'Analysed'] : ['idle', 'Not analysed']
               return (
                 <li key={t.id}>
                   <div className="dw-ts-item">
@@ -318,7 +324,8 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
                       <button className="dw-button dw-button-quiet" disabled={busy} onClick={() => remove(t)} aria-label="Delete transcript">Delete</button>
                     </div>
                   </div>
-                  {failed && <div className="dw-ts-error" role="alert"><strong>The analysis could not finish.</strong> Your transcript is saved — try again in a moment. <details><summary>Technical details</summary><code>{failed}</code></details></div>}
+                  {run?.id === t.id && <div className="dw-ts-row-run"><AnalysisPanel run={run} L={L} onClose={() => setRun(null)} onReview={() => { setRun(null); document.getElementById('ts-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} /></div>}
+                  {failed && run?.id !== t.id && <div className="dw-ts-error" role="alert"><strong>The analysis could not finish.</strong> Your transcript is saved — try again in a moment. <details><summary>Technical details</summary><code>{failed}</code></details></div>}
                 </li>
               )
             })}
@@ -326,8 +333,24 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
         </section>
       )}
 
-      {run && <AnalysisPanel run={run} L={L} onClose={() => setRun(null)} onReview={() => { setRun(null); document.getElementById('ts-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />}
       {notice && <p role="status" className="dw-ts-notice">{notice}</p>}
+
+      {coverage.length > 0 && (
+        <section className="dw-ts-block" aria-labelledby="ts-cover">
+          <h3 id="ts-cover">What the transcripts covered</h3>
+          <p className="dw-caption">{coverage.length} of {discoveryCatalog.objects.length} SAP PM objects discussed. Open one to see the findings right at its fields.</p>
+          <div className="dw-ts-cover">
+            {coverage.map(c => (
+              <button type="button" key={c.o.id} className={`dw-ts-cover-row ${c.waiting ? 'is-wait' : 'is-ok'}`} onClick={() => onOpenObject?.(c.o.id)}>
+                <span className="dw-ts-cover-name">{c.o.title}</span>
+                <span className="dw-ts-cover-bar" aria-hidden="true"><i style={{ width: (c.applied * 100 / c.total) + '%' }} /></span>
+                <span className="dw-ts-cover-num">{c.applied} applied</span>
+                <span className={`dw-ts-cover-wait ${c.waiting ? '' : 'is-zero'}`}>{c.waiting ? `${c.waiting} to review` : 'done'}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {suggestions.length > 0 && (
         <section className="dw-ts-block" aria-labelledby="ts-review">
