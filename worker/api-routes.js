@@ -19,6 +19,7 @@ const HANDLERS = {
 const MAX_BODY_BYTES = {
   'discovery-transcript': 15_000,
   'discovery-find': 4_000,
+  'discovery-correct': 8_000,
   chat: 2_000_000,
   categorise: 30_000,
   extract: 50_000,
@@ -36,6 +37,7 @@ const DISCOVERY_ALIASES = {
   'discovery-retention': 'retention',
   'discovery-transcript': 'transcript',
   'discovery-find': 'find',
+  'discovery-correct': 'correct',
 }
 
 let envCopied = false

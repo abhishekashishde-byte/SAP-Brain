@@ -20,6 +20,7 @@ import {loadTemplates,saveTemplate,editTemplate,deleteTemplate,templateItems} fr
 import {TemplateLibrary,TemplateSuggestions} from './Templates.jsx'
 import {localizeObject,getAreaTitle,germanHoverText,germanCatalogStatus} from './i18n.js'
 import Transcripts,{describeValue} from './Transcripts.jsx'
+import Correction from './Correction.jsx'
 import {loadTranscripts,loadTranscriptSuggestions,updateTranscriptSuggestion} from './transcriptData.js'
 import Finder from './Finder.jsx'
 import {WaniLogo} from '../../pages/Login.jsx'
@@ -63,11 +64,12 @@ function MoreMenu({items}){
   {open&&<div className="dw-more-menu" role="menu">{items.map(([label,hint,fn,desktopOnly])=><button key={label} role="menuitem" type="button" className={desktopOnly?'dw-desktop-only':undefined} onClick={()=>{setOpen(false);fn()}}><strong>{label}</strong><small>{hint}</small></button>)}</div>}</div>
 }
 // Shows a transcript finding right at the field/question/decision it concerns, with Apply / Reject.
-function TxHint({items,onApply,onReject,busy}){
+function TxHint({items,onApply,onReject,busy,session,onCorrected}){
+ const [correcting,setCorrecting]=useState(null)
  if(!items?.length)return null
- return <div className="dw-tx-hints">{items.map(s=><div key={s.id} className={`dw-tx-hint dw-tx-${s.confidence}`}>
+ return <div className="dw-tx-hints">{items.map(s=>correcting===s.id?<div key={s.id} className="dw-tx-hint dw-tx-correcting"><Correction s={s} session={session} onCancel={()=>setCorrecting(null)} onSaved={async(u,applyNow)=>{setCorrecting(null);await onCorrected(u,applyNow)}}/></div>:<div key={s.id} className={`dw-tx-hint dw-tx-${s.confidence}`}>
   <div className="dw-tx-hint-text"><span className="dw-tx-label">From transcript · {s.confidence} confidence</span><strong>{describeValue(s.kind,s.payload,{metric:new Map()})}</strong><em>“{s.quote}”</em></div>
-  <div className="dw-tx-hint-actions"><button type="button" className="dw-button dw-primary" disabled={busy===s.id} onClick={()=>onApply(s)}>Apply</button><button type="button" className="dw-button dw-button-quiet" disabled={busy===s.id} onClick={()=>onReject(s)}>Reject</button></div>
+  <div className="dw-tx-hint-actions"><button type="button" className="dw-button dw-primary" disabled={busy===s.id} onClick={()=>onApply(s)}>Apply</button><button type="button" className="dw-button" disabled={busy===s.id} onClick={()=>setCorrecting(s.id)}>Correct</button><button type="button" className="dw-button dw-button-quiet" disabled={busy===s.id} onClick={()=>onReject(s)}>Reject</button></div>
  </div>)}</div>
 }
 const STATUS_DOT={not_started:'none',in_progress:'progress',done:'done',out_of_scope:'out'}
@@ -402,7 +404,7 @@ export default function DiscoveryWorkshop({session}) {
   catch(e){setError('Could not apply: '+e.message)}finally{setTxBusy(null)}
  }
  async function rejectTx(s){setTxBusy(s.id);try{await updateTranscriptSuggestion(s.id,{status:'rejected'});await refreshTranscriptData()}catch(e){setError('Could not reject: '+e.message)}finally{setTxBusy(null)}}
- const txHint=id=>presenter?null:<TxHint items={txPendingByItem[id]} onApply={applyTx} onReject={rejectTx} busy={txBusy}/>
+ const txHint=id=>presenter?null:<TxHint items={txPendingByItem[id]} onApply={applyTx} onReject={rejectTx} busy={txBusy} session={session} onCorrected={async(u,applyNow)=>{if(applyNow)await applyTx(u);else await refreshTranscriptData()}}/>
  function existingTranscriptValue(s){
   const p=s.payload||{},id=s.target_ref
   if(s.kind==='field_mark'){
@@ -434,7 +436,11 @@ export default function DiscoveryWorkshop({session}) {
  const withStamp=(old,extra)=>[old?.trim(),transcriptStamp(extra)].filter(Boolean).join('\n')
  async function acceptTranscriptSuggestion(s){
   const p=s.payload||{},id=s.target_ref
-  const source={via:'transcript',transcript_id:s.transcript_id,suggestion_id:s.id,at:new Date().toISOString()}
+  const source={via:'transcript',transcript_id:s.transcript_id,suggestion_id:s.id,at:new Date().toISOString(),...(p._correction?{corrected:p._correction}:{})}
+  if(s.kind==='custom_field'){
+   if(!discoveryCatalog.objects.some(o=>o.id===p.object_id)||!String(p.label||'').trim())throw Error('Invalid new field')
+   writeEntry(p.object_id,'custom_field',crypto.randomUUID(),{label:String(p.label).trim(),mark:['needed','not_needed','clarify'].includes(p.mark)?p.mark:'needed',note:withStamp('',p.note),source});return
+  }
   if(s.kind==='field_mark'){
    const o=discoveryCatalog.objects.find(o=>o.fields.some(f=>f.id===id))
    if(!o||!['needed','not_needed','clarify'].includes(p.mark))throw Error('Invalid SAP field suggestion')

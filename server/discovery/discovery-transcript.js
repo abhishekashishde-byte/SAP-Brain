@@ -2,20 +2,20 @@ import { createClient } from '@supabase/supabase-js'
 import { requireApprovedUser,requireJsonBody,sendAuthError } from '../shared/_auth.js'
 import { discoveryCatalog } from '../../src/features/discovery/catalog.js'
 import { processCatalog } from '../../src/features/discovery/processCatalog.js'
-const KINDS=new Set(['field_mark','answer','decision','process','stakeholder','driver','sizing','request','todo','risk','gap'])
+export const KINDS=new Set(['field_mark','answer','decision','process','stakeholder','driver','sizing','request','todo','risk','gap'])
 const EXTENSIONS=new Set(['txt','vtt','docx','mp3','m4a','wav'])
 const AUDIO=new Set(['mp3','m4a','wav'])
 const MODEL=process.env.DISCOVERY_AI_MODEL||'claude-sonnet-5-5'
-const allowed=new Set([...discoveryCatalog.objects.flatMap(o=>[o.id,...o.fields.map(f=>f.id),...o.questions.map(q=>q.id),...o.decisions.map(d=>d.id)]),...processCatalog.processes.map(p=>p.id)])
+export const allowed=new Set([...discoveryCatalog.objects.flatMap(o=>[o.id,...o.fields.map(f=>f.id),...o.questions.map(q=>q.id),...o.decisions.map(d=>d.id)]),...processCatalog.processes.map(p=>p.id)])
 // The model sees what each object means (description, T-codes) and the exact allowed answers,
 // so it can relate what the customer said to the right item and propose valid values.
-const catalogBrief={objects:discoveryCatalog.objects.map(o=>({id:o.id,title:o.title,meaning:o.plain,tcodes:o.tcodes,fields:o.fields.map(f=>({id:f.id,label:f.label})),questions:o.questions.map(q=>({id:q.id,text:q.text,type:q.type,...(q.options?{options:q.options}:{})})),decisions:o.decisions.map(d=>({id:d.id,text:d.text,options:d.options}))})),processes:processCatalog.processes.map(p=>({id:p.id,title:p.title})),processStatuses:processCatalog.statuses}
+export const catalogBrief={objects:discoveryCatalog.objects.map(o=>({id:o.id,title:o.title,meaning:o.plain,tcodes:o.tcodes,fields:o.fields.map(f=>({id:f.id,label:f.label})),questions:o.questions.map(q=>({id:q.id,text:q.text,type:q.type,...(q.options?{options:q.options}:{})})),decisions:o.decisions.map(d=>({id:d.id,text:d.text,options:d.options}))})),processes:processCatalog.processes.map(p=>({id:p.id,title:p.title})),processStatuses:processCatalog.statuses}
 const output=(res,code,body)=>res.status(code).json(body)
-async function callClaude(system,input){
+export async function callClaude(system,input){
  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:MODEL,max_tokens:5600,
   // The catalog is identical for every part of a transcript: cache it so later parts read it at the cached-input price.
   system:[{type:'text',text:system},{type:'text',text:'CATALOG:\n'+JSON.stringify(input.catalog),cache_control:{type:'ephemeral'}}],
-  messages:[{role:'user',content:JSON.stringify({transcript:input.transcript})}]})})
+  messages:[{role:'user',content:JSON.stringify(Object.fromEntries(Object.entries(input).filter(([k])=>k!=='catalog')))}]})})
  const data=await r.json()
  if(!r.ok)throw Error(data.error?.message||'LLM analysis failed')
  const text=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('').replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'').trim()
@@ -109,12 +109,16 @@ Confidence — be strict, it decides what is applied automatically:
 - low: a hint, a hypothetical, contradictory statements, or poor transcription.
 
 Return strict JSON {"topics":["object ids discussed in this segment"],"suggestions":[{"kind":"field_mark|answer|decision|process|stakeholder|driver|sizing|request|todo|risk|gap","target_ref":"exact catalog ID for field_mark/answer/decision/process, else empty","payload":{},"quote":"exact short quote copied from the transcript segment","ts":"timestamp present in source or empty","confidence":"low|medium|high"}]}.
+If consultant_corrections are given, they show how this consultant mapped similar statements before; follow that mapping for similar statements.
 At most 20 suggestions per segment, most valuable first. Never invent quotations, timestamps, facts, people, requirements or IDs.`
+  // Corrections the consultant made to earlier findings in this workshop guide this analysis.
+  const {data:corrected}=await db.from('discovery_transcript_suggestions').select('kind,target_ref,payload,quote').eq('workshop_id',workshopId).in('status',['edited','accepted']).not('payload->_correction','is',null).limit(20)
+  const corrections=(corrected||[]).map(x=>({quote:x.quote,was:x.payload._correction.from,consultant_said:x.payload._correction.text,correct:{kind:x.kind,target_ref:x.target_ref,label:x.payload.label||undefined}}))
   const proposals=[]
   step({type:'plan',total:chunks.length,warnings})
   for(const chunk of chunks){
    step({type:'segment',state:'start',index:chunk.segment,total:chunks.length,found:proposals.length})
-   const data=await callClaude(system,{catalog:catalogBrief,transcript:chunk})
+   const data=await callClaude(system,{catalog:catalogBrief,transcript:chunk,...(corrections.length?{consultant_corrections:corrections}:{})})
    if(!Array.isArray(data?.suggestions))throw Error('Malformed transcript suggestions')
    const topics=(Array.isArray(data.topics)?data.topics:[]).filter(t=>discoveryCatalog.objects.some(o=>o.id===t))
    for(const raw of data.suggestions.slice(0,20)){
