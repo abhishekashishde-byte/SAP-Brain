@@ -17,9 +17,6 @@ export const FINDER_SECTIONS = [
   ['raid', 'Risks & assumptions', 'Risks, assumptions, issues, dependencies'],
   ['summary', 'Summary & export', 'Excel, PDF, scope pack, AI minutes'],
   ['details', 'Workshop details', 'Customer, date, sources, general notes'],
-  ['email', 'Draft follow-up email', 'Email to the customer after the call'],
-  ['next', 'Next session', 'Plan the next workshop meeting'],
-  ['template', 'Save as template', 'Reuse this workshop setup'],
   ['presenter', 'Presenter mode', 'Clean view for screen sharing'],
 ]
 

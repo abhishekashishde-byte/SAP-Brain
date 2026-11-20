@@ -22,9 +22,6 @@ export const FIND_SECTIONS = [
   ['raid', 'Risks, assumptions, issues and dependencies'],
   ['summary', 'Summary & export: Excel, PDF, scope pack, AI meeting minutes'],
   ['details', 'Workshop details: customer, date, participants, legacy source systems, general notes, legacy manual import'],
-  ['email', 'Draft follow-up email to the customer'],
-  ['next', 'Plan the next workshop session'],
-  ['template', 'Save this workshop as a reusable template'],
   ['presenter', 'Presenter mode: clean view to share the screen with the customer'],
 ]
 

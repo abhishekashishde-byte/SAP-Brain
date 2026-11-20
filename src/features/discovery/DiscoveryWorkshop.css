@@ -478,3 +478,4 @@
 .dw-ts-cover-wait{font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:#f0b44c;color:#1d1504;white-space:nowrap}
 .dw-ts-cover-wait.is-zero{background:#123024;color:#9fe0c2}
 @media(max-width:700px){.dw .dw-ts-cover-row{grid-template-columns:1fr auto;row-gap:6px}.dw-ts-cover-bar{grid-column:1/-1;order:3}.dw-ts-cover-num{display:none}}
+@media(max-width:860px){.dw-header-actions .dw-more{display:none}}

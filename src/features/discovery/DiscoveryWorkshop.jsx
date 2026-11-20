@@ -14,11 +14,10 @@ import {loadFirstCall,addFirstCall,removeFirstCall,createFirstCallQueue,SIZING_L
 import FitGap from './FitGap.jsx'
 import {loadScopingP1,addGap,editGap,deleteGap,ignoreCandidate,unignoreCandidate,loadScopingInventories,addInventory,editInventory,deleteInventory} from './scopingData.js'
 import ScopingInventory from './ScopingInventory.jsx'
-import FollowupEmail from './FollowupEmail.jsx'
 import {createNextSession,loadEngagementSessions,loadPreviousEntries} from './seriesData.js'
 import {CarryoverReview,EngagementTimeline} from './Series.jsx'
 import {loadTemplates,saveTemplate,editTemplate,deleteTemplate,templateItems} from './templateData.js'
-import {SaveTemplate,TemplateLibrary,TemplateSuggestions} from './Templates.jsx'
+import {TemplateLibrary,TemplateSuggestions} from './Templates.jsx'
 import {localizeObject,getAreaTitle,germanHoverText,germanCatalogStatus} from './i18n.js'
 import Transcripts,{describeValue} from './Transcripts.jsx'
 import {loadTranscripts,loadTranscriptSuggestions,updateTranscriptSuggestion} from './transcriptData.js'
@@ -549,9 +548,6 @@ export default function DiscoveryWorkshop({session}) {
    if(id==='processes'){setShowProcesses(true);setScopingTab(null);setFirstTab(null);setShowSummary(false);return}
    if(id==='summary'){setShowSummary(true);setCarryoverOpen(false);setShowProcesses(false);setFirstTab(null);setScopingTab(null);return}
    if(id==='details'){if(setupRef.current){setupRef.current.open=true;setupRef.current.scrollIntoView({behavior:'smooth',block:'start'})}return}
-   if(id==='email')return setEmailOpen(true)
-   if(id==='next'){setNextOpen(true);setNextDate(workshop.call_date);return}
-   if(id==='template')return setTemplateOpen(true)
    if(id==='presenter')return setPresenter(true)
    return
   }
@@ -624,18 +620,12 @@ export default function DiscoveryWorkshop({session}) {
     <button type="button" className={`dw-button ${showSummary?'':'dw-primary'}`} onClick={()=>{setShowSummary(v=>!v);setCarryoverOpen(false);setShowProcesses(false);setFirstTab(null);setScopingTab(null)}}>{showSummary?<>Back<span className="dw-hide-sm"> to workshop</span></>:<>Summary<span className="dw-hide-sm"> & export</span></>}</button>
     {presenter?<button type="button" className="dw-button" onClick={()=>setPresenter(false)}>Exit presenter</button>:<MoreMenu items={[
      ['Presenter mode','Clean view for screen sharing',()=>setPresenter(true),true],
-     ['Draft follow-up email','Email to the customer after the call',()=>setEmailOpen(true)],
-     ['Plan next session','Carry open points into a new meeting',()=>{setNextOpen(true);setNextDate(workshop.call_date)}],
-     ['Save as template','Reuse this setup for other customers',()=>setTemplateOpen(true)],
      ['Workshop details','Customer, sources, general notes',()=>goTo({type:'section',id:'details'})],
     ]}/>}
    </div>}
   </header>
   {mode==='workshop'&&workshop&&<Finder open={finderOpen} onClose={()=>setFinderOpen(false)} onGo={goTo} session={session} workshopId={workshop.id} currentObject={selected?.title}/>}
   <div className="dw-container">
-  {templateOpen&&workshop&&<SaveTemplate workshop={workshop} session={session} source={{entries,processEntries,requests:firstCall.requests,gaps,raid:inventories.raid}} onSave={createPersonalTemplate} onClose={()=>setTemplateOpen(false)}/>}
-  {nextOpen&&workshop&&<div className="dw-quick dw-inline"><label>Next meeting date <input type="date" value={nextDate} onChange={e=>setNextDate(e.target.value)}/></label><button className="dw-button dw-primary" disabled={loading} onClick={nextSession}>Create next session</button><button className="dw-button" onClick={()=>setNextOpen(false)}>Cancel</button></div>}
-  {emailOpen&&workshop&&<FollowupEmail workshop={workshop} session={session} stakeholders={firstCall.stakeholders} onClose={()=>setEmailOpen(false)}/>}
   {error&&<div role="alert" className="dw-alert">{error}<button className="dw-close" onClick={()=>setError('')}>×</button></div>}
   {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">Discover · SAP Plant Maintenance</div><h1>Customer workshops</h1><p>Confidential to your account. Open a workshop to continue, or start a new one.</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>setMode('templates')}>My templates ({templates.length})</button><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div></div>
    {loading&&<p>Loading workshops…</p>}{!loading&&!workshops.length&&<div className="dw-card"><h2>No workshops yet</h2><p>Create a workshop to begin capturing SAP PM requirements.</p></div>}
