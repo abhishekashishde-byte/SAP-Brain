@@ -22,6 +22,8 @@ import {SaveTemplate,TemplateLibrary,TemplateSuggestions} from './Templates.jsx'
 import {localizeObject,getAreaTitle,germanHoverText,germanCatalogStatus} from './i18n.js'
 import Transcripts from './Transcripts.jsx'
 import {loadTranscripts,loadTranscriptSuggestions} from './transcriptData.js'
+import Finder from './Finder.jsx'
+import {WaniLogo} from '../../pages/Login.jsx'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
 const emptyForm=()=>({client_name:'',title:'SAP PM Discovery Workshop',project_name:'',consultant_name:'',call_date:today(),start_time:'',end_time:'',participants:'',legacy_system:'',scope_areas:discoveryCatalog.areas.map(a=>a.id)})
@@ -30,14 +32,14 @@ const markCycle=['','needed','not_needed','clarify']
 const statuses=['not_started','in_progress','done','out_of_scope']
 const labels={needed:'Needed',not_needed:'Not needed',clarify:'Clarify',not_started:'Not started',in_progress:'In progress',done:'Done',out_of_scope:'Out of scope'}
 const eKey=(o,t,id)=>entryKey(o,t,id)
-function Section({title,count,children,open=true,id,summary}){return <details id={id} className="dw-section" defaultOpen={open}><summary>{title}{summary&&<span className="dw-section-progress">{summary}</span>}<span className="dw-count">{count}</span></summary><div className="dw-section-body">{children}</div></details>}
+function Section({title,count,children,open=true,id,summary}){const ref=useRef(null);useEffect(()=>{if(open&&ref.current)ref.current.open=true},[]);return <details ref={ref} id={id} className="dw-section"><summary>{title}{summary&&<span className="dw-section-progress">{summary}</span>}<span className="dw-count">{count}</span></summary><div className="dw-section-body">{children}</div></details>}
 
 function CompactField({field, value={}, onChange, presenter}) {
  const [editing,setEditing]=useState(false)
  const noteRef=useRef(null)
  const cycle=()=>onChange({...value,mark:markCycle[(markCycle.indexOf(value.mark||'')+1)%markCycle.length]})
  useEffect(()=>{if(editing)noteRef.current?.focus()},[editing])
- return <div className={`dw-compact-field ${value.mark?'dw-compact-'+value.mark:''}`}>
+ return <div id={field.id?'dw-i-'+field.id:undefined} className={`dw-compact-field ${value.mark?'dw-compact-'+value.mark:''}`}>
   <div className="dw-compact-row">
    <button type="button" className={`dw-compact-status dw-compact-status-${value.mark||'none'}`}
      title={`${value.mark?labels[value.mark]:'Unmarked'} — click to change status`}
@@ -54,6 +56,14 @@ function CompactField({field, value={}, onChange, presenter}) {
  </div>
 }
 
+function MoreMenu({items}){
+ const [open,setOpen]=useState(false)
+ const ref=useRef(null)
+ useEffect(()=>{if(!open)return;const close=e=>{if(!ref.current?.contains(e.target))setOpen(false)};const esc=e=>{if(e.key==='Escape')setOpen(false)};document.addEventListener('mousedown',close);document.addEventListener('keydown',esc);return()=>{document.removeEventListener('mousedown',close);document.removeEventListener('keydown',esc)}},[open])
+ return <div className="dw-more" ref={ref}><button type="button" className="dw-button dw-icon-button" aria-haspopup="menu" aria-expanded={open} onClick={()=>setOpen(o=>!o)} title="More actions">More<span aria-hidden="true">▾</span></button>
+  {open&&<div className="dw-more-menu" role="menu">{items.map(([label,hint,fn])=><button key={label} role="menuitem" type="button" onClick={()=>{setOpen(false);fn()}}><strong>{label}</strong><small>{hint}</small></button>)}</div>}</div>
+}
+const STATUS_DOT={not_started:'none',in_progress:'progress',done:'done',out_of_scope:'out'}
 function NoteInput({label,value,onChange,internal,onInternal,placeholder='Add notes here…'}) {
  return <div className="dw-note"><label>{label}</label>{onInternal&&<label className="dw-internal"><input type="checkbox" checked={!!internal} onChange={e=>onInternal(e.target.checked)}/> Internal only</label>}
  <textarea rows="2" value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder}/></div>
@@ -71,7 +81,7 @@ function QuestionEditor({item,display=item,value={},onChange,linkedSizing=null})
  <details className="dw-mini-note"><summary>+ Note</summary><textarea rows="2" value={value.note||''} onChange={e=>onChange({...value,note:e.target.value})} placeholder="Additional context…"/></details></div>
 }
 function DecisionEditor({item,display=item,value={},onChange,stakeholders=[]}) {
- return <div className="dw-item"><div className="dw-item-title" title={display.text!==item.text?item.text:undefined}>{display.text}</div><div className="dw-choice">{[...item.options,'Other…'].map(opt=><button key={opt} className={value.choice===opt?'selected':''} onClick={()=>onChange({...value,choice:opt,status:'decided',decided_at:value.decided_at||new Date().toLocaleDateString('en-CA')})}>{display.options?.[item.options.indexOf(opt)]||opt}</button>)}</div>
+ return <div className="dw-item" id={'dw-i-'+item.id}><div className="dw-item-title" title={display.text!==item.text?item.text:undefined}>{display.text}</div><div className="dw-choice">{[...item.options,'Other…'].map(opt=><button key={opt} className={value.choice===opt?'selected':''} onClick={()=>onChange({...value,choice:opt,status:'decided',decided_at:value.decided_at||new Date().toLocaleDateString('en-CA')})}>{display.options?.[item.options.indexOf(opt)]||opt}</button>)}</div>
  {value.choice==='Other…'&&<input className="dw-input" placeholder="Custom decision" value={value.other||''} onChange={e=>onChange({...value,other:e.target.value})}/>}
  <div className="dw-inline"><label>Decision status <select value={value.status||'open'} onChange={e=>onChange({...value,status:e.target.value,decided_at:e.target.value==='decided'?(value.decided_at||new Date().toLocaleDateString('en-CA')):value.decided_at})}><option value="open">Open</option><option value="decided">Decided</option></select></label><label>Decided by <select value={value.decided_by||''} onChange={e=>onChange({...value,decided_by:e.target.value||null})}><option value="">Not recorded</option>{stakeholders.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select></label><label>Decision date <input type="date" value={value.decided_at||''} onChange={e=>onChange({...value,decided_at:e.target.value||null})}/></label></div><textarea rows="2" placeholder="Rationale / decision notes…" value={value.rationale||''} onChange={e=>onChange({...value,rationale:e.target.value})}/></div>
 }
@@ -134,6 +144,9 @@ export default function DiscoveryWorkshop({session}) {
  const [followups,setFollowups]=useState([])
  const [minutes,setMinutes]=useState('')
  const [minutesAudience,setMinutesAudience]=useState('client')
+ const [finderOpen,setFinderOpen]=useState(false)
+ const [jump,setJump]=useState(null)
+ const setupRef=useRef(null)
  const queue=useRef(null)
  const processQueue=useRef(null)
  const firstQueue=useRef(null)
@@ -155,8 +168,17 @@ export default function DiscoveryWorkshop({session}) {
   }
   return{fields,questions,decisions,clarify}
  },[scoped,entries])
- const refresh=useCallback(async()=>{if(!userId)return;setLoading(true);try{setWorkshops(await loadWorkshops(userId));setError('')}catch(e){setError(e.message)}finally{setLoading(false)}},[userId])
- useEffect(()=>{refresh()},[refresh])
+ const refresh=useCallback(async()=>{if(!userId)return [];setLoading(true);try{const rows=await loadWorkshops(userId);setWorkshops(rows);setError('');return rows}catch(e){setError(e.message);return []}finally{setLoading(false)}},[userId])
+ // Deep links from the Implementation page: ?workshop=<id> opens it, ?new=1 starts the create form.
+ const deepLinked=useRef(false)
+ useEffect(()=>{refresh().then(rows=>{
+  if(deepLinked.current)return;deepLinked.current=true
+  const params=new URLSearchParams(window.location.search)
+  const id=params.get('workshop')
+  if(id){const w=rows.find(x=>x.id===id);if(w)openWorkshop(w)}
+  else if(params.get('new')==='1'){setForm(emptyForm());setMode('create')}
+  if(id||params.get('new'))window.history.replaceState(null,'',window.location.pathname)
+ })},[refresh])
  const refreshTemplateLibrary=useCallback(async()=>{if(!userId)return;try{setTemplates(await loadTemplates(userId))}catch(e){setError('Template library unavailable: '+e.message)}},[userId])
  useEffect(()=>{refreshTemplateLibrary()},[refreshTemplateLibrary])
  useEffect(()=>()=>{queue.current?.close();processQueue.current?.close();firstQueue.current?.close()},[])
@@ -480,13 +502,47 @@ export default function DiscoveryWorkshop({session}) {
   if(mode!=='workshop'||presenter||showSummary)return
   const onKey=e=>{
    const el=e.target;const typing=el instanceof HTMLElement&&(el.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(el.tagName))
-   if((e.key==='/'&&!typing)||(e.key.toLowerCase()==='k'&&e.ctrlKey)){e.preventDefault();setQuickOpen(true);return}
+   if(e.key.toLowerCase()==='k'&&(e.ctrlKey||e.metaKey)){e.preventDefault();setFinderOpen(true);return}
+   if(e.key==='/'&&!typing){e.preventDefault();setQuickOpen(true);return}
    if(typing||e.ctrlKey||e.metaKey||e.altKey)return
    if(e.key==='j'){e.preventDefault();if(selectedIndex<objects.length-1)selectObject(objects[selectedIndex+1].id)}
    if(e.key==='k'){e.preventDefault();if(selectedIndex>0)selectObject(objects[selectedIndex-1].id)}
    if(e.key==='p'){e.preventDefault();setPresenter(v=>!v)}
   };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)
  },[mode,presenter,showSummary,objects,selectedIndex])
+ function goTo(row){
+  setMobileNav(false)
+  if(row.type==='section'){
+   const id=row.id
+   if(['stakeholders','drivers','sizing','requests','parking'].includes(id))return openFirst(id)
+   if(['transcripts','gaps','interfaces','forms_reports','raid'].includes(id))return openScoping(id)
+   if(id==='processes'){setShowProcesses(true);setScopingTab(null);setFirstTab(null);setShowSummary(false);return}
+   if(id==='summary'){setShowSummary(true);setCarryoverOpen(false);setShowProcesses(false);setFirstTab(null);setScopingTab(null);return}
+   if(id==='details'){if(setupRef.current){setupRef.current.open=true;setupRef.current.scrollIntoView({behavior:'smooth',block:'start'})}return}
+   if(id==='email')return setEmailOpen(true)
+   if(id==='next'){setNextOpen(true);setNextDate(workshop.call_date);return}
+   if(id==='template')return setTemplateOpen(true)
+   if(id==='presenter')return setPresenter(true)
+   return
+  }
+  if(row.type==='process'){setShowProcesses(true);setScopingTab(null);setFirstTab(null);setShowSummary(false);setJump({id:row.id,at:Date.now()});return}
+  const objectId=row.objectId||row.id
+  setScope('all');setSearch('');setOnlyCarried(false)
+  selectObject(objectId)
+  if(row.type==='field'&&row.optional)setShowOptional(true)
+  if(row.type!=='object')setJump({id:row.id,at:Date.now()})
+ }
+ useEffect(()=>{
+  if(!jump)return
+  const t=setTimeout(()=>{
+   const el=document.getElementById('dw-i-'+jump.id)
+   if(!el)return
+   for(let p=el;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true
+   el.scrollIntoView({behavior:'smooth',block:'center'})
+   el.classList.add('dw-flash');setTimeout(()=>el.classList.remove('dw-flash'),1800)
+  },120)
+  return()=>clearTimeout(t)
+ },[jump,selectedId,showProcesses])
  async function askAI(action,extra={}) {
   if(!workshop||aiBusy)return
   setAiBusy(action);setError('')
@@ -518,16 +574,41 @@ export default function DiscoveryWorkshop({session}) {
  }
  function goBack(){firstQueue.current?.flush();firstQueue.current?.close();firstQueue.current=null;queue.current?.flush();queue.current?.close();queue.current=null;processQueue.current?.flush();processQueue.current?.close();processQueue.current=null;setWorkshop(null);setMode('list');setShowSummary(false);refresh()}
  const covered={objects:scoped.length,fields:scoped.reduce((n,o)=>n+o.fields.length,0),questions:scoped.reduce((n,o)=>n+o.questions.length,0),decisions:scoped.reduce((n,o)=>n+o.decisions.length,0)}
+ const totalItems=covered.fields+covered.questions+covered.decisions
+ const doneItems=counts.fields+counts.questions+counts.decisions
+ const pct=totalItems?Math.round(doneItems*100/totalItems):0
+ const syncing=pending+processPending+firstPending
  return <main className={`dw ${presenter?'dw-presenter':''}`}>
-  <header className="dw-header"><div className="dw-brand"><button className="dw-back" onClick={mode==='workshop'?goBack:()=>window.location.assign('/implementation')} aria-label="Go back">←</button><span className="dw-logo">W</span><span>Wani <span className="dw-slash">/</span> Discovery Workshop</span></div>
-   {mode==='workshop'&&<div className="dw-actions"><span className="dw-save" aria-live="polite">{pending+processPending+firstPending?(pending+processPending+firstPending)+' pending sync':savingMeta?'Saving…':'Saved'}</span><button className="dw-button" onClick={()=>setPresenter(x=>!x)}>{presenter?'Work mode':'Presenter mode'}</button><button className="dw-button" onClick={()=>setTemplateOpen(true)}>Save as template</button><button className="dw-button" onClick={()=>{setNextOpen(x=>!x);setNextDate(workshop.call_date)}}>Next session</button><button className="dw-button" onClick={()=>setEmailOpen(true)}>Draft follow-up email</button><button className="dw-button" onClick={()=>setParkOpen(x=>!x)}>Parking ({firstCall.parking.filter(x=>x.status==='parked').length})</button><button className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)}>Objects</button></div>}
+  <header className="dw-header">
+   <div className="dw-brand">
+    <a className="dw-logo-link" href="/" title="Wani chat" aria-label="Wani chat"><WaniLogo size={22} dark/></a>
+    <nav className="dw-crumbs" aria-label="Breadcrumb">
+     <a href="/implementation">Implementation</a><span aria-hidden="true">›</span>
+     {mode==='workshop'&&workshop?<><button type="button" onClick={goBack}>Discovery · PM</button><span aria-hidden="true">›</span><span className="dw-crumb-current" aria-current="page">{workshop.client_name}</span></>:<span className="dw-crumb-current" aria-current="page">Discovery · SAP PM</span>}
+    </nav>
+   </div>
+   {mode==='workshop'&&workshop&&<div className="dw-header-actions">
+    <span className={`dw-save ${syncing?'dw-save-busy':''}`} aria-live="polite">{syncing?syncing+' syncing…':savingMeta?'Saving…':'Saved'}</span>
+    <button type="button" className="dw-findbtn" onClick={()=>setFinderOpen(true)} title="Find anything or ask Wani (Ctrl+K)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Find or ask…</span><kbd>Ctrl K</kbd></button>
+    {!presenter&&<button type="button" className="dw-button" onClick={()=>setParkOpen(x=>!x)} title="Park a topic for later (Shift+P)">Park<span className="dw-hide-sm"> topic</span>{firstCall.parking.filter(x=>x.status==='parked').length?<span className="dw-badge">{firstCall.parking.filter(x=>x.status==='parked').length}</span>:null}</button>}
+    <button type="button" className={`dw-button ${showSummary?'':'dw-primary'}`} onClick={()=>{setShowSummary(v=>!v);setCarryoverOpen(false);setShowProcesses(false);setFirstTab(null);setScopingTab(null)}}>{showSummary?<>Back<span className="dw-hide-sm"> to workshop</span></>:<>Summary<span className="dw-hide-sm"> & export</span></>}</button>
+    {presenter?<button type="button" className="dw-button" onClick={()=>setPresenter(false)}>Exit presenter</button>:<MoreMenu items={[
+     ['Presenter mode','Clean view for screen sharing',()=>setPresenter(true)],
+     ['Draft follow-up email','Email to the customer after the call',()=>setEmailOpen(true)],
+     ['Plan next session','Carry open points into a new meeting',()=>{setNextOpen(true);setNextDate(workshop.call_date)}],
+     ['Save as template','Reuse this setup for other customers',()=>setTemplateOpen(true)],
+     ['Workshop details','Customer, sources, general notes',()=>goTo({type:'section',id:'details'})],
+    ]}/>}
+    <button type="button" className="dw-button dw-mobile-nav" onClick={()=>setMobileNav(x=>!x)} aria-expanded={mobileNav}>{mobileNav?'Close':'Sections'}</button>
+   </div>}
   </header>
+  {mode==='workshop'&&workshop&&<Finder open={finderOpen} onClose={()=>setFinderOpen(false)} onGo={goTo} session={session} workshopId={workshop.id} currentObject={selected?.title}/>}
   <div className="dw-container">
   {templateOpen&&workshop&&<SaveTemplate workshop={workshop} session={session} source={{entries,processEntries,requests:firstCall.requests,gaps,raid:inventories.raid}} onSave={createPersonalTemplate} onClose={()=>setTemplateOpen(false)}/>}
   {nextOpen&&workshop&&<div className="dw-quick dw-inline"><label>Next meeting date <input type="date" value={nextDate} onChange={e=>setNextDate(e.target.value)}/></label><button className="dw-button dw-primary" disabled={loading} onClick={nextSession}>Create next session</button><button className="dw-button" onClick={()=>setNextOpen(false)}>Cancel</button></div>}
   {emailOpen&&workshop&&<FollowupEmail workshop={workshop} session={session} stakeholders={firstCall.stakeholders} onClose={()=>setEmailOpen(false)}/>}
   {error&&<div role="alert" className="dw-alert">{error}<button className="dw-close" onClick={()=>setError('')}>×</button></div>}
-  {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">SAP PM · Discovery</div><h1>Customer workshops</h1><p>Client-confidential data. Only your signed-in account can access your workshop records.</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>setMode('templates')}>My templates ({templates.length})</button><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div></div>
+  {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">Discover · SAP Plant Maintenance</div><h1>Customer workshops</h1><p>Confidential to your account. Open a workshop to continue, or start a new one.</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>setMode('templates')}>My templates ({templates.length})</button><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div></div>
    {loading&&<p>Loading workshops…</p>}{!loading&&!workshops.length&&<div className="dw-card"><h2>No workshops yet</h2><p>Create a workshop to begin capturing SAP PM requirements.</p></div>}
    <div className="dw-workshop-list">{workshops.map(w=><article className="dw-list-card" key={w.id}><div><div className="dw-kicker">{w.call_date} · {w.status}</div><h2>{w.client_name}</h2><p>{w.title} · {w.project_name||'SAP PM'}</p></div><div className="dw-actions"><button className="dw-button dw-primary" onClick={()=>openWorkshop(w)}>Open</button><button className="dw-button" onClick={()=>deleteWorkshop(w)}>Delete</button></div></article>)}</div></>}
   {mode==='templates'&&<><button className="dw-inline-button" onClick={()=>setMode('list')}>← All workshops</button><TemplateLibrary templates={templates} onRename={renamePersonalTemplate} onDelete={removePersonalTemplate} onUse={template=>{setSelectedTemplate(template);setForm(emptyForm());setMode('create')}}/></>}
@@ -537,10 +618,17 @@ export default function DiscoveryWorkshop({session}) {
    <p className="dw-caption">Customer information and workshop notes are confidential and are not included in Wani's shared knowledge base.</p><button type="submit" disabled={loading||!form.scope_areas.length} className="dw-button dw-primary">Create workshop</button></form></div>}
   {mode==='workshop'&&workshop&&<>
    {parkOpen&&<div className="dw-quick dw-inline"><input autoFocus placeholder="Park this topic…" value={parkText} onChange={e=>setParkText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')quickPark();if(e.key==='Escape')setParkOpen(false)}}/><button className="dw-button" onClick={quickPark}>Save</button><button className="dw-button" onClick={()=>setParkOpen(false)}>Cancel</button></div>}
-   <section className="dw-intro dw-intro-compact"><div className="dw-kicker">SAP PM · {discoveryCatalog.version}</div><div className="dw-list-heading"><div><h1>{workshop.client_name}</h1><p>{workshop.title} · {workshop.project_name||'Discovery workshop'}</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>{setShowSummary(s=>!s);setCarryoverOpen(false);setShowProcesses(false);setFirstTab(null);setScopingTab(null)}}>{showSummary?'Back to objects':'Summary & exports'}</button></div></div>
-    <div className="dw-stats dw-overview-stats"><span>Fields marked: {counts.fields}/{covered.fields}</span><span>Questions answered: {counts.questions}/{covered.questions}</span><span>Decisions made: {counts.decisions}/{covered.decisions}</span><span>Need clarification: {counts.clarify}</span><span>Open tasks: {todos.filter(t=>!t.done).length}</span></div>
-    <details className="dw-workshop-setup" key={workshop.id}>
-      <summary><span className="dw-setup-title">Workshop details & sources</span><span className="dw-setup-caption">{sourceSystems.length} source{sourceSystems.length===1?'':'s'} · {workshop.consultant_name||'Consultant not set'} · {val('workshop','workshop_note','main').text?.trim()?'Notes saved':'Notes available'}</span></summary>
+   <section className="dw-intro dw-intro-compact">
+    <div className="dw-ws-head">
+     <div className="dw-ws-title"><h1>{workshop.client_name}</h1><p>{[workshop.project_name||workshop.title,workshop.call_date,workshop.legacy_system&&('from '+workshop.legacy_system)].filter(Boolean).join(' · ')}</p></div>
+     <div className="dw-progress" title={`${counts.fields}/${covered.fields} fields marked · ${counts.questions}/${covered.questions} questions answered · ${counts.decisions}/${covered.decisions} decisions made`}>
+      <div className="dw-progress-top"><strong>{pct}% captured</strong><span>{counts.clarify?counts.clarify+' to clarify · ':''}{todos.filter(t=>!t.done).length} open tasks</span></div>
+      <div className="dw-progress-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{width:pct+'%'}}/></div>
+      <div className="dw-progress-legend"><span>Fields {counts.fields}/{covered.fields}</span><span>Questions {counts.questions}/{covered.questions}</span><span>Decisions {counts.decisions}/{covered.decisions}</span></div>
+     </div>
+    </div>
+    <details className="dw-workshop-setup" key={workshop.id} ref={setupRef}>
+      <summary><span className="dw-setup-title">Workshop details, sources & general notes</span><span className="dw-setup-caption">{sourceSystems.length} source{sourceSystems.length===1?'':'s'} · {workshop.consultant_name||'Consultant not set'} · {val('workshop','workshop_note','main').text?.trim()?'Notes saved':'Notes available'}</span></summary>
       <div className="dw-setup-body">
       {workshop.engagement_id&&<div className="dw-stats"><span>Engagement · Session {workshop.session_no||1}</span>{workshop.previous_workshop_id&&<button className="dw-button" onClick={()=>{setCarryoverOpen(v=>!v);setShowSummary(false)}}>{carryoverOpen?'Hide carry-over':'Open from last session'}</button>}</div>}
     <div className="dw-metadata">{[['Customer',workshop.client_name],['Meeting date',workshop.call_date],['Consultant',workshop.consultant_name||'—'],['Catalog coverage',`${covered.objects} objects · ${covered.fields} fields · ${covered.questions} questions · ${covered.decisions} decisions`]].map(([k,v])=><div key={k}><span>{k}</span><strong>{v}</strong></div>)}</div>
@@ -571,13 +659,44 @@ export default function DiscoveryWorkshop({session}) {
  <div className="dw-stats"><strong>Completeness check</strong><span>{covered.fields-counts.fields} unmarked fields</span><span>{covered.questions-counts.questions} unanswered questions</span><span>{covered.decisions-counts.decisions} undecided decisions</span><span>{counts.clarify} clarifications</span></div>
  <div className="dw-inline"><label>Show <select value={summaryFilter} onChange={e=>setSummaryFilter(e.target.value)}><option value="all">All objects</option><option value="open">With unresolved points</option><option value="decisions">With decisions</option><option value="todos">With action items</option></select></label></div>
  {scoped.filter(o=>summaryFilter==='all'||summaryFilter==='open'&&(o.fields.some(f=>!val(o.id,'field',f.id).mark||val(o.id,'field',f.id).mark==='clarify')||o.questions.some(q=>val(o.id,'question',q.id).answer===undefined)||o.decisions.some(d=>val(o.id,'decision',d.id).status!=='decided'))||summaryFilter==='decisions'&&o.decisions.some(d=>val(o.id,'decision',d.id).status==='decided')||summaryFilter==='todos'&&todos.some(t=>t.object_id===o.id)).map(o=><div key={o.id} className="dw-summary-object"><h3>{o.title}</h3><p>Fields marked: {o.fields.filter(f=>val(o.id,'field',f.id).mark).length}/{o.fields.length} · Answers: {o.questions.filter(q=>val(o.id,'question',q.id).answer!==undefined).length}/{o.questions.length} · Decisions: {o.decisions.filter(d=>val(o.id,'decision',d.id).status==='decided').length}/{o.decisions.length}</p><button className="dw-inline-button" onClick={()=>{selectObject(o.id);setShowSummary(false)}}>Review object →</button></div>)}</div>:
-   <div className="dw-workspace"><aside className={`dw-sidebar ${mobileNav?'dw-open':''}`}><div className="dw-nav-group"><div className="dw-nav-heading">Workshop</div><button className={`dw-nav-item ${scopingTab==='transcripts'?'dw-active':''}`} onClick={()=>openScoping('transcripts')}>Transcripts <span>{transcriptSuggestions.filter(x=>x.status==='pending'||x.status==='edited').length}</span></button>{FIRST_CALL_SECTIONS.map(([id,title])=><button key={id} className={`dw-nav-item ${firstTab===id?'dw-active':''}`} onClick={()=>openFirst(id)}>{title}<span>{(firstCall[id]||[]).length}</span></button>)}</div>{workshop.previous_workshop_id&&<label className="dw-mini-checkbox"><input type="checkbox" checked={onlyCarried} onChange={e=>setOnlyCarried(e.target.checked)}/>Carried-over items</label>}<div className="dw-sidebar-top"><strong>Workshop catalog</strong><span>{objects.length}/{scoped.length}</span></div><input className="dw-search" placeholder="Search objects or T-codes" value={search} onChange={e=>setSearch(e.target.value)}/><select className="dw-scope" value={scope} onChange={e=>setScope(e.target.value)}><option value="all">All areas</option>{discoveryCatalog.areas.filter(a=>scoped.some(o=>o.area===a.id)).map(a=><option value={a.id} key={a.id}>{a.title}</option>)}</select>
-    {discoveryCatalog.areas.map(a=>{const children=objects.filter(o=>o.area===a.id);return children.length?<div key={a.id} className="dw-nav-group"><div className="dw-nav-heading">{getAreaTitle(a,presenter?workshop.client_language:'en')}</div><NoteInput label="Area notes" value={val(a.id,'area_note','main').text} onChange={v=>writeNote(a.id,'area_note','main',v)} internal={entry(a.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(a.id,'area_note','main',val(a.id,'area_note','main').text||'',v)}/>{children.map(o=><button className={`dw-nav-item ${o.id===selected?.id?'dw-active':''}`} key={o.id} onClick={()=>selectObject(o.id)} title={germanHoverText(o.id,'object')}>{localizeObject(o,presenter?workshop.client_language:'en').title}<span>{objectSources[o.id]?.not_maintained?'None':(objectSources[o.id]?.source_system_ids||[]).map(id=>sourceSystems.find(x=>x.id===id)?.system_type||'').filter(Boolean).map(type=>type==='sap_ecc'||type==='sap_s4'?'SAP':type==='excel_access'?'Excel':type==='paper'?'Paper':type.startsWith('non_sap_')?'Non-SAP':'Other').filter((x,i,a)=>a.indexOf(x)===i).join('+')||'—'} · {labels[val(o.id,'object_status','main').status]||'Not started'}</span></button>)}</div>:null})}<div className="dw-nav-group"><div className="dw-nav-heading">Additional discovery</div><button className={`dw-nav-item ${showProcesses?'dw-active':''}`} onClick={()=>{setShowProcesses(true);setScopingTab(null);setFirstTab(null);setShowSummary(false);setMobileNav(false)}}>Processes & jobs <span>{processCatalog.processes.length}</span></button></div><div className="dw-nav-group"><div className="dw-nav-heading">Scoping</div><button className={`dw-nav-item ${scopingTab==='gaps'?'dw-active':''}`} onClick={()=>openScoping('gaps')}>Fit-gap <span>{gaps.length}</span></button>{[['interfaces','Interfaces'],['forms_reports','Forms & reports'],['raid','Risks & assumptions']].map(([id,title])=><button key={id} className={`dw-nav-item ${scopingTab===id?'dw-active':''}`} onClick={()=>openScoping(id)}>{title}<span>{inventories[id].length}</span></button>)}</div></aside>
+   <div className="dw-workspace"><aside className={`dw-sidebar ${mobileNav?'dw-open':''}`} aria-label="Workshop sections">
+    <div className="dw-nav-group"><div className="dw-nav-heading">Capture</div>
+     <button className={`dw-nav-item ${scopingTab==='transcripts'?'dw-active':''}`} onClick={()=>openScoping('transcripts')}><span className="dw-nav-label">Transcript analysis<em className="dw-ai-tag">AI</em></span>{transcriptSuggestions.some(x=>x.status==='pending'||x.status==='edited')?<span className="dw-nav-count dw-nav-count-hot">{transcriptSuggestions.filter(x=>x.status==='pending'||x.status==='edited').length} to review</span>:null}</button>
+    </div>
+    <div className="dw-nav-group"><div className="dw-nav-heading">Customer context</div>
+     {FIRST_CALL_SECTIONS.map(([id,title])=><button key={id} className={`dw-nav-item ${firstTab===id?'dw-active':''}`} onClick={()=>openFirst(id)}><span className="dw-nav-label">{title}</span><span className="dw-nav-count">{(firstCall[id]||[]).length||''}</span></button>)}
+    </div>
+    <div className="dw-nav-group dw-nav-catalog">
+     <div className="dw-nav-heading dw-nav-heading-row"><span>SAP PM objects</span><span>{scoped.filter(o=>val(o.id,'object_status','main').status==='done').length}/{scoped.length} done</span></div>
+     <input className="dw-search" placeholder="Filter objects or T-codes" aria-label="Filter objects" value={search} onChange={e=>setSearch(e.target.value)}/>
+     {workshop.previous_workshop_id&&<label className="dw-mini-checkbox"><input type="checkbox" checked={onlyCarried} onChange={e=>setOnlyCarried(e.target.checked)}/>Only carried-over items</label>}
+     {discoveryCatalog.areas.map(a=>{const children=objects.filter(o=>o.area===a.id);if(!children.length)return null;const done=children.filter(o=>val(o.id,'object_status','main').status==='done').length;return <details key={a.id} className="dw-area" open={children.some(o=>o.id===selected?.id)||!!search||children.length<=4}>
+      <summary><span>{getAreaTitle(a,presenter?workshop.client_language:'en')}</span><span className="dw-nav-count">{done}/{children.length}</span></summary>
+      {children.map(o=>{const st=val(o.id,'object_status','main').status||'not_started';return <button className={`dw-nav-item dw-nav-object ${o.id===selected?.id&&!firstTab&&!scopingTab&&!showProcesses&&!showSummary?'dw-active':''}`} key={o.id} onClick={()=>selectObject(o.id)} title={(labels[st]||'Not started')+(germanHoverText(o.id,'object')?' · '+germanHoverText(o.id,'object'):'')}><span className={`dw-dot dw-dot-${STATUS_DOT[st]||'none'}`} aria-label={labels[st]||'Not started'}/><span className="dw-nav-label">{localizeObject(o,presenter?workshop.client_language:'en').title}</span></button>})}
+     </details>})}
+     {!objects.length&&<p className="dw-no-results">No objects match “{search}”. Try Find or ask (Ctrl K).</p>}
+    </div>
+    <div className="dw-nav-group"><div className="dw-nav-heading">Processes</div>
+     <button className={`dw-nav-item ${showProcesses?'dw-active':''}`} onClick={()=>{setShowProcesses(true);setScopingTab(null);setFirstTab(null);setShowSummary(false);setMobileNav(false)}}><span className="dw-nav-label">Processes & jobs</span><span className="dw-nav-count">{Object.values(processEntries).filter(x=>x.status).length}/{processCatalog.processes.length}</span></button>
+    </div>
+    <div className="dw-nav-group"><div className="dw-nav-heading">Scope & gaps</div>
+     <button className={`dw-nav-item ${scopingTab==='gaps'?'dw-active':''}`} onClick={()=>openScoping('gaps')}><span className="dw-nav-label">Fit-gap</span><span className="dw-nav-count">{gaps.length||''}</span></button>
+     {[['interfaces','Interfaces'],['forms_reports','Forms & reports'],['raid','Risks & assumptions']].map(([id,title])=><button key={id} className={`dw-nav-item ${scopingTab===id?'dw-active':''}`} onClick={()=>openScoping(id)}><span className="dw-nav-label">{title}</span><span className="dw-nav-count">{inventories[id].length||''}</span></button>)}
+    </div>
+   </aside>
    <div className="dw-main">{scopingTab==='transcripts'?<Transcripts workshop={workshop} session={session} transcripts={transcripts} suggestions={transcriptSuggestions} onRefresh={refreshTranscriptData} onAccept={acceptTranscriptSuggestion} onExisting={existingTranscriptValue} presenter={presenter}/>:['interfaces','forms_reports','raid'].includes(scopingTab)?<ScopingInventory key={scopingTab} kind={scopingTab} rows={inventories[scopingTab]} stakeholders={firstCall.stakeholders} requests={firstCall.requests} onAdd={newInventory} onEdit={changeInventory} onDelete={removeInventory} onGap={inventoryToGap} presenter={presenter}/>:scopingTab==='gaps'?<FitGap entries={entries} legacyFields={legacyFields} processEntries={processEntries} legacyHints={legacyHints} gaps={gaps} ignored={ignoredGaps} stakeholders={firstCall.stakeholders} onAdd={createGap} onEdit={changeGap} onDelete={removeGap} onIgnore={ignoreGapCandidate} onUnignore={unignoreGapCandidate} presenter={presenter} session={session} workshopId={workshop.id} onMerge={mergeGapGroup}/>:firstTab?<FirstCall key={firstTab} section={firstTab} rows={firstCall} workshopId={workshop.id} add={addFirst} edit={editFirst} remove={deleteFirst} onTodo={moveParkToTodo} objectId={selected?.id} presenter={presenter}/>:showProcesses?<ProcessJobs workshopId={workshop.id} entries={processEntries} onChange={changeProcess} presenter={presenter} language={workshop.client_language||'en'} onJump={selectObject} onTask={createProcessTask} categoryNotes={Object.fromEntries(processCatalog.categories.map(cat=>[cat.id,{text:val('process:'+cat.id,'area_note','main').text||'',internal:!!entry('process:'+cat.id,'area_note','main')?.is_internal}]))} onCategoryNote={(id,text,internal)=>writeNote('process:'+id,'area_note','main',text,internal)}/>:selected&&<div className="dw-card"><div className="dw-object-heading"><div><div className="dw-kicker">{area?.title} · {selectedIndex+1} / {objects.length}</div><h2 title={germanHoverText(selected.id,'object')}>{displaySelected.title}</h2></div><select aria-label="Object status" value={val(selected.id,'object_status','main').status||'not_started'} onChange={e=>writeEntry(selected.id,'object_status','main',{status:e.target.value})}>{statuses.map(x=><option key={x} value={x}>{labels[x]}</option>)}</select></div>
-    <button className="dw-inline-button" onClick={()=>openFirst('stakeholders')}>Owners: {firstCall.stakeholders.filter(x=>(x.responsible_for||[]).includes(selected.id)).map(x=>x.name).join(', ')||'not recorded'}</button>
-    <button className="dw-inline-button" onClick={()=>openFirst('drivers')}>{firstCall.drivers.filter(x=>x.kind==='pain'&&(x.affected||[]).includes(selected.id)).length} pain points · {firstCall.drivers.filter(x=>x.kind==='goal'&&(x.affected||[]).includes(selected.id)).length} goals</button>
-    <button className="dw-inline-button" onClick={()=>openFirst('requests')}>Requests: {firstCall.requests.filter(x=>x.related_id===selected.id&&x.status==='open').length} open</button>
-    <button className="dw-inline-button" onClick={()=>openScoping('gaps')}>Gaps: {gaps.filter(g=>g.related_id===selected.id).length}</button><button className="dw-inline-button" onClick={()=>setShowProcesses(true)}>Related processes: {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='valid').length} valid · {processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='clarify').length} clarify</button><div className="dw-caption">{legacyFields.filter(x=>x.object_id===selected.id).length} extra source fields · {legacyFields.filter(x=>x.object_id===selected.id&&(!x.sap_handling||x.sap_handling==='clarify')).length} open</div><div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div><p className="dw-description">{displaySelected.plain}</p>
+    <div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div>
+    <div className="dw-context-chips" aria-label="Linked information">
+     {[
+      ['Owners',firstCall.stakeholders.filter(x=>(x.responsible_for||[]).includes(selected.id)).map(x=>x.name).join(', ')||'—',()=>openFirst('stakeholders')],
+      ['Pain points / goals',firstCall.drivers.filter(x=>x.kind==='pain'&&(x.affected||[]).includes(selected.id)).length+' / '+firstCall.drivers.filter(x=>x.kind==='goal'&&(x.affected||[]).includes(selected.id)).length,()=>openFirst('drivers')],
+      ['Open requests',firstCall.requests.filter(x=>x.related_id===selected.id&&x.status==='open').length,()=>openFirst('requests')],
+      ['Gaps',gaps.filter(g=>g.related_id===selected.id).length,()=>openScoping('gaps')],
+      ['Processes valid',processCatalog.processes.filter(p=>p.relatedObjects?.split(',').includes(selected.id)&&processEntries[p.id]?.status==='valid').length,()=>setShowProcesses(true)],
+      ['Source fields open',legacyFields.filter(x=>x.object_id===selected.id&&(!x.sap_handling||x.sap_handling==='clarify')).length+' / '+legacyFields.filter(x=>x.object_id===selected.id).length,()=>{const el=document.getElementById('dw-legacy');if(el){el.open=true;el.scrollIntoView({behavior:'smooth',block:'start'})}}],
+     ].map(([k,v,fn])=><button type="button" key={k} className="dw-chip" onClick={fn}><span>{k}</span><strong>{v}</strong></button>)}
+    </div>
+<p className="dw-description">{displaySelected.plain}</p>
     {val(selected.id,'object_status','main').status!=='out_of_scope'&&<>
     <Section title="Legacy data & source mapping" count={legacyFields.filter(x=>x.object_id===selected.id).length+' fields'} open={false} id="dw-legacy"><p className="dw-caption">Source systems, uploaded legacy fields and AI mapping hints.</p>
     <ObjectSourcePicker workshopId={workshop.id} objectId={selected.id} systems={sourceSystems} value={objectSources[selected.id]} onSave={updateObjectSources} presenter={presenter}/>
@@ -606,11 +725,12 @@ export default function DiscoveryWorkshop({session}) {
       {!presenter&&<div className="dw-inline"><input className="dw-input" aria-label="New custom field" placeholder="Add another field" value={customLabel} onChange={e=>setCustomLabel(e.target.value)}/><button className="dw-button" onClick={()=>addCustom('custom_field',customLabel)}>+ Add</button></div>}
      </div>
     </Section>
-    <Section id="dw-questions" title="Process questions" count={selected.questions.length} open={false} summary={`${selected.questions.filter(q=>{const a=val(selected.id,'question',q.id).answer;return a!==undefined&&a!==''&&(!Array.isArray(a)||a.length)}).length} answered`}>{selected.questions.map((q,i)=><details key={q.id} className="dw-section" style={{marginBottom:6,borderRadius:9}}><summary style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}><span aria-hidden="true" style={{color:(()=>{const a=val(selected.id,'question',q.id).answer;return a!==undefined&&a!==''&&(!Array.isArray(a)||a.length)?'#16a34a':'#94a3b8'})(),fontWeight:700}}>●</span><span style={{flex:1,minWidth:0}}>{displaySelected.questions[i]?.text||q.text}</span><small style={{maxWidth:'35%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#16a34a'}}>{(()=>{const a=val(selected.id,'question',q.id).answer;return Array.isArray(a)?a.join(', '):typeof a==='string'||typeof a==='number'?String(a):''})()}</small></summary><div className="dw-section-body"><QuestionEditor item={q} display={displaySelected.questions[i]} value={val(selected.id,'question',q.id)} linkedSizing={SIZING_LINKS[q.id]?firstCall.sizing.find(x=>x.metric_id===SIZING_LINKS[q.id])?.value:null} onChange={v=>{writeEntry(selected.id,'question',q.id,v);if(SIZING_LINKS[q.id])editFirst('sizing',{metric_id:SIZING_LINKS[q.id]},{metric_id:SIZING_LINKS[q.id],value:v.answer===''?null:v.answer,source:'client'})}}/></div></details>)}
+    <Section id="dw-questions" title="Process questions" count={selected.questions.length} open={false} summary={`${selected.questions.filter(q=>{const a=val(selected.id,'question',q.id).answer;return a!==undefined&&a!==''&&(!Array.isArray(a)||a.length)}).length} answered`}>{selected.questions.map((q,i)=><details key={q.id} id={'dw-i-'+q.id} className="dw-section" style={{marginBottom:6,borderRadius:9}}><summary style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}><span aria-hidden="true" style={{color:(()=>{const a=val(selected.id,'question',q.id).answer;return a!==undefined&&a!==''&&(!Array.isArray(a)||a.length)?'#16a34a':'#94a3b8'})(),fontWeight:700}}>●</span><span style={{flex:1,minWidth:0}}>{displaySelected.questions[i]?.text||q.text}</span><small style={{maxWidth:'35%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#16a34a'}}>{(()=>{const a=val(selected.id,'question',q.id).answer;return Array.isArray(a)?a.join(', '):typeof a==='string'||typeof a==='number'?String(a):''})()}</small></summary><div className="dw-section-body"><QuestionEditor item={q} display={displaySelected.questions[i]} value={val(selected.id,'question',q.id)} linkedSizing={SIZING_LINKS[q.id]?firstCall.sizing.find(x=>x.metric_id===SIZING_LINKS[q.id])?.value:null} onChange={v=>{writeEntry(selected.id,'question',q.id,v);if(SIZING_LINKS[q.id])editFirst('sizing',{metric_id:SIZING_LINKS[q.id]},{metric_id:SIZING_LINKS[q.id],value:v.answer===''?null:v.answer,source:'client'})}}/></div></details>)}
  {Object.values(entries).filter(x=>x.object_id===selected.id&&x.item_type==='custom_question').map(x=><QuestionEditor key={x.item_id} item={{text:x.value?.text,type:'text'}} value={{answer:x.value?.answer||''}} onChange={v=>writeEntry(selected.id,'custom_question',x.item_id,{...x.value,answer:v.answer})}/>)}
  <div className="dw-inline"><input className="dw-input" placeholder="Add custom question" aria-label="New custom question" value={customQuestion} onChange={e=>setCustomQuestion(e.target.value)}/><button className="dw-button" onClick={()=>addCustom('custom_question',customQuestion)}>+ Question</button></div></Section>
     <Section id="dw-decisions" title="Decisions" count={selected.decisions.length} open={false} summary={`${selected.decisions.filter(d=>val(selected.id,'decision',d.id).status==='decided').length} decided`}>{selected.decisions.map((d,i)=><DecisionEditor key={d.id} item={d} display={displaySelected.decisions[i]} stakeholders={firstCall.stakeholders} value={val(selected.id,'decision',d.id)} onChange={v=>writeEntry(selected.id,'decision',d.id,v)}/>)}</Section>
     {!presenter&&<Section title="Ask Wani & follow-ups" count="AI" open={false}><div className="dw-ai-box"><p className="dw-caption">Suggestions only. Nothing is added to your notes unless you select Save.</p><div className="dw-inline"><button className="dw-button" disabled={!!aiBusy||!!pending||!!processPending} onClick={()=>askAI('followups')}>{aiBusy==='followups'?'Thinking…':'Suggest follow-ups'}</button></div>{followups.map((q,i)=><div className="dw-item" key={i}><strong>{q.question}</strong><p className="dw-caption">{q.why}</p><button className="dw-inline-button" onClick={()=>addCustom('custom_question',q.question)}>Add as custom question</button></div>)}<textarea rows="2" placeholder="Ask about the current SAP PM object…" value={aiQuestion} onChange={e=>setAiQuestion(e.target.value)}/><button className="dw-button" disabled={!!aiBusy||!aiQuestion.trim()} onClick={()=>askAI('ask')}>{aiBusy==='ask'?'Asking…':'Ask Wani'}</button>{aiAnswer&&<div className="dw-ai-answer"><p>{aiAnswer}</p><button className="dw-inline-button" onClick={()=>{writeNote(selected.id,'note','main',(val(selected.id,'note','main').text||'')+'\\n'+aiAnswer,true)}}>Save to internal notes</button></div>}</div></Section>}
+    {!presenter&&area&&<Section title={'Area notes · '+getAreaTitle(area,'en')} count={val(area.id,'area_note','main').text?.trim()?'Saved':'Empty'} open={false}><NoteInput label={'Notes for all '+getAreaTitle(area,'en')+' objects'} value={val(area.id,'area_note','main').text} onChange={v=>writeNote(area.id,'area_note','main',v)} internal={entry(area.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(area.id,'area_note','main',val(area.id,'area_note','main').text||'',v)}/></Section>}
     <Section id="dw-actions" title="Notes & action items" count={todos.filter(t=>t.object_id===selected.id).length} open={false}><NoteInput label="Object notes" value={val(selected.id,'note','main').text} onChange={v=>writeNote(selected.id,'note','main',v)} internal={entry(selected.id,'note','main')?.is_internal} onInternal={v=>writeNote(selected.id,'note','main',val(selected.id,'note','main').text||'',v)}/>
     {!presenter&&<><div className="dw-inline"><input className="dw-input" aria-label="New action item" value={newTodo} onChange={e=>setNewTodo(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addTodo()}}} placeholder="Add follow-up / action item…"/><button className="dw-button" onClick={addTodo}>Add</button></div>{todos.filter(t=>t.object_id===selected.id).map(t=><div key={t.id} className="dw-task"><label><input type="checkbox" checked={t.done} onChange={e=>editTodo(t.id,{done:e.target.checked})}/>{t.text}</label><input aria-label="Owner" placeholder="Owner" defaultValue={t.owner||''} onBlur={e=>editTodo(t.id,{owner:e.target.value})}/><input aria-label="Due date" type="date" defaultValue={t.due_date||''} onChange={e=>editTodo(t.id,{due_date:e.target.value||null})}/><button className="dw-button" onClick={()=>deleteTodo(t.id)}>Remove</button></div>)}</>}</Section>
     </>}

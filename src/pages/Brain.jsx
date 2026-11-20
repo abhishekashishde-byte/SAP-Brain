@@ -3141,34 +3141,6 @@ export default function Brain({ session }) {
         @keyframes blob2{0%,100%{transform:translate(15%,20%) scale(1.1)}50%{transform:translate(-20%,-10%) scale(1.4)}}
         @keyframes blob3{0%,100%{transform:translate(-5%,10%) scale(1)}50%{transform:translate(10%,-15%) scale(1.2)}}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(79,70,229,0.25);border-radius:4px}
-        /* Implementation: polished graphite/silver, no purple; shine moves only on interaction. */
-        .wani-impl-nav{
-          position:relative;isolation:isolate;overflow:hidden;
-          display:inline-flex;align-items:center;justify-content:center;gap:7px;
-          flex-shrink:0;white-space:nowrap;
-          color:#e9e9ec!important;text-decoration:none;
-          background:linear-gradient(145deg,#25262a 0%,#101115 56%,#202126 100%);
-          border:1px solid #62656c;border-radius:11px;
-          box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 3px 12px rgba(0,0,0,.26);
-          font-family:Inter,'DM Sans',sans-serif;font-size:12px;font-weight:680;letter-spacing:.01em;
-          padding:8px 13px;min-height:36px;
-          transition:transform .2s ease,border-color .25s ease,box-shadow .25s ease;
-        }
-        .wani-impl-nav::after{
-          content:'';pointer-events:none;position:absolute;inset:-120% auto -120% -60%;width:44%;
-          background:linear-gradient(90deg,transparent,rgba(255,255,255,.0) 12%,rgba(255,255,255,.30) 50%,rgba(255,255,255,.0) 88%,transparent);
-          transform:translateX(-160%) rotate(24deg);transition:transform .8s cubic-bezier(.18,.6,.22,1);
-        }
-        .wani-impl-nav:hover,.wani-impl-nav:focus-visible{
-          border-color:#c4c7cd;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 0 0 1px rgba(255,255,255,.08),0 0 22px rgba(255,255,255,.13);
-          transform:translateY(-1px);
-        }
-        .wani-impl-nav:hover::after,.wani-impl-nav:focus-visible::after{transform:translateX(450%) rotate(24deg)}
-        .wani-impl-nav:active{transform:scale(.97)}
-        .wani-impl-nav:focus-visible{outline:2px solid #e1e3e8;outline-offset:3px}
-        .wani-impl-nav svg{color:#d5d7dd}
-        @media(max-width:768px){.wani-impl-nav{padding:8px 10px;font-size:11px;min-height:35px}}
-        @media(prefers-reduced-motion:reduce){.wani-impl-nav,.wani-impl-nav::after{transition:none!important;transform:none!important}.wani-impl-nav::after{display:none}}
         @media(max-width:768px){
           .main-topbar{padding:0 18px!important;height:68px!important;min-height:68px!important;}
           .chat-input-wrap{padding:10px 14px 16px!important;margin-bottom:0!important;}
@@ -3203,6 +3175,9 @@ export default function Brain({ session }) {
                 color: view==='history' ? t.text : t.text3,
                 boxShadow: view==='history' ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
               }}><IconHistory size={15}/>{!isMobile&&' History'}</button>
+            <a href="/implementation" title="SAP implementation workspace" aria-label="Open Implementation workspace"
+              style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',background:'transparent',color:t.text3,textDecoration:'none' }}
+              onMouseEnter={e=>{e.currentTarget.style.color=t.text}} onMouseLeave={e=>{e.currentTarget.style.color=t.text3}}><IconLayers size={15}/>{!isMobile&&' Implementation'}</a>
           </div>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
 
@@ -3264,11 +3239,6 @@ export default function Brain({ session }) {
               {isMobile && tab.key === 'home' ? 'Chat' : tab.label}
             </button>
           ))}
-          {/* Implementation belongs to the main navigation, not as a floating home-screen CTA. */}
-          <a className="wani-impl-nav" href="/implementation"
-            title="SAP S/4HANA Implementation workspace" aria-label="Open Implementation workspace">
-            <IconLayers size={15}/>{isMobile?'Implement':'Implementation'}
-          </a>
 
           <div style={{ flex:1 }} />
 

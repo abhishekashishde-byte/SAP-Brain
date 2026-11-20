@@ -6,12 +6,14 @@ import discoveryAI from '../server/discovery/discovery-ai.js'
 import discoveryImport from '../server/discovery/discovery-import.js'
 import discoveryTranscript from '../server/discovery/discovery-transcript.js'
 import discoveryRetention from '../server/discovery/discovery-retention.js'
+import discoveryFind from '../server/discovery/discovery-find.js'
 
 const routes={
   ai:discoveryAI,
   import:discoveryImport,
   transcript:discoveryTranscript,
-  retention:discoveryRetention
+  retention:discoveryRetention,
+  find:discoveryFind
 }
 export default async function handler(req,res){
  const route=typeof req.query?.route==='string'?req.query.route:null
