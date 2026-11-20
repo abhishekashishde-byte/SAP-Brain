@@ -7,5 +7,10 @@
     "not_found_handling": "single-page-application",
     "binding": "ASSETS"
   },
-  "main": "worker/index.js"
+  "main": "worker/index.js",
+  "triggers": {
+    "crons": [
+      "0 3 * * *"
+    ]
+  }
 }
