@@ -15,7 +15,7 @@ export const FINDER_SECTIONS = [
   ['interfaces', 'Interfaces', 'Integrations with other systems'],
   ['forms_reports', 'Forms & reports', 'Print forms and reports'],
   ['raid', 'Risks & assumptions', 'Risks, assumptions, issues, dependencies'],
-  ['summary', 'Summary & export', 'Excel, PDF, scope pack, AI minutes'],
+  ['summary', 'Summary & export', 'Excel, PDF, scope pack'],
   ['details', 'Workshop details', 'Customer, date, sources, general notes'],
   ['presenter', 'Presenter mode', 'Clean view for screen sharing'],
 ]

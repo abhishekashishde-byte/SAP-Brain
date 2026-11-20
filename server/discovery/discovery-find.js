@@ -20,7 +20,7 @@ export const FIND_SECTIONS = [
   ['interfaces', 'Interfaces: integrations with other systems'],
   ['forms_reports', 'Forms & reports: print forms, reports, layouts'],
   ['raid', 'Risks, assumptions, issues and dependencies'],
-  ['summary', 'Summary & export: Excel, PDF, scope pack, AI meeting minutes'],
+  ['summary', 'Summary & export: Excel, PDF, scope pack'],
   ['details', 'Workshop details: customer, date, participants, legacy source systems, general notes, legacy manual import'],
   ['presenter', 'Presenter mode: clean view to share the screen with the customer'],
 ]
