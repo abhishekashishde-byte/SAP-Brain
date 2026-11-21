@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 const cardStyle = {
-  background: '#12121A', border: '1px solid rgba(255,255,255,0.08)',
+  background: '#161616', border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: 16, padding: 18,
 }
 
@@ -29,9 +29,9 @@ function formatTokens(value) {
 function Metric({ label, value, hint }) {
   return (
     <div style={cardStyle}>
-      <div style={{ fontSize: 12, color: '#8A849E', marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 750, color: '#F4F1FF' }}>{value}</div>
-      {hint && <div style={{ fontSize: 11, color: '#69647C', marginTop: 6 }}>{hint}</div>}
+      <div style={{ fontSize: 12, color: '#8f9093', marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 750, color: '#f8f8f8' }}>{value}</div>
+      {hint && <div style={{ fontSize: 11, color: '#6f7071', marginTop: 6 }}>{hint}</div>}
     </div>
   )
 }
@@ -100,23 +100,23 @@ export default function AdminDashboard({ onClose, session }) {
   }, [data, query])
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0A0A12', color: '#F4F1FF', fontFamily: "'Inter',sans-serif", padding: 24 }}>
+    <div style={{ minHeight: '100dvh', background: '#0e0e0e', color: '#f8f8f8', fontFamily: "'Inter',sans-serif", padding: 24 }}>
       <div style={{ maxWidth: 1250, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
           <div>
-            <div style={{ fontSize: 12, color: '#7F78A7', fontWeight: 700, letterSpacing: 1.1, textTransform: 'uppercase' }}>Wani Admin</div>
+            <div style={{ fontSize: 12, color: '#8d8f92', fontWeight: 700, letterSpacing: 1.1, textTransform: 'uppercase' }}>Wani Admin</div>
             <h1 style={{ margin: '6px 0 0', fontSize: 28 }}>Usage Dashboard</h1>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={load} style={{ padding: '9px 14px', borderRadius: 10, border: '1px solid #343044', background: '#171522', color: '#D8D3EA', cursor: 'pointer' }}>Refresh</button>
-            <button onClick={onClose} style={{ padding: '9px 14px', borderRadius: 10, border: '1px solid #4F46E5', background: '#4F46E5', color: '#fff', cursor: 'pointer' }}>Back to Wani</button>
+            <button onClick={load} style={{ padding: '9px 14px', borderRadius: 10, border: '1px solid #393a3b', background: '#1b1b1c', color: '#dddee0', cursor: 'pointer' }}>Refresh</button>
+            <button onClick={onClose} style={{ padding: '9px 14px', borderRadius: 10, border: '1px solid #90949b', background: '#90949b', color: '#fff', cursor: 'pointer' }}>Back to Wani</button>
           </div>
         </div>
 
         {error && <div style={{ ...cardStyle, borderColor: 'rgba(239,68,68,.4)', color: '#FCA5A5', marginBottom: 18 }}>{error}</div>}
 
         {loading && !data ? (
-          <div style={{ color: '#8A849E', padding: 20 }}>Loading admin data…</div>
+          <div style={{ color: '#8f9093', padding: 20 }}>Loading admin data…</div>
         ) : data && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
@@ -137,9 +137,9 @@ export default function AdminDashboard({ onClose, session }) {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder="Search user or email…"
-                style={{ flex: 1, minWidth: 220, background: '#0E0D15', color: '#F4F1FF', border: '1px solid #302C40', borderRadius: 10, padding: '10px 12px', outline: 'none' }}
+                style={{ flex: 1, minWidth: 220, background: '#111111', color: '#f8f8f8', border: '1px solid #353637', borderRadius: 10, padding: '10px 12px', outline: 'none' }}
               />
-              <div style={{ fontSize: 12, color: '#8A849E' }}>
+              <div style={{ fontSize: 12, color: '#8f9093' }}>
                 Free limit: {data.limits.daily}/day · {data.limits.monthly}/month
               </div>
             </div>
@@ -148,9 +148,9 @@ export default function AdminDashboard({ onClose, session }) {
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1380 }}>
                   <thead>
-                    <tr style={{ background: '#171522' }}>
+                    <tr style={{ background: '#1b1b1c' }}>
                       {['User','Access status','Last online','Today','Month','Tokens today','Tokens month','Customer briefs','Consultant notes','Images','Credits left','Joined','Action'].map(h => (
-                        <th key={h} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, textTransform: 'uppercase', letterSpacing: .6, color: '#8A849E', borderBottom: '1px solid #2A2736' }}>{h}</th>
+                        <th key={h} style={{ textAlign: 'left', padding: '12px 14px', fontSize: 11, textTransform: 'uppercase', letterSpacing: .6, color: '#8f9093', borderBottom: '1px solid #2e2e2f' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -159,15 +159,15 @@ export default function AdminDashboard({ onClose, session }) {
                       <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,.055)' }}>
                         <td style={{ padding: '13px 14px' }}>
                           <div style={{ fontSize: 13, fontWeight: 650 }}>{u.name}</div>
-                          <div style={{ fontSize: 11, color: '#77718B', marginTop: 2 }}>{u.email}</div>
-                          <div style={{ fontSize: 9, color: '#555064', marginTop: 2 }}>{u.id}</div>
+                          <div style={{ fontSize: 11, color: '#7c7d80', marginTop: 2 }}>{u.email}</div>
+                          <div style={{ fontSize: 9, color: '#595a5b', marginTop: 2 }}>{u.id}</div>
                         </td>
                         <td style={{ padding: '13px 14px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: u.approved ? '#22C55E' : '#F59E0B', boxShadow: u.online ? '0 0 0 3px rgba(34,197,94,.12)' : 'none' }}/>
                             <div>
                               <div style={{ color: u.approved ? '#86EFAC' : '#FCD34D', fontWeight: 650 }}>{u.approved ? 'Approved' : 'Pending approval'}</div>
-                              <div style={{ color:'#77718B', fontSize:10, marginTop:2 }}>{u.emailConfirmed ? 'Email confirmed' : 'Email not confirmed'} · {u.provider || 'email'}{u.online ? ' · Online' : ''}</div>
+                              <div style={{ color:'#7c7d80', fontSize:10, marginTop:2 }}>{u.emailConfirmed ? 'Email confirmed' : 'Email not confirmed'} · {u.provider || 'email'}{u.online ? ' · Online' : ''}</div>
                             </div>
                           </div>
                         </td>
@@ -184,22 +184,22 @@ export default function AdminDashboard({ onClose, session }) {
                         </td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.customerBriefs || 0}</td>
                         <td style={{ padding: '13px 14px', fontSize: 13 }}>{u.consultantNotes || 0}</td>
-                        <td style={{ padding: '13px 14px', fontSize: 13, fontWeight: 700, color: '#C4B5FD' }}>{u.imagesTotal || 0}</td>
+                        <td style={{ padding: '13px 14px', fontSize: 13, fontWeight: 700, color: '#d7d8db' }}>{u.imagesTotal || 0}</td>
                         <td style={{ padding: '13px 14px', fontSize: 12 }}>
-                          {u.unlimited ? <span style={{ color: '#A78BFA' }}>Unlimited</span> : `${u.dailyRemaining} today · ${u.monthlyRemaining} month`}
+                          {u.unlimited ? <span style={{ color: '#bfc1c6' }}>Unlimited</span> : `${u.dailyRemaining} today · ${u.monthlyRemaining} month`}
                         </td>
-                        <td style={{ padding: '13px 14px', fontSize: 12, color: '#A9A4BA' }}>
+                        <td style={{ padding: '13px 14px', fontSize: 12, color: '#aeafb0' }}>
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
                         </td>
                         <td style={{ padding: '13px 14px' }}>
                           {u.approved
                             ? <span style={{ color:'#6B7280', fontSize:11 }}>Approved</span>
-                            : <button onClick={() => approveUser(u)} disabled={approving === u.id} style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #4F46E5', background:'#4F46E5', color:'#fff', cursor:approving === u.id ? 'wait' : 'pointer', fontWeight:650, fontSize:11, opacity:approving === u.id ? .65 : 1 }}>{approving === u.id ? 'Approving…' : 'Approve'}</button>}
+                            : <button onClick={() => approveUser(u)} disabled={approving === u.id} style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #90949b', background:'#90949b', color:'#fff', cursor:approving === u.id ? 'wait' : 'pointer', fontWeight:650, fontSize:11, opacity:approving === u.id ? .65 : 1 }}>{approving === u.id ? 'Approving…' : 'Approve'}</button>}
                         </td>
                       </tr>
                     ))}
                     {users.length === 0 && (
-                      <tr><td colSpan="13" style={{ padding: 24, textAlign: 'center', color: '#77718B' }}>No users found.</td></tr>
+                      <tr><td colSpan="13" style={{ padding: 24, textAlign: 'center', color: '#7c7d80' }}>No users found.</td></tr>
                     )}
                   </tbody>
                 </table>

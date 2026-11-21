@@ -2,9 +2,9 @@ import { supabase } from './supabaseClient'
 
 const FAB_SELECTOR = 'button[title="New chat"], button[data-wani-credit-fab="true"]'
 const LONG_PRESS_MS = 520
-const PURPLE = '#4F46E5'
-const PURPLE_BORDER = '#6D5DFB'
-const USED_DARK = '#050508'
+const PURPLE = '#90949b'
+const PURPLE_BORDER = '#a8abb0'
+const USED_DARK = '#060607'
 
 let installed = false
 let currentStatus = null
@@ -20,14 +20,14 @@ function clamp(value, min, max) {
 }
 
 function statusTone(usage) {
-  if (!usage) return { color: '#A78BFA', label: 'Free credits' }
+  if (!usage) return { color: '#bfc1c6', label: 'Free credits' }
   if (usage.dailyRemaining <= 0 || usage.monthlyRemaining <= 0) {
     return { color: '#F87171', label: 'Limit reached' }
   }
   if (usage.dailyRemaining === 1 || usage.monthlyRemaining <= 3) {
     return { color: '#FBBF24', label: 'Running low' }
   }
-  return { color: '#A78BFA', label: 'Free credits' }
+  return { color: '#bfc1c6', label: 'Free credits' }
 }
 
 function removePopover() {
@@ -43,7 +43,7 @@ function progressRow(label, used, limit, color) {
     <div style="margin-top:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:6px">
         <span style="font-size:12px;color:rgba(255,255,255,.62)">${label}</span>
-        <span style="font-size:12px;font-weight:650;color:#F5F3FF">${used} / ${limit} used</span>
+        <span style="font-size:12px;font-weight:650;color:#f9f9f9">${used} / ${limit} used</span>
       </div>
       <div style="height:5px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden">
         <div style="width:${pct}%;height:100%;border-radius:999px;background:${color};transition:width .25s ease"></div>
@@ -67,13 +67,13 @@ function showPopover(button) {
   popover.innerHTML = `
     <div style="display:flex;align-items:center;gap:9px">
       <span style="width:9px;height:9px;border-radius:50%;background:${tone.color};box-shadow:0 0 12px ${tone.color}"></span>
-      <span style="font-size:13px;font-weight:700;color:#F8F7FF;letter-spacing:.01em">${tone.label}</span>
+      <span style="font-size:13px;font-weight:700;color:#fbfbfb;letter-spacing:.01em">${tone.label}</span>
     </div>
     <div style="font-size:20px;font-weight:750;color:#FFFFFF;margin-top:10px;letter-spacing:-.02em">
       ${dailyLeft} question${dailyLeft === 1 ? '' : 's'} left today
     </div>
-    ${progressRow('Today', usage.dailyUsed, usage.dailyLimit, '#7C6CF2')}
-    ${progressRow('This month', usage.monthlyUsed, usage.monthlyLimit, '#9B8AFB')}
+    ${progressRow('Today', usage.dailyUsed, usage.dailyLimit, '#abaeb3')}
+    ${progressRow('This month', usage.monthlyUsed, usage.monthlyLimit, '#bfc1c6')}
     <div style="height:1px;background:rgba(255,255,255,.08);margin:14px 0 10px"></div>
     <div style="font-size:11px;line-height:1.45;color:rgba(255,255,255,.48)">
       ${monthlyLeft} monthly credit${monthlyLeft === 1 ? '' : 's'} remaining · Daily credits reset at midnight Berlin time
@@ -89,9 +89,9 @@ function showPopover(button) {
     boxSizing: 'border-box',
     padding: '16px 17px 15px',
     borderRadius: '16px',
-    background: 'linear-gradient(145deg, rgba(24,19,45,.985), rgba(9,8,17,.985))',
-    border: '1px solid rgba(109,93,251,.58)',
-    boxShadow: '0 18px 48px rgba(0,0,0,.52), 0 0 0 1px rgba(124,108,242,.08) inset',
+    background: 'linear-gradient(145deg, rgba(30,31,34,.985), rgba(12,12,13,.985))',
+    border: '1px solid rgba(168,171,176,.58)',
+    boxShadow: '0 18px 48px rgba(0,0,0,.52), 0 0 0 1px rgba(171,174,179,.08) inset',
     backdropFilter: 'blur(18px)',
     WebkitBackdropFilter: 'blur(18px)',
     fontFamily: "'Inter','DM Sans',sans-serif",
@@ -114,8 +114,8 @@ function addGlobalStyles() {
       to { opacity:1; transform:translateY(0) scale(1); }
     }
     @keyframes waniCreditPulse {
-      0% { box-shadow:0 0 0 0 rgba(109,93,251,.48), 0 7px 22px rgba(79,70,229,.38); }
-      100% { box-shadow:0 0 0 11px rgba(109,93,251,0), 0 7px 22px rgba(79,70,229,.38); }
+      0% { box-shadow:0 0 0 0 rgba(168,171,176,.48), 0 7px 22px rgba(144,148,155,.38); }
+      100% { box-shadow:0 0 0 11px rgba(168,171,176,0), 0 7px 22px rgba(144,148,155,.38); }
     }
   `
   document.head.appendChild(style)
@@ -129,7 +129,7 @@ function restoreAdminButton(button) {
   button.style.background = PURPLE
   button.style.border = 'none'
   button.style.boxSizing = ''
-  button.style.boxShadow = '0 6px 20px rgba(79,70,229,0.45)'
+  button.style.boxShadow = '0 6px 20px rgba(144,148,155,0.45)'
   button.style.color = '#fff'
   button.style.touchAction = ''
   button.style.userSelect = ''
@@ -156,7 +156,7 @@ function applyUsageStyle(button) {
   button.style.border = `2px solid ${PURPLE_BORDER}`
   button.style.boxSizing = 'border-box'
   button.style.color = '#fff'
-  button.style.boxShadow = '0 0 0 1px rgba(109,93,251,.18), 0 7px 22px rgba(79,70,229,.38)'
+  button.style.boxShadow = '0 0 0 1px rgba(168,171,176,.18), 0 7px 22px rgba(144,148,155,.38)'
   button.style.touchAction = 'manipulation'
   button.style.userSelect = 'none'
   button.style.webkitUserSelect = 'none'

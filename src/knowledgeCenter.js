@@ -187,13 +187,13 @@ function buildPanel() {
   const panel = element('section')
   Object.assign(panel.style, {
     width: 'min(620px, 100vw)', height: '100dvh', boxSizing: 'border-box',
-    background: '#10101A', borderLeft: '1px solid #2A2440', color: '#F0EEF8',
+    background: '#141516', borderLeft: '1px solid #303134', color: '#f2f3f4',
     display: 'flex', flexDirection: 'column', boxShadow: '-20px 0 60px rgba(0,0,0,.4)',
   })
 
   const header = element('div')
   Object.assign(header.style, {
-    padding: '20px 20px 14px', borderBottom: '1px solid #2A2440', flexShrink: '0',
+    padding: '20px 20px 14px', borderBottom: '1px solid #303134', flexShrink: '0',
   })
 
   const titleRow = element('div')
@@ -207,7 +207,7 @@ function buildPanel() {
       state.isAdmin
         ? 'Review local consultant knowledge and promote verified entries globally.'
         : 'Your local knowledge and verified global knowledge used by Wani.',
-      { fontSize: '12px', color: '#8A849E', marginTop: '5px', lineHeight: '1.5' },
+      { fontSize: '12px', color: '#8f9093', marginTop: '5px', lineHeight: '1.5' },
     ),
   )
 
@@ -239,9 +239,9 @@ function tabButton(key, label) {
   const active = state.tab === key
   const button = element('button', { type: 'button' }, label)
   Object.assign(button.style, {
-    border: active ? '1px solid #6366F1' : '1px solid #302A49',
-    background: active ? '#4F46E5' : '#191629',
-    color: active ? '#FFF' : '#A9A3C0',
+    border: active ? '1px solid #a6a9ae' : '1px solid #38393b',
+    background: active ? '#90949b' : '#1e1f21',
+    color: active ? '#FFF' : '#b0b1b3',
     borderRadius: '9px', padding: '8px 12px', cursor: 'pointer',
     font: "600 12px 'Inter','DM Sans',sans-serif",
   })
@@ -286,7 +286,7 @@ function renderLocal(content) {
 
   state.localEntries.forEach(entry => {
     const status = entry.admin_review_status === 'rejected'
-      ? { label: 'Local only · reviewed', background: 'rgba(148,163,184,.13)', color: '#B7B3C7' }
+      ? { label: 'Local only · reviewed', background: 'rgba(148,163,184,.13)', color: '#bcbdbe' }
       : { label: 'Pending global review', background: 'rgba(245,158,11,.14)', color: '#FBBF24' }
 
     const card = knowledgeCard(entry, status)
@@ -372,8 +372,8 @@ function reviewCard(entry) {
   const meta = element('div')
   Object.assign(meta.style, { display: 'flex', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' })
   meta.append(
-    styledText(entry.user_email || 'Unknown user', { fontSize: '12px', fontWeight: '700', color: '#C4B5FD' }),
-    styledText(formatDate(entry.created_at), { fontSize: '11px', color: '#77718B' }),
+    styledText(entry.user_email || 'Unknown user', { fontSize: '12px', fontWeight: '700', color: '#d7d8db' }),
+    styledText(formatDate(entry.created_at), { fontSize: '11px', color: '#7c7d80' }),
   )
 
   const module = field('Module', entry.module || '')
@@ -473,15 +473,15 @@ function knowledgeCard(entry, badge) {
   Object.assign(top.style, { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' })
   top.append(
     badgeElement(badge.label, badge.background, badge.color),
-    styledText(formatDate(entry.approved_at || entry.created_at), { color: '#77718B', fontSize: '11px' }),
+    styledText(formatDate(entry.approved_at || entry.created_at), { color: '#7c7d80', fontSize: '11px' }),
   )
 
   const path = [entry.module, entry.topic, entry.object].filter(Boolean).join(' › ')
   const pathText = styledText(path || 'General SAP knowledge', {
-    color: '#A78BFA', fontSize: '11px', fontWeight: '650', marginTop: '12px',
+    color: '#bfc1c6', fontSize: '11px', fontWeight: '650', marginTop: '12px',
   })
   const finding = styledText(entry.finding || '', {
-    color: '#E7E5EF', fontSize: '13px', lineHeight: '1.62', marginTop: '8px', whiteSpace: 'pre-wrap',
+    color: '#e9eaeb', fontSize: '13px', lineHeight: '1.62', marginTop: '8px', whiteSpace: 'pre-wrap',
   })
 
   card.append(top, pathText, finding)
@@ -490,7 +490,7 @@ function knowledgeCard(entry, badge) {
 
 function styleCard(card) {
   Object.assign(card.style, {
-    background: '#171425', border: '1px solid #2D2842', borderRadius: '14px',
+    background: '#1b1c1e', border: '1px solid #333437', borderRadius: '14px',
     padding: '15px', marginTop: '12px', boxShadow: '0 6px 18px rgba(0,0,0,.13)',
   })
 }
@@ -498,19 +498,19 @@ function styleCard(card) {
 function infoBox(title, text) {
   const box = element('div')
   Object.assign(box.style, {
-    background: 'rgba(79,70,229,.09)', border: '1px solid rgba(99,102,241,.3)',
+    background: 'rgba(144,148,155,.09)', border: '1px solid rgba(166,169,174,.3)',
     borderRadius: '12px', padding: '13px 14px', marginBottom: '14px',
   })
   box.append(
-    styledText(title, { color: '#C4B5FD', fontSize: '13px', fontWeight: '700' }),
-    styledText(text, { color: '#9892AB', fontSize: '12px', lineHeight: '1.55', marginTop: '5px' }),
+    styledText(title, { color: '#d7d8db', fontSize: '13px', fontWeight: '700' }),
+    styledText(text, { color: '#9d9ea0', fontSize: '12px', lineHeight: '1.55', marginTop: '5px' }),
   )
   return box
 }
 
 function field(label, value) {
   const wrapper = element('label')
-  const labelText = styledText(label, { color: '#817B94', fontSize: '10px', fontWeight: '700', marginBottom: '5px' })
+  const labelText = styledText(label, { color: '#868789', fontSize: '10px', fontWeight: '700', marginBottom: '5px' })
   const input = element('input', { type: 'text', value })
   styleInput(input)
   wrapper.append(labelText, input)
@@ -520,7 +520,7 @@ function field(label, value) {
 function textAreaField(label, value, rows = 4) {
   const wrapper = element('label')
   Object.assign(wrapper.style, { display: 'block', marginTop: '10px' })
-  const labelText = styledText(label, { color: '#817B94', fontSize: '10px', fontWeight: '700', marginBottom: '5px' })
+  const labelText = styledText(label, { color: '#868789', fontSize: '10px', fontWeight: '700', marginBottom: '5px' })
   const input = element('textarea', { rows: String(rows) })
   input.value = value
   styleInput(input)
@@ -531,19 +531,19 @@ function textAreaField(label, value, rows = 4) {
 
 function styleInput(input) {
   Object.assign(input.style, {
-    width: '100%', boxSizing: 'border-box', border: '1px solid #38314F',
-    borderRadius: '9px', background: '#0E0C17', color: '#EEEAF8', padding: '9px 10px',
+    width: '100%', boxSizing: 'border-box', border: '1px solid #3e3f42',
+    borderRadius: '9px', background: '#111112', color: '#f0f1f2', padding: '9px 10px',
     outline: 'none', font: "500 12px 'Inter','DM Sans',sans-serif",
   })
-  input.addEventListener('focus', () => { input.style.borderColor = '#6366F1' })
-  input.addEventListener('blur', () => { input.style.borderColor = '#38314F' })
+  input.addEventListener('focus', () => { input.style.borderColor = '#a6a9ae' })
+  input.addEventListener('blur', () => { input.style.borderColor = '#3e3f42' })
 }
 
 function actionButton(label, variant, onClick) {
   const button = element('button', { type: 'button' }, label)
   const styles = {
-    primary: { background: '#4F46E5', border: '#6366F1', color: '#FFF' },
-    secondary: { background: '#242036', border: '#3B3550', color: '#C7C2D6' },
+    primary: { background: '#90949b', border: '#a6a9ae', color: '#FFF' },
+    secondary: { background: '#2a2b2c', border: '#414244', color: '#cbcccd' },
     danger: { background: 'rgba(220,38,38,.08)', border: 'rgba(239,68,68,.4)', color: '#FCA5A5' },
   }[variant] || {}
   Object.assign(button.style, {
@@ -558,8 +558,8 @@ function actionButton(label, variant, onClick) {
 function iconButton(text, title, onClick) {
   const button = element('button', { type: 'button', title, 'aria-label': title }, text)
   Object.assign(button.style, {
-    width: '34px', height: '34px', borderRadius: '9px', border: '1px solid #302A49',
-    background: '#191629', color: '#B7B2C7', cursor: 'pointer', fontSize: '20px',
+    width: '34px', height: '34px', borderRadius: '9px', border: '1px solid #38393b',
+    background: '#1e1f21', color: '#bbbcbe', cursor: 'pointer', fontSize: '20px',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0',
   })
   button.addEventListener('click', onClick)
@@ -579,14 +579,14 @@ function emptyState(text, spinning = false) {
   const box = element('div')
   Object.assign(box.style, {
     minHeight: '240px', display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', gap: '12px', textAlign: 'center', color: '#8A849E',
+    justifyContent: 'center', gap: '12px', textAlign: 'center', color: '#8f9093',
     fontSize: '13px', lineHeight: '1.5', padding: '24px', boxSizing: 'border-box',
   })
   if (spinning) {
     const spinner = element('div')
     Object.assign(spinner.style, {
-      width: '25px', height: '25px', borderRadius: '50%', border: '2px solid #302A49',
-      borderTopColor: '#6366F1', animation: 'waniKnowledgeSpin .8s linear infinite',
+      width: '25px', height: '25px', borderRadius: '50%', border: '2px solid #38393b',
+      borderTopColor: '#a6a9ae', animation: 'waniKnowledgeSpin .8s linear infinite',
     })
     ensureSpinnerStyle()
     box.append(spinner)
@@ -628,8 +628,8 @@ function showToast(message, isError = false) {
     position: 'fixed', zIndex: '2147483647', left: '50%', bottom: '24px',
     transform: 'translateX(-50%)', maxWidth: 'min(440px,calc(100vw - 30px))',
     padding: '11px 15px', borderRadius: '10px', color: '#FFF', textAlign: 'center',
-    background: isError ? 'rgba(127,29,29,.98)' : 'rgba(49,46,129,.98)',
-    border: `1px solid ${isError ? 'rgba(248,113,113,.5)' : 'rgba(129,140,248,.5)'}`,
+    background: isError ? 'rgba(127,29,29,.98)' : 'rgba(83,86,92,.98)',
+    border: `1px solid ${isError ? 'rgba(248,113,113,.5)' : 'rgba(185,187,192,.5)'}`,
     boxShadow: '0 12px 30px rgba(0,0,0,.35)',
     font: "650 12px/1.45 'Inter','DM Sans',sans-serif",
   })

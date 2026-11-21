@@ -33,7 +33,7 @@ function CheckFirstBox({ text, dark }) {
 function CauseCard({ cause, dark }) {
   return (
     <div style={{
-      padding: 14, borderRadius: 12, background: dark ? '#0A0A12' : '#FAFAF8',
+      padding: 14, borderRadius: 12, background: dark ? '#0e0e0e' : '#FAFAF8',
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
     }}>
       <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6, color: dark ? '#fff' : '#111' }}>
@@ -53,7 +53,7 @@ function TroubleshootingDesktop({ data, dark }) {
   return (
     <div style={{
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-      borderRadius: 16, padding: 24, background: dark ? '#12121A' : '#fff',
+      borderRadius: 16, padding: 24, background: dark ? '#161616' : '#fff',
     }}>
       <h3 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: dark ? '#fff' : '#111' }}>{data.title}</h3>
       <p style={{ margin: '0 0 14px', fontSize: 13, color: dark ? '#94A3B8' : '#666' }}>{data.issueSummary}</p>
@@ -70,7 +70,7 @@ function TroubleshootingMobile({ data, dark }) {
   return (
     <div style={{
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-      borderRadius: 14, padding: 16, background: dark ? '#12121A' : '#fff',
+      borderRadius: 14, padding: 16, background: dark ? '#161616' : '#fff',
     }}>
       <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: dark ? '#fff' : '#111' }}>{data.title}</h3>
       <p style={{ margin: '0 0 12px', fontSize: 12.5, color: dark ? '#94A3B8' : '#666' }}>{data.issueSummary}</p>
@@ -88,7 +88,7 @@ function TroubleshootingMobile({ data, dark }) {
                 style={{
                   width: '100%', textAlign: 'left', padding: '10px 12px', display: 'flex',
                   justifyContent: 'space-between', alignItems: 'center',
-                  background: dark ? '#0A0A12' : '#FAFAF8', border: 'none', cursor: 'pointer',
+                  background: dark ? '#0e0e0e' : '#FAFAF8', border: 'none', cursor: 'pointer',
                 }}
               >
                 <span style={{ fontSize: 13, fontWeight: 700, color: dark ? '#fff' : '#111' }}>
@@ -97,7 +97,7 @@ function TroubleshootingMobile({ data, dark }) {
                 <span style={{ color: dark ? '#94A3B8' : '#666', fontSize: 12 }}>{isOpen ? '−' : '+'}</span>
               </button>
               {isOpen && (
-                <div style={{ padding: '10px 12px', background: dark ? '#12121A' : '#fff' }}>
+                <div style={{ padding: '10px 12px', background: dark ? '#161616' : '#fff' }}>
                   <div style={{ fontSize: 12.5, lineHeight: 1.5, color: dark ? '#94A3B8' : '#666', marginBottom: 8 }}>
                     {c.description}
                   </div>

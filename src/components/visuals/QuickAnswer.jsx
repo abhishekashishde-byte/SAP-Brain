@@ -37,7 +37,7 @@ export default function QuickAnswer({ text, showCursor }) {
         {text}
         {showCursor && (
           <span style={{
-            display: 'inline-block', width: 2, height: '1em', background: '#4F46E5',
+            display: 'inline-block', width: 2, height: '1em', background: '#90949b',
             marginLeft: 2, animation: 'cursorBlink 0.8s infinite', verticalAlign: 'middle',
           }} />
         )}

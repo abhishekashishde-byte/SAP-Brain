@@ -31,7 +31,7 @@ export default function ConceptExplainer({ data }) {
     <div style={{
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
       borderRadius: isMobile ? 14 : 16, padding: isMobile ? 16 : 22,
-      background: dark ? '#12121A' : '#fff',
+      background: dark ? '#161616' : '#fff',
     }}>
       <h3 style={{ margin: '0 0 10px', fontSize: isMobile ? 15 : 17, fontWeight: 700, color: dark ? '#fff' : '#111' }}>
         {data.title}
@@ -52,7 +52,7 @@ export default function ConceptExplainer({ data }) {
           {concepts.map((c, i) => (
             <div key={i} style={{
               flex: 1, padding: 12, borderRadius: 10,
-              background: dark ? '#0A0A12' : '#FAFAF8',
+              background: dark ? '#0e0e0e' : '#FAFAF8',
               border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
             }}>
               <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 4, color: dark ? '#fff' : '#111' }}>

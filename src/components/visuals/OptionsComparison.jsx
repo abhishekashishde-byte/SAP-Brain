@@ -37,7 +37,7 @@ function RecommendationBanner({ rec, dark }) {
 function OptionCard({ opt, dark, compact }) {
   return (
     <div style={{
-      padding: 16, borderRadius: 12, background: dark ? '#0A0A12' : '#FAFAF8',
+      padding: 16, borderRadius: 12, background: dark ? '#0e0e0e' : '#FAFAF8',
       border: opt.recommended
         ? '2px solid #0A6ED1'
         : `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
@@ -101,7 +101,7 @@ function OptionsDesktop({ data, dark }) {
   return (
     <div style={{
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-      borderRadius: 16, padding: 24, background: dark ? '#12121A' : '#fff',
+      borderRadius: 16, padding: 24, background: dark ? '#161616' : '#fff',
     }}>
       <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: dark ? '#fff' : '#111' }}>{data.title}</h3>
       <RecommendationBanner rec={data.recommendation} dark={dark} />
@@ -120,7 +120,7 @@ function OptionsMobile({ data, dark }) {
   return (
     <div style={{
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-      borderRadius: 14, padding: 16, background: dark ? '#12121A' : '#fff',
+      borderRadius: 14, padding: 16, background: dark ? '#161616' : '#fff',
     }}>
       <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700, color: dark ? '#fff' : '#111' }}>{data.title}</h3>
       <RecommendationBanner rec={data.recommendation} dark={dark} />

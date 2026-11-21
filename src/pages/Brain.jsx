@@ -76,26 +76,27 @@ const IconPlus = ({ size=16, color='currentColor' }) => (
 
 const T = {
   light: {
-    bg:'#FAFAF8',surface:'#FFFFFF',surface2:'#F5F0FA',border:'#EDEDE8',border2:'#D8D0E8',
+    bg:'#FAFAF8',surface:'#FFFFFF',surface2:'#f4f5f5',border:'#EDEDE8',border2:'#dbdcdd',
     text:'#1C1C1E',text2:'#3A3A3C',text3:'#8A8A8E',text4:'#AEAEB2',
-    sidebar:'linear-gradient(180deg,#FFFFFF 0%,#FDF8FF 100%)',topbar:'rgba(255,255,255,0.9)',
-    inputBg:'#FAFAF8',msgUser:'#FDF4FF',msgUserBdr:'#E8C8F0',msgAI:'#FFFFFF',msgAIBdr:'#EDEDED',
-    blob1:'rgba(200,80,192,0.12)',blob2:'rgba(255,107,53,0.09)',blob3:'rgba(255,204,112,0.11)',
-    bgGrad:'linear-gradient(160deg,#FDF8FF 0%,#FFF5F0 40%,#FFFBF0 100%)',
+    sidebar:'linear-gradient(180deg,#FFFFFF 0%,#fbfbfc 100%)',topbar:'rgba(255,255,255,0.9)',
+    inputBg:'#FAFAF8',msgUser:'#f9f9fa',msgUserBdr:'#dadbde',msgAI:'#FFFFFF',msgAIBdr:'#EDEDED',
+    blob1:'rgba(134,138,146,0.12)',blob2:'rgba(255,107,53,0.09)',blob3:'rgba(255,204,112,0.11)',
+    bgGrad:'linear-gradient(160deg,#fbfbfc 0%,#FFF5F0 40%,#FFFBF0 100%)',
     codeBg:'rgba(15,23,42,0.05)',codeTxt:'#1F2937',
-    summarise:'linear-gradient(135deg,rgba(200,80,192,0.08),rgba(255,107,53,0.06))',
-    summariseBdr:'rgba(200,80,192,0.2)',summariseTxt:'#7C3A7A',
+    summarise:'linear-gradient(135deg,rgba(134,138,146,0.08),rgba(255,107,53,0.06))',
+    summariseBdr:'rgba(134,138,146,0.2)',summariseTxt:'#575a5f',
   },
   dark: {
-    bg:'#0A0A12',surface:'#12101E',surface2:'#1A1530',border:'#2A2440',border2:'#3D3560',
-    text:'#F0EEF8',text2:'#C8C4DC',text3:'#8A849E',text4:'#5A5470',
-    sidebar:'linear-gradient(180deg,#12101E 0%,#0E0C1A 100%)',topbar:'rgba(12,10,20,0.92)',
-    inputBg:'#1A1530',msgUser:'#1E1535',msgUserBdr:'#4A2060',msgAI:'#16132A',msgAIBdr:'#2A2440',
-    blob1:'rgba(200,80,192,0.18)',blob2:'rgba(255,107,53,0.14)',blob3:'rgba(255,204,112,0.12)',
-    bgGrad:'linear-gradient(160deg,#0E0C1E 0%,#120A18 40%,#0C0E18 100%)',
+    // Jet black, neutral greys — no colour tint.
+    bg:'#000000',surface:'#0D0D0F',surface2:'#17171A',border:'#232326',border2:'#36363B',
+    text:'#F2F2F3',text2:'#C8C8CC',text3:'#8C8C93',text4:'#5C5C63',
+    sidebar:'linear-gradient(180deg,#0A0A0B 0%,#000000 100%)',topbar:'rgba(0,0,0,0.82)',
+    inputBg:'#111113',msgUser:'#17171A',msgUserBdr:'#2A2A2E',msgAI:'#0D0D0F',msgAIBdr:'#232326',
+    blob1:'rgba(255,255,255,0.04)',blob2:'rgba(255,255,255,0.03)',blob3:'rgba(255,255,255,0.03)',
+    bgGrad:'#000000',
     codeBg:'rgba(255,255,255,0.07)',codeTxt:'#E5E7EB',
-    summarise:'linear-gradient(135deg,rgba(200,80,192,0.15),rgba(255,107,53,0.1))',
-    summariseBdr:'rgba(200,80,192,0.35)',summariseTxt:'#D090D0',
+    summarise:'linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))',
+    summariseBdr:'rgba(255,255,255,0.14)',summariseTxt:'#D4D4D8',
   }
 }
 
@@ -104,25 +105,33 @@ const T = {
 // and the on-background greeting text; everything else (sidebar, bubbles, fonts,
 // layout) is untouched and keeps using the existing light/dark `t` object.
 const BG_THEMES = {
-  aurora:   { bgGrad:'linear-gradient(160deg,#140b1f 0%,#0c0a1a 100%)', blobA:'rgba(127,119,221,0.55)', blobB:'rgba(83,74,183,0.5)',  blobC:'rgba(175,169,236,0.3)', text:'#CECBF6', text2:'#AFA9EC' },
+  // Default: jet black with slowly drifting grey particles (drawn by ParticleField).
+  midnight: { bgGrad:'#000000', particles:true, blobA:'transparent', blobB:'transparent', blobC:'transparent', text:'#D4D4D8', text2:'#A1A1AA' },
+  aurora:   { bgGrad:'linear-gradient(160deg,#141516 0%,#111213 100%)', blobA:'rgba(166,169,174,0.55)', blobB:'rgba(122,126,135,0.5)',  blobC:'rgba(200,202,205,0.3)', text:'#dfe0e2', text2:'#c8cacd' },
   ember:    { bgGrad:'linear-gradient(160deg,#1c0f0a 0%,#140b08 100%)', blobA:'rgba(240,153,123,0.5)', blobB:'rgba(153,60,29,0.5)',  blobC:'rgba(216,90,48,0.3)',   text:'#F5C4B3', text2:'#F0997B' },
   graphite: { bgGrad:'linear-gradient(160deg,#141412 0%,#0d0d0c 100%)', blobA:'rgba(136,135,128,0.4)', blobB:'rgba(95,94,90,0.4)',  blobC:'rgba(68,68,65,0.3)',    text:'#D3D1C7', text2:'#B4B2A9' },
-  light:    { bgGrad:'linear-gradient(160deg,#eaf1fb 0%,#f5f8fd 100%)', blobA:'rgba(133,183,235,0.45)',blobB:'rgba(175,169,236,0.4)',blobC:'rgba(133,183,235,0.25)',text:'#0C447C', text2:'#185FA5' },
+  light:    { bgGrad:'linear-gradient(160deg,#eaf1fb 0%,#f5f8fd 100%)', blobA:'rgba(133,183,235,0.45)',blobB:'rgba(200,202,205,0.4)',blobC:'rgba(133,183,235,0.25)',text:'#0C447C', text2:'#185FA5' },
 }
 const BG_THEME_LIST = [
-  { key:'aurora',   label:'Aurora' },
+  { key:'midnight', label:'Midnight' },
   { key:'ember',    label:'Ember' },
   { key:'graphite', label:'Graphite' },
   { key:'light',    label:'Light' },
 ]
+// The old purple 'Aurora' theme is retired; profiles that still have it get Midnight.
+const resolveThemeKey = key => key === 'aurora' || !key ? 'midnight' : key
 
 // Image outputs inherit the same profile theme as the Wani workspace. These
 // values are used only for local UI/branding; api/chat.js keeps its own strict
 // whitelist so an arbitrary client string can never become an image prompt.
 const IMAGE_THEME_UI = {
+  midnight: {
+    footerBg:'#000000', footerInk:'#F2F2F3', invertMark:true,
+    downloadBg:'rgba(40,40,44,0.94)', downloadBorder:'rgba(212,212,216,0.55)', downloadInk:'#FFFFFF',
+  },
   aurora: {
-    footerBg:'#100B1C', footerInk:'#F4F1FF', invertMark:true,
-    downloadBg:'rgba(72,61,145,0.92)', downloadBorder:'rgba(206,203,246,0.65)', downloadInk:'#FFFFFF',
+    footerBg:'#131314', footerInk:'#f8f8f8', invertMark:true,
+    downloadBg:'rgba(98,101,108,0.92)', downloadBorder:'rgba(223,224,226,0.65)', downloadInk:'#FFFFFF',
   },
   ember: {
     footerBg:'#180D09', footerInk:'#FFF0E9', invertMark:true,
@@ -140,7 +149,7 @@ const IMAGE_THEME_UI = {
 
 const MODULE_COLORS = {
   "PP – Production Planning":{ from:'#16a34a',to:'#059669',emoji:'⚙️' },
-  "PM – Plant Maintenance":  { from:'#4f46e5',to:'#7c3aed',emoji:'🔧' },
+  "PM – Plant Maintenance":  { from:'#90949b',to:'#8e9299',emoji:'🔧' },
   "MM – Materials Management":          { from:'#ea580c',to:'#dc2626',emoji:'📦' },
   "Fiori / UX":              { from:'#0284c7',to:'#0369a1',emoji:'◻️' },
   "S/4HANA General":         { from:'#b45309',to:'#92400e',emoji:'◈'  },
@@ -170,9 +179,9 @@ const isMobileWidth = () => window.innerWidth < 768
 
 // ── CODE ATTACHMENT CARD ──────────────────────────────────────────────────────
 function CodeCard({ language, lines, content, expanded, onToggle, onRemove, t, dark }) {
-  const langColors = { ABAP: '#1E6B4A', SQL: '#1A56DB', XML: '#9A3412', JSON: '#6D28D9', Code: '#374151' }
-  const bgColor = dark ? '#1E1E2E' : '#F8F9FC'
-  const borderColor = dark ? '#2D2D3D' : '#E2E8F0'
+  const langColors = { ABAP: '#1E6B4A', SQL: '#1A56DB', XML: '#9A3412', JSON: '#7a7e87', Code: '#374151' }
+  const bgColor = dark ? '#252627' : '#fafafa'
+  const borderColor = dark ? '#343536' : '#E2E8F0'
 
   return (
     <div style={{ borderRadius:10, border:`1.5px solid ${borderColor}`, background:bgColor, overflow:'hidden', marginBottom:6 }}>
@@ -195,7 +204,7 @@ function CodeCard({ language, lines, content, expanded, onToggle, onRemove, t, d
       </div>
       {/* Code preview */}
       {expanded && (
-        <div style={{ borderTop:`1px solid ${borderColor}`, background: dark ? '#12121C' : '#F1F5F9',
+        <div style={{ borderTop:`1px solid ${borderColor}`, background: dark ? '#161718' : '#F1F5F9',
           padding:'10px 14px', maxHeight:240, overflowY:'auto' }}>
           <pre style={{ margin:0, fontSize:11, fontFamily:"'Fira Code','Courier New',monospace",
             color: dark ? '#A8D8A8' : '#1E293B', whiteSpace:'pre-wrap', wordBreak:'break-word',
@@ -218,6 +227,56 @@ function ModuleBadge({ module, small }) {
       borderRadius:20,fontSize:small?10:11,fontWeight:600,letterSpacing:0.3,flexShrink:0,
     }}>{meta.label}</span>
   )
+}
+
+// ── PARTICLE FIELD — jet black background with slowly drifting grey particles ──
+// Canvas, ~1 particle per 18k px², capped; pauses when the tab is hidden and is
+// static for users who prefer reduced motion.
+function ParticleField() {
+  const ref = useRef(null)
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    let w = 0, h = 0, raf = 0, parts = []
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const seed = () => {
+      const rect = canvas.parentElement.getBoundingClientRect()
+      w = rect.width; h = rect.height
+      canvas.width = w * dpr; canvas.height = h * dpr
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      const n = Math.min(110, Math.round((w * h) / 18000))
+      parts = Array.from({ length: n }, () => ({
+        x: Math.random() * w, y: Math.random() * h,
+        r: 0.5 + Math.random() * 1.4,
+        vx: (Math.random() - 0.5) * 0.12, vy: -0.03 - Math.random() * 0.12,
+        a: 0.12 + Math.random() * 0.38, tw: Math.random() * Math.PI * 2,
+      }))
+    }
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h)
+      for (const p of parts) {
+        if (!still) {
+          p.x += p.vx; p.y += p.vy; p.tw += 0.012
+          if (p.y < -4) { p.y = h + 4; p.x = Math.random() * w }
+          if (p.x < -4) p.x = w + 4; else if (p.x > w + 4) p.x = -4
+        }
+        const alpha = p.a * (0.75 + 0.25 * Math.sin(p.tw))
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(200,200,206,${alpha.toFixed(3)})`; ctx.fill()
+      }
+      if (!still && !document.hidden) raf = requestAnimationFrame(draw)
+    }
+    const onVisible = () => { cancelAnimationFrame(raf); if (!document.hidden) draw() }
+    const ro = new ResizeObserver(() => { seed(); if (still) draw() })
+    seed(); draw()
+    ro.observe(canvas.parentElement)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener('visibilitychange', onVisible) }
+  }, [])
+  return <canvas ref={ref} aria-hidden="true" style={{ position:'absolute',inset:0,display:'block' }} />
 }
 
 // ── LIVE ACTIVITY — what Wani is really doing while you wait ─────────────────
@@ -265,7 +324,7 @@ function TypingDots() {
   return (
     <div style={{ display:'flex',gap:5,alignItems:'center',padding:'12px 16px' }}>
       {[0,1,2].map(i=>(
-        <div key={i} style={{ width:7,height:7,borderRadius:'50%',background:'#4F46E5',animation:'typingBounce 1.2s infinite',animationDelay:`${i*0.18}s`,opacity:0.7 }}/>
+        <div key={i} style={{ width:7,height:7,borderRadius:'50%',background:'#90949b',animation:'typingBounce 1.2s infinite',animationDelay:`${i*0.18}s`,opacity:0.7 }}/>
       ))}
     </div>
   )
@@ -293,9 +352,9 @@ function UsageBar({ count, limit, dark }) {
 
   const isRed    = pct >= 100
   const isOrange = pct >= 90 && pct < 100
-  const barColor = isRed ? '#EF4444' : isOrange ? '#F97316' : '#4F46E5'
-  const bgColor  = isRed ? 'rgba(239,68,68,0.08)' : isOrange ? 'rgba(249,115,22,0.08)' : 'rgba(79,70,229,0.08)'
-  const borderColor = isRed ? 'rgba(239,68,68,0.25)' : isOrange ? 'rgba(249,115,22,0.25)' : 'rgba(79,70,229,0.2)'
+  const barColor = isRed ? '#EF4444' : isOrange ? '#F97316' : '#90949b'
+  const bgColor  = isRed ? 'rgba(239,68,68,0.08)' : isOrange ? 'rgba(249,115,22,0.08)' : 'rgba(144,148,155,0.08)'
+  const borderColor = isRed ? 'rgba(239,68,68,0.25)' : isOrange ? 'rgba(249,115,22,0.25)' : 'rgba(144,148,155,0.2)'
 
   return (
     <div style={{
@@ -384,7 +443,7 @@ function SourceInfoPanel({ info, t, dark }) {
           borderRadius:10,
         }}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 16px' }}>
-            <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Intent: </span><span style={{ color: dark?'#a5b4fc':'#4F46E5', fontWeight:600 }}>{info.intent}</span></div>
+            <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Intent: </span><span style={{ color: dark?'#ced0d3':'#90949b', fontWeight:600 }}>{info.intent}</span></div>
             {info.detectedModule && <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Module: </span><span style={{ color:'#059669', fontWeight:600 }}>{info.detectedModule}</span></div>}
             <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Models: </span><span style={{ color: dark?'#e2e8f0':'#1C1C1E' }}>{modelLabel}</span></div>
             {info.totalMs && <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Time: </span><span style={{ color: dark?'#fbbf24':'#D97706', fontWeight:600 }}>{(info.totalMs/1000).toFixed(1)}s</span></div>}
@@ -446,7 +505,7 @@ function AnswerPipeline({ pipeline, dark }) {
       id: 'claude',
       icon: '🧠',
       label: 'Claude Sonnet Answer',
-      color: '#8B5CF6',
+      color: '#a5a8ad',
       empty: !pipeline.claudeAnswer,
       content: pipeline.claudeAnswer || 'No Claude Sonnet answer',
     },
@@ -454,7 +513,7 @@ function AnswerPipeline({ pipeline, dark }) {
       id: 'merged',
       icon: '✨',
       label: 'GPT-4o Final Analysis',
-      color: '#4F46E5',
+      color: '#90949b',
       empty: !pipeline.mergedAnswer,
       content: pipeline.mergedAnswer || 'No final answer',
     },
@@ -655,7 +714,7 @@ function OnDemandVisual({ msg, onRequestVisual, t, dark }) {
   const [error, setError] = useState('')
   const [visible, setVisible] = useState(false)
   const hasVisual = !!msg._customerBriefData
-  const visualTheme = IMAGE_THEME_UI[msg._customerBriefTheme] || (dark ? IMAGE_THEME_UI.aurora : IMAGE_THEME_UI.light)
+  const visualTheme = IMAGE_THEME_UI[msg._customerBriefTheme] || (dark ? IMAGE_THEME_UI.midnight : IMAGE_THEME_UI.light)
 
   const handleClick = async () => {
     if (hasVisual) { setVisible(v => !v); return }
@@ -699,7 +758,7 @@ function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
   const [error, setError] = useState('')
   const [visible, setVisible] = useState(false)
   const hasHandout = !!msg._handoutData
-  const visualTheme = IMAGE_THEME_UI[msg._handoutTheme] || (dark ? IMAGE_THEME_UI.aurora : IMAGE_THEME_UI.light)
+  const visualTheme = IMAGE_THEME_UI[msg._handoutTheme] || (dark ? IMAGE_THEME_UI.midnight : IMAGE_THEME_UI.light)
 
   const handleClick = async () => {
     if (hasHandout) { setVisible(v => !v); return }
@@ -784,13 +843,13 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         const label = mdLink[1]
         const isCitation = /^\d+$/.test(label.trim())
         return <a key={i} href={mdLink[2]} target="_blank" rel="noopener noreferrer" style={ isCitation
-          ? { color:'#4F46E5',textDecoration:'none',fontSize:'0.72em',verticalAlign:'super',fontWeight:600,padding:'0 1px' }
-          : { color:'#4F46E5',textDecoration:'underline',fontWeight:600,wordBreak:'break-word' } }>{isCitation ? `[${label}]` : label}</a>
+          ? { color:'#90949b',textDecoration:'none',fontSize:'0.72em',verticalAlign:'super',fontWeight:600,padding:'0 1px' }
+          : { color:'#90949b',textDecoration:'underline',fontWeight:600,wordBreak:'break-word' } }>{isCitation ? `[${label}]` : label}</a>
       }
       if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ fontWeight:600,color:t.text }}>{part.slice(2,-2)}</strong>
       if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily:"'IBM Plex Mono',ui-monospace,monospace",background:t.codeBg,padding:'1px 5px',borderRadius:5,fontSize:'0.86em',color:t.text,border:`1px solid ${t.border}`,whiteSpace:'nowrap' }}>{part.slice(1,-1)}</code>
       if (part.startsWith('_') && part.endsWith('_')) return <span key={i} style={{ fontSize:11,color:t.text4,fontStyle:'italic' }}>{part.slice(1,-1)}</span>
-      if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:'#4F46E5',textDecoration:'underline',wordBreak:'break-all' }}>{part}</a>
+      if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:'#90949b',textDecoration:'underline',wordBreak:'break-all' }}>{part}</a>
       return <span key={i}>{part}</span>
     })
   }
@@ -824,7 +883,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
           </div>
           <div style={{ overflowX:'auto' }}>
           <table style={{ borderCollapse:'collapse',width:'100%',fontSize:15 }}>
-            <thead><tr>{headers.map((h,j)=><th key={j} style={{ padding:'8px 12px',background:'rgba(79,70,229,0.08)',borderBottom:'2px solid rgba(79,70,229,0.2)',textAlign:'left',fontWeight:600,color:t.text,whiteSpace:'nowrap' }}>{h.trim()}</th>)}</tr></thead>
+            <thead><tr>{headers.map((h,j)=><th key={j} style={{ padding:'8px 12px',background:'rgba(144,148,155,0.08)',borderBottom:'2px solid rgba(144,148,155,0.2)',textAlign:'left',fontWeight:600,color:t.text,whiteSpace:'nowrap' }}>{h.trim()}</th>)}</tr></thead>
             <tbody>{rows.map((row,j)=><tr key={j} style={{ borderBottom:`1px solid ${t.border}`,background:j%2===0?t.surface:t.surface2 }}>{row.map((cell,k)=><td key={k} style={{ padding:'7px 12px',color:t.text2 }}>{inlineFormat(cell.trim())}</td>)}</tr>)}</tbody>
           </table></div></div>)
         continue
@@ -871,7 +930,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
             </div>
             <div style={{ overflowX:'auto' }}>
               <table style={{ borderCollapse:'collapse', width:'100%', fontSize:15 }}>
-                <thead><tr>{headerRow.map((h,j)=><th key={j} style={{ padding:'8px 12px',background:'rgba(79,70,229,0.08)',borderBottom:'2px solid rgba(79,70,229,0.2)',textAlign:'left',fontWeight:600,color:t.text,whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
+                <thead><tr>{headerRow.map((h,j)=><th key={j} style={{ padding:'8px 12px',background:'rgba(144,148,155,0.08)',borderBottom:'2px solid rgba(144,148,155,0.2)',textAlign:'left',fontWeight:600,color:t.text,whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
                 <tbody>{dataRows.map((row,j)=><tr key={j} style={{ borderBottom:`1px solid ${t.border}`,background:j%2===0?t.surface:t.surface2 }}>{row.map((cell,k)=><td key={k} style={{ padding:'7px 12px',color:t.text2,lineHeight:1.5 }}>{cell}</td>)}</tr>)}</tbody>
               </table>
             </div>
@@ -880,7 +939,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
           // Regular code block
           const copyCode = () => navigator.clipboard?.writeText(codeText)
           els.push(<div key={`code${i}`} style={{ margin:'10px 0', position:'relative' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 12px', background:'rgba(79,70,229,0.08)', borderRadius:'8px 8px 0 0', borderBottom:`1px solid ${t.border}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 12px', background:'rgba(144,148,155,0.08)', borderRadius:'8px 8px 0 0', borderBottom:`1px solid ${t.border}` }}>
               <span style={{ fontSize:11, color:t.text4, fontFamily:"'IBM Plex Mono',monospace" }}>{lang || 'code'}</span>
               <button onClick={copyCode} style={{ fontSize:11,padding:'2px 8px',borderRadius:5,border:`1px solid ${t.border}`,background:'transparent',color:t.text3,cursor:'pointer',fontFamily:"'Inter',sans-serif" }}>Copy</button>
             </div>
@@ -902,11 +961,11 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
       if (line.startsWith('# '))      { els.push(<div key={i} style={{ fontWeight:700,fontSize:20,color:t.text,margin:'16px 0 8px',letterSpacing:'-0.01em' }}>{inlineFormat(line.slice(2).replace(/^#+\s*/,''))}</div>); i++; continue }
       if (line.startsWith('## '))     { els.push(<div key={i} style={{ fontWeight:700,fontSize:18,color:t.text,margin:'14px 0 6px',letterSpacing:'-0.01em' }}>{inlineFormat(line.slice(3).replace(/^#+\s*/,''))}</div>); i++; continue }
       if (line.startsWith('### '))    { els.push(<div key={i} style={{ fontWeight:600,fontSize:16,color:t.text,margin:'10px 0 4px' }}>{inlineFormat(line.slice(4).replace(/^#+\s*/,''))}</div>); i++; continue }
-      if (/^\d+\.\s/.test(line))     { const m = line.match(/^(\d+)\.\s(.*)$/); els.push(<div key={i} style={{ display:'flex',gap:8,margin:'6px 0 2px',paddingLeft:2 }}><span style={{ color:'#4F46E5',fontWeight:700,fontSize:15,flexShrink:0,minWidth:18 }}>{m[1]}.</span><span style={{ fontWeight:600,color:t.text,fontSize:16,lineHeight:1.7 }}>{inlineFormat(m[2])}</span></div>); i++; continue }
-      if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex',gap:8,margin:'4px 0',paddingLeft:4 }}><span style={{ color:'#4F46E5',marginTop:1,flexShrink:0,fontSize:14 }}>•</span><span style={{ lineHeight:1.7,color:t.text2,fontSize:16 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
+      if (/^\d+\.\s/.test(line))     { const m = line.match(/^(\d+)\.\s(.*)$/); els.push(<div key={i} style={{ display:'flex',gap:8,margin:'6px 0 2px',paddingLeft:2 }}><span style={{ color:'#90949b',fontWeight:700,fontSize:15,flexShrink:0,minWidth:18 }}>{m[1]}.</span><span style={{ fontWeight:600,color:t.text,fontSize:16,lineHeight:1.7 }}>{inlineFormat(m[2])}</span></div>); i++; continue }
+      if (/^[\*\-] /.test(line))     { els.push(<div key={i} style={{ display:'flex',gap:8,margin:'4px 0',paddingLeft:4 }}><span style={{ color:'#90949b',marginTop:1,flexShrink:0,fontSize:14 }}>•</span><span style={{ lineHeight:1.7,color:t.text2,fontSize:16 }}>{inlineFormat(line.slice(2))}</span></div>); i++; continue }
       if (/^\s+[\+\-\*] /.test(line)) {
         const txt = line.replace(/^\s+[\+\-\*] /,'')
-        els.push(<div key={i} style={{ display:'flex',gap:8,margin:'3px 0',paddingLeft:20 }}><span style={{ color:'#6366F1',fontSize:12,marginTop:3,flexShrink:0 }}>–</span><span style={{ fontSize:15,lineHeight:1.65,color:t.text3 }}>{inlineFormat(txt)}</span></div>); i++; continue
+        els.push(<div key={i} style={{ display:'flex',gap:8,margin:'3px 0',paddingLeft:20 }}><span style={{ color:'#a6a9ae',fontSize:12,marginTop:3,flexShrink:0 }}>–</span><span style={{ fontSize:15,lineHeight:1.65,color:t.text3 }}>{inlineFormat(txt)}</span></div>); i++; continue
       }
       if (/^---+$/.test(line.trim())) { els.push(<hr key={i} style={{ border:'none',borderTop:`1px solid ${t.border}`,margin:'10px 0' }}/>); i++; continue }
       if (line.trim() === '')         { els.push(<div key={i} style={{ height:6 }}/>); i++; continue }
@@ -916,7 +975,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         if (match) {
           const icon = line[0]
           const source = icon === '💬' ? 'SAP Community' : icon === '📖' ? 'SAP Help' : icon === '✍️' ? 'SAP Blog' : 'SAP'
-          const color = icon === '💬' ? '#0070f3' : icon === '📖' ? '#10b981' : '#8b5cf6'
+          const color = icon === '💬' ? '#0070f3' : icon === '📖' ? '#10b981' : '#a5a8ad'
           els.push(
             <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 12px',margin:'4px 0',background:`${color}11`,border:`1px solid ${color}33`,borderRadius:8,textDecoration:'none',cursor:'pointer' }}>
               <span style={{ fontSize:16,flexShrink:0 }}>{icon}</span>
@@ -937,7 +996,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         for (let pi = 0; pi < parts.length; pi++) {
           if (parts[pi].startsWith('[') && parts[pi].includes('](')) {
             const match = parts[pi].match(/\[([^\]]+)\]\(([^)]+)\)/)
-            if (match) rendered.push(<a key={pi} href={match[2]} target="_blank" rel="noopener noreferrer" style={{ color:'#4F46E5',textDecoration:'underline' }}>{match[1]}</a>)
+            if (match) rendered.push(<a key={pi} href={match[2]} target="_blank" rel="noopener noreferrer" style={{ color:'#90949b',textDecoration:'underline' }}>{match[1]}</a>)
           } else if (parts[pi] && !parts[pi].match(/^[^\]]+$|^\([^)]+\)$/)) {
             rendered.push(<span key={pi}>{inlineFormat(parts[pi])}</span>)
           }
@@ -962,16 +1021,16 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
     <div style={{ display:'flex',gap:6,marginTop:6,alignItems:'center' }}>
       {[{id:'up',icon:'👍',label:'Helpful'},{id:'down',icon:'👎',label:'Not helpful'}].map(btn=>(
         <button key={btn.id} title={btn.label} onClick={()=>setLiked(liked===btn.id?null:btn.id)} style={{
-          background:liked===btn.id?'rgba(79,70,229,0.12)':'transparent',
-          border:`1px solid ${liked===btn.id?'rgba(79,70,229,0.4)':t.border}`,
+          background:liked===btn.id?'rgba(144,148,155,0.12)':'transparent',
+          border:`1px solid ${liked===btn.id?'rgba(144,148,155,0.4)':t.border}`,
           borderRadius:8,padding:'3px 8px',cursor:'pointer',fontSize:13,
-          transition:'all 0.15s',color:liked===btn.id?'#4F46E5':t.text4,
+          transition:'all 0.15s',color:liked===btn.id?'#90949b':t.text4,
         }}>{btn.icon}</button>
       ))}
       <button title="Copy" onClick={handleCopy} style={{
         background:'transparent',border:`1px solid ${t.border}`,
         borderRadius:8,padding:'3px 9px',cursor:'pointer',fontSize:11,
-        color:copied?'#4F46E5':t.text4,transition:'all 0.15s',fontFamily:"'Inter','DM Sans',sans-serif",
+        color:copied?'#90949b':t.text4,transition:'all 0.15s',fontFamily:"'Inter','DM Sans',sans-serif",
       }}>{copied?'✓ Copied':'Copy'}</button>
     </div>
   )
@@ -1050,7 +1109,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
                 <QuickAnswer text={streamingQuickAnswer} showCursor={!content} />
               )}
               {renderMarkdown(content)}
-              {isStreaming && !isFinalizing && !(!content && !streamingQuickAnswer && activity?.length > 0) && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
+              {isStreaming && !isFinalizing && !(!content && !streamingQuickAnswer && activity?.length > 0) && <span style={{ display:'inline-block',width:2,height:'1em',background:'#90949b',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
               {isStreaming && isFinalizing && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, color: dark ? '#94A3B8' : '#666', fontSize: 13 }}>
                   <span style={{
@@ -1315,14 +1374,14 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
             { key:'summary',icon:'📋',title:'SAP Resolution Note',desc:'Problem statement + solution + key steps. Ready to send to a client or keep as documentation.' },
             { key:'transcript',icon:'📄',title:'Full Transcript',desc:'Complete Q&A dialogue — every message in order.' },
           ].map(opt=>(
-            <div key={opt.key} onClick={()=>setMode(opt.key)} style={{ padding:'14px 16px',borderRadius:12,cursor:'pointer',border:`2px solid ${mode===opt.key?'#4F46E5':t.border}`,background:mode===opt.key?'rgba(79,70,229,0.06)':t.surface2,transition:'all 0.15s' }}>
+            <div key={opt.key} onClick={()=>setMode(opt.key)} style={{ padding:'14px 16px',borderRadius:12,cursor:'pointer',border:`2px solid ${mode===opt.key?'#90949b':t.border}`,background:mode===opt.key?'rgba(144,148,155,0.06)':t.surface2,transition:'all 0.15s' }}>
               <div style={{ display:'flex',alignItems:'center',gap:10 }}>
                 <span style={{ fontSize:20 }}>{opt.icon}</span>
                 <div>
-                  <div style={{ fontSize:13,fontWeight:600,color:mode===opt.key?'#4F46E5':t.text }}>{opt.title}</div>
+                  <div style={{ fontSize:13,fontWeight:600,color:mode===opt.key?'#90949b':t.text }}>{opt.title}</div>
                   <div style={{ fontSize:11,color:t.text3,marginTop:2,lineHeight:1.5 }}>{opt.desc}</div>
                 </div>
-                <div style={{ marginLeft:'auto',width:18,height:18,borderRadius:'50%',border:`2px solid ${mode===opt.key?'#4F46E5':t.border}`,background:mode===opt.key?'#4F46E5':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                <div style={{ marginLeft:'auto',width:18,height:18,borderRadius:'50%',border:`2px solid ${mode===opt.key?'#90949b':t.border}`,background:mode===opt.key?'#90949b':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
                   {mode===opt.key && <div style={{ width:8,height:8,borderRadius:'50%',background:'#fff' }}/>}
                 </div>
               </div>
@@ -1330,7 +1389,7 @@ function ExportModal({ conversation, messages, onClose, t, dark }) {
           ))}
         </div>
         {error && <div style={{ fontSize:12,color:'#DC2626',marginBottom:12 }}>{error}</div>}
-        <button onClick={()=>mode&&generateDocx(mode)} disabled={!mode||loading} style={{ width:'100%',padding:'12px',borderRadius:10,border:'none',background:mode&&!loading?'linear-gradient(135deg,#1a1a2e,#4F46E5)':t.border,color:mode&&!loading?'#fff':t.text4,fontSize:14,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",cursor:mode&&!loading?'pointer':'not-allowed',transition:'all 0.2s',display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
+        <button onClick={()=>mode&&generateDocx(mode)} disabled={!mode||loading} style={{ width:'100%',padding:'12px',borderRadius:10,border:'none',background:mode&&!loading?'linear-gradient(135deg,#232425,#90949b)':t.border,color:mode&&!loading?'#fff':t.text4,fontSize:14,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",cursor:mode&&!loading?'pointer':'not-allowed',transition:'all 0.2s',display:'flex',alignItems:'center',justifyContent:'center',gap:8 }}>
           {loading?<><div style={{ width:16,height:16,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 0.8s linear infinite' }}/> Generating…</>:<>↓ Download Word Document</>}
         </button>
         <div style={{ fontSize:11,color:t.text4,textAlign:'center',marginTop:10 }}>.docx — opens in Word, Google Docs, LibreOffice</div>
@@ -1369,7 +1428,7 @@ function SaveFindingModal({ t, dark, onClose, onSave }) {
         <div style={{ display:'flex', gap:8, marginTop:4 }}>
           <button onClick={onClose} style={{ flex:1, padding:'8px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:13 }}>Cancel</button>
           <button onClick={handleSave} disabled={!finding.trim() || saving}
-            style={{ flex:2, padding:'8px', borderRadius:8, border:'none', background: finding.trim() ? '#4F46E5' : '#9ca3af', color:'white', cursor: finding.trim() ? 'pointer' : 'not-allowed', fontFamily:"'Inter',sans-serif", fontSize:13, fontWeight:600 }}>
+            style={{ flex:2, padding:'8px', borderRadius:8, border:'none', background: finding.trim() ? '#90949b' : '#9ca3af', color:'white', cursor: finding.trim() ? 'pointer' : 'not-allowed', fontFamily:"'Inter',sans-serif", fontSize:13, fontWeight:600 }}>
             {saving ? 'Saving…' : '✓ Save to Knowledge Base'}
           </button>
         </div>
@@ -1383,7 +1442,7 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
   const [name, setName] = useState(profile?.name||'')
   const [modules, setModules] = useState(profile?.modules||[])
   const [role, setRole] = useState(profile?.role||'')
-  const [selectedTheme, setSelectedTheme] = useState(profile?.theme || 'aurora')
+  const [selectedTheme, setSelectedTheme] = useState(resolveThemeKey(profile?.theme))
   const [saving, setSaving] = useState(false)
   const [memories, setMemories] = useState([])
   const [memoriesLoading, setMemoriesLoading] = useState(false)
@@ -1438,11 +1497,11 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:16 }} onClick={onClose}>
-      <div style={{ background:'linear-gradient(145deg,#1A1035,#0F0A2A)',border:'1px solid rgba(79,70,229,0.2)',borderRadius:24,padding:32,width:420,maxWidth:'100%',maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards' }} onClick={e=>e.stopPropagation()}>
+      <div style={{ background:'linear-gradient(145deg,#212224,#191a1b)',border:'1px solid rgba(144,148,155,0.2)',borderRadius:24,padding:32,width:420,maxWidth:'100%',maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',animation:'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards' }} onClick={e=>e.stopPropagation()}>
 
         {/* Header */}
         <div style={{ textAlign:'center',marginBottom:20 }}>
-          <div style={{ width:64,height:64,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,fontWeight:700,color:'#fff',margin:'0 auto 10px',boxShadow:'0 4px 20px rgba(79,70,229,0.25)' }}>{initials}</div>
+          <div style={{ width:64,height:64,borderRadius:'50%',background:'linear-gradient(135deg,#232425,#90949b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,fontWeight:700,color:'#fff',margin:'0 auto 10px',boxShadow:'0 4px 20px rgba(144,148,155,0.25)' }}>{initials}</div>
           <div style={{ fontSize:12,color:'rgba(255,255,255,0.5)' }}>{session.user.email}</div>
         </div>
 
@@ -1451,7 +1510,7 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
           {['profile','memory'].map(tab => (
             <button key={tab} onClick={()=>setActiveTab(tab)} style={{
               flex:1, padding:'7px 0', borderRadius:8, border:'none', cursor:'pointer',
-              background: activeTab===tab ? 'rgba(79,70,229,0.5)' : 'transparent',
+              background: activeTab===tab ? 'rgba(144,148,155,0.5)' : 'transparent',
               color: activeTab===tab ? '#fff' : 'rgba(255,255,255,0.4)',
               fontSize:13, fontWeight:600, fontFamily:"'Inter',sans-serif", transition:'all 0.15s',
               textTransform:'capitalize',
@@ -1465,13 +1524,13 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
             <div style={{ marginBottom:16 }}>
               <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Name</label>
               <input value={name} onChange={e=>setName(e.target.value)} placeholder="Enter your name"
-                style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
+                style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(144,148,155,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
               />
             </div>
             <div style={{ marginBottom:16 }}>
               <label style={{ display:'block',fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1.2,textTransform:'uppercase',marginBottom:8 }}>Your Role</label>
               <input value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g. SAP Consultant, Project Manager"
-                style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(79,70,229,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
+                style={{ width:'100%',padding:'10px 14px',boxSizing:'border-box',background:'rgba(255,255,255,0.08)',border:'1.5px solid rgba(144,148,155,0.25)',borderRadius:10,fontSize:14,fontFamily:"'Inter','DM Sans',sans-serif",color:'#fff',outline:'none' }}
               />
             </div>
             <div style={{ marginBottom:20 }}>
@@ -1480,9 +1539,9 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
                 {SAP_MODULES.map(m => (
                   <button key={m} onClick={()=>toggleModule(m)} style={{
                     padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',
-                    border:`1px solid ${modules.includes(m)?'#4F46E5':'rgba(255,255,255,0.15)'}`,
-                    background:modules.includes(m)?'rgba(79,70,229,0.3)':'rgba(255,255,255,0.05)',
-                    color:modules.includes(m)?'#a5b4fc':'rgba(255,255,255,0.5)',
+                    border:`1px solid ${modules.includes(m)?'#90949b':'rgba(255,255,255,0.15)'}`,
+                    background:modules.includes(m)?'rgba(144,148,155,0.3)':'rgba(255,255,255,0.05)',
+                    color:modules.includes(m)?'#ced0d3':'rgba(255,255,255,0.5)',
                     transition:'all 0.15s',
                   }}>{m}</button>
                 ))}
@@ -1496,16 +1555,16 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
                     <div style={{
                       width:44,height:44,borderRadius:'50%',
                       background:`radial-gradient(circle at 35% 30%,${BG_THEMES[key].blobA},${BG_THEMES[key].bgGrad.match(/#[0-9a-fA-F]{6}/)?.[0] || '#141412'} 70%)`,
-                      border: selectedTheme===key ? '2px solid #4F46E5' : '1px solid rgba(255,255,255,0.15)',
+                      border: selectedTheme===key ? '2px solid #90949b' : '1px solid rgba(255,255,255,0.15)',
                       boxSizing:'border-box',
                     }}/>
-                    <div style={{ fontSize:10,color:selectedTheme===key?'#a5b4fc':'rgba(255,255,255,0.5)',marginTop:4 }}>{label}</div>
+                    <div style={{ fontSize:10,color:selectedTheme===key?'#ced0d3':'rgba(255,255,255,0.5)',marginTop:4 }}>{label}</div>
                   </div>
                 ))}
               </div>
             </div>
             <button onClick={async()=>{ setSaving(true); await onSave({name, role, modules, theme:selectedTheme}); setSaving(false); onClose() }}
-              style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(79,70,229,0.25)' }}>
+              style={{ width:'100%',padding:13,background:'linear-gradient(135deg,#232425,#90949b)',border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",marginBottom:12,boxShadow:'0 4px 16px rgba(144,148,155,0.25)' }}>
               {saving?'Saving...':'Save Profile'}
             </button>
             <button onClick={onSignOut} style={{ width:'100%',padding:12,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,color:'rgba(255,255,255,0.6)',fontSize:14,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif" }}
@@ -1523,10 +1582,10 @@ function ProfileModal({ session, profile, onClose, onSave, onSignOut, t }) {
               <input value={newMemory} onChange={e=>setNewMemory(e.target.value)}
                 onKeyDown={e=>e.key==='Enter' && addMemory()}
                 placeholder="Add a new memory..."
-                style={{ flex:1, padding:'9px 12px', background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:13, color:'#fff', outline:'none', fontFamily:"'Inter',sans-serif" }}
+                style={{ flex:1, padding:'9px 12px', background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(144,148,155,0.25)', borderRadius:10, fontSize:13, color:'#fff', outline:'none', fontFamily:"'Inter',sans-serif" }}
               />
               <button onClick={addMemory} disabled={addingMemory || !newMemory.trim()}
-                style={{ padding:'9px 14px', borderRadius:10, border:'none', background:'#4F46E5', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', opacity: addingMemory||!newMemory.trim() ? 0.5 : 1 }}>
+                style={{ padding:'9px 14px', borderRadius:10, border:'none', background:'#90949b', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', opacity: addingMemory||!newMemory.trim() ? 0.5 : 1 }}>
                 {addingMemory ? '...' : '+ Add'}
               </button>
             </div>
@@ -1564,8 +1623,8 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={onClick}
       style={{
         padding:'14px 16px', borderRadius:14, cursor:'pointer', position:'relative',
-        background: isActive ? 'rgba(79,70,229,0.10)' : t.surface,
-        border: `1.5px solid ${isActive ? '#4F46E5' : hovered ? 'rgba(79,70,229,0.35)' : t.border}`,
+        background: isActive ? 'rgba(144,148,155,0.10)' : t.surface,
+        border: `1.5px solid ${isActive ? '#90949b' : hovered ? 'rgba(144,148,155,0.35)' : t.border}`,
         boxShadow: hovered ? '0 6px 20px rgba(0,0,0,0.10)' : '0 1px 3px rgba(0,0,0,0.03)',
         transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
         transition:'all 0.18s ease',
@@ -1575,7 +1634,7 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
         {conv.module && <ModuleBadge module={conv.module} small/>}
         {conv.is_summarised && <span style={{ fontSize:9,color:t.text4,background:t.surface2,padding:'1px 5px',borderRadius:10 }}>∑ summarised</span>}
       </div>
-      <div style={{ fontSize:14,fontWeight:isActive?600:500,color:isActive?'#4F46E5':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>{conv.title}</div>
+      <div style={{ fontSize:14,fontWeight:isActive?600:500,color:isActive?'#90949b':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>{conv.title}</div>
       <div style={{ fontSize:11.5,color:t.text3,marginTop:10,fontWeight:400,display:'flex',alignItems:'center',gap:5 }}>
         <span style={{ overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{conv.topic}</span>
         <span style={{ color:t.text4,flexShrink:0 }}>·</span>
@@ -1597,9 +1656,9 @@ function ProjectItem({ proj, isActive, onClick, onDelete, t }) {
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={onClick}
       style={{
         padding:'14px 16px', borderRadius:14, cursor:'pointer', position:'relative',
-        background: isActive ? 'rgba(79,70,229,0.12)' : 'linear-gradient(135deg,rgba(79,70,229,0.06),rgba(124,58,237,0.04))',
-        border: `1.5px solid ${isActive ? '#4F46E5' : hovered ? 'rgba(79,70,229,0.45)' : 'rgba(79,70,229,0.22)'}`,
-        boxShadow: hovered ? '0 6px 20px rgba(79,70,229,0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
+        background: isActive ? 'rgba(144,148,155,0.12)' : 'linear-gradient(135deg,rgba(144,148,155,0.06),rgba(142,146,153,0.04))',
+        border: `1.5px solid ${isActive ? '#90949b' : hovered ? 'rgba(144,148,155,0.45)' : 'rgba(144,148,155,0.22)'}`,
+        boxShadow: hovered ? '0 6px 20px rgba(144,148,155,0.15)' : '0 1px 3px rgba(0,0,0,0.03)',
         transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
         transition:'all 0.18s ease',
         display:'flex', flexDirection:'column', minHeight:92,
@@ -1607,9 +1666,9 @@ function ProjectItem({ proj, isActive, onClick, onDelete, t }) {
     >
       <div style={{ display:'flex',alignItems:'center',gap:6,marginBottom:8 }}>
         {proj.module && <ModuleBadge module={proj.module} small/>}
-        <span style={{ fontSize:9,fontWeight:700,color:'#4F46E5',background:'rgba(79,70,229,0.15)',padding:'2px 7px',borderRadius:8,letterSpacing:0.5 }}>📁 FS</span>
+        <span style={{ fontSize:9,fontWeight:700,color:'#90949b',background:'rgba(144,148,155,0.15)',padding:'2px 7px',borderRadius:8,letterSpacing:0.5 }}>📁 FS</span>
       </div>
-      <div style={{ fontSize:14,fontWeight:600,color:isActive?'#4F46E5':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>
+      <div style={{ fontSize:14,fontWeight:600,color:isActive?'#90949b':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>
         {proj.project_name || proj.fs_title || proj.title}
       </div>
       <div style={{ fontSize:11.5,color:t.text3,marginTop:10 }}>
@@ -1630,7 +1689,7 @@ const MODULE_STACK = [
   { key:'PM – Plant Maintenance',mod:'PM',sub:'Plant Maintenance',emoji:'🔧',gradDark:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)',gradLight:'linear-gradient(140deg,#064E3B 0%,#059669 55%,#6EE7B7 100%)' },
   { key:'MM – Materials Management',mod:'MM',sub:'Materials Management',emoji:'📦',gradDark:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)',gradLight:'linear-gradient(140deg,#7F1D1D 0%,#DC2626 55%,#FCA5A5 100%)' },
   { key:'Fiori / UX',mod:'Fiori',sub:'User Experience',emoji:'◻',gradDark:'linear-gradient(140deg,#1E3A5F 0%,#1D4ED8 55%,#93C5FD 100%)',gradLight:'linear-gradient(140deg,#1E3A5F 0%,#1D4ED8 55%,#93C5FD 100%)' },
-  { key:'S/4HANA General',mod:'S/4HANA',sub:'General',emoji:'◈',gradDark:'linear-gradient(140deg,#3B0764 0%,#7C3AED 55%,#DDD6FE 100%)',gradLight:'linear-gradient(140deg,#3B0764 0%,#7C3AED 55%,#DDD6FE 100%)' },
+  { key:'S/4HANA General',mod:'S/4HANA',sub:'General',emoji:'◈',gradDark:'linear-gradient(140deg,#333538 0%,#8e9299 55%,#e9eaeb 100%)',gradLight:'linear-gradient(140deg,#333538 0%,#8e9299 55%,#e9eaeb 100%)' },
 ]
 
 const N_CARDS=MODULE_STACK.length,CARD_H=170,PEEK=14
@@ -1682,10 +1741,10 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
               <div style={{ fontSize:isMobile?17:24, fontWeight:700, color:t.text, fontFamily:"'Inter','DM Sans',sans-serif" }}>History</div>
               <div style={{ fontSize:12, color:t.text3, marginTop:1 }}>{totalCount} conversation{totalCount!==1?'s':''}{projects.length>0?` · ${projects.length} project${projects.length!==1?'s':''}`:''}</div>
             </div>
-            {!isMobile&&(<button onClick={()=>goChat(null,null,null)} style={{ padding:'10px 18px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(79,70,229,0.2)',transition:'all 0.2s',flexShrink:0,whiteSpace:'nowrap' }}
-              onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(79,70,229,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
-              onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(79,70,229,0.2)';e.currentTarget.style.transform='translateY(0)'}}
-            ><span style={{ fontSize:16,color:dark?'#0D0D1A':'#ffffff' }}>+</span><span style={{color:dark?'#0D0D1A':'#ffffff'}}>New Conversation</span></button>)}
+            {!isMobile&&(<button onClick={()=>goChat(null,null,null)} style={{ padding:'10px 18px',background:dark?'linear-gradient(135deg,#ffffff 0%,#a0a0b0 100%)':'linear-gradient(135deg,#232425 0%,#16213e 100%)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Inter','DM Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 2px 10px rgba(144,148,155,0.2)',transition:'all 0.2s',flexShrink:0,whiteSpace:'nowrap' }}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(144,148,155,0.3)';e.currentTarget.style.transform='translateY(-1px)'}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 2px 10px rgba(144,148,155,0.2)';e.currentTarget.style.transform='translateY(0)'}}
+            ><span style={{ fontSize:16,color:dark?'#131314':'#ffffff' }}>+</span><span style={{color:dark?'#131314':'#ffffff'}}>New Conversation</span></button>)}
           </div>
 
           <div style={{ display:'flex', gap:10, flexDirection:isMobile?'column':'row' }}>
@@ -1693,7 +1752,7 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
               <span style={{ position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:t.text4,fontSize:14 }}>🔍</span>
               <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search conversations..."
                 style={{ width:'100%',padding:'10px 12px 10px 36px',boxSizing:'border-box',border:`1.5px solid ${t.border}`,borderRadius:10,fontSize:13.5,color:t.text,background:t.inputBg,fontFamily:"'Inter','DM Sans',sans-serif",outline:'none',transition:'border-color 0.2s' }}
-                onFocus={e=>e.target.style.borderColor='#4F46E5'}
+                onFocus={e=>e.target.style.borderColor='#90949b'}
                 onBlur={e=>e.target.style.borderColor=t.border}
               />
             </div>
@@ -1706,10 +1765,10 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
                   background:t.inputBg, cursor:'pointer', transition:'border-color 0.2s',
                   fontFamily:"'Inter','DM Sans',sans-serif", height:'100%', boxSizing:'border-box',
                 }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=filterDropdownOpen?'#4F46E5':t.border}
+                onMouseEnter={e=>e.currentTarget.style.borderColor='#90949b'}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=filterDropdownOpen?'#90949b':t.border}
               >
-                <span style={{ fontSize:13, color: deliverableFilter==='ALL' ? t.text3 : '#4F46E5', fontWeight: deliverableFilter==='ALL'?400:600, whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
+                <span style={{ fontSize:13, color: deliverableFilter==='ALL' ? t.text3 : '#90949b', fontWeight: deliverableFilter==='ALL'?400:600, whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
                   {DELIVERABLE_FILTERS.find(f=>f.key===deliverableFilter)?.label || 'All Conversations'}
                 </span>
                 <span style={{ fontSize:11, color:t.text4, transform: filterDropdownOpen?'rotate(180deg)':'rotate(0deg)', transition:'transform 0.2s', flexShrink:0, marginLeft:6 }}>▾</span>
@@ -1727,13 +1786,13 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
                     onClick={() => { setDeliverableFilter('ALL'); setFilterDropdownOpen(false) }}
                     style={{
                       padding:'9px 14px', fontSize:13, cursor:'pointer',
-                      color: deliverableFilter==='ALL' ? '#4F46E5' : t.text,
-                      background: deliverableFilter==='ALL' ? 'rgba(79,70,229,0.07)' : 'transparent',
+                      color: deliverableFilter==='ALL' ? '#90949b' : t.text,
+                      background: deliverableFilter==='ALL' ? 'rgba(144,148,155,0.07)' : 'transparent',
                       fontWeight: deliverableFilter==='ALL' ? 600 : 400,
                       display:'flex', alignItems:'center', justifyContent:'space-between',
                       transition:'background 0.12s',
                     }}
-                    onMouseEnter={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                    onMouseEnter={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='rgba(144,148,155,0.04)' }}
                     onMouseLeave={e=>{ if(deliverableFilter!=='ALL') e.currentTarget.style.background='transparent' }}
                   >
                     All Conversations
@@ -1756,13 +1815,13 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
                             onClick={() => { setDeliverableFilter(f.key); setFilterDropdownOpen(false) }}
                             style={{
                               padding:'8px 14px 8px 20px', fontSize:13, cursor:'pointer',
-                              color: deliverableFilter===f.key ? '#4F46E5' : t.text2,
-                              background: deliverableFilter===f.key ? 'rgba(79,70,229,0.07)' : 'transparent',
+                              color: deliverableFilter===f.key ? '#90949b' : t.text2,
+                              background: deliverableFilter===f.key ? 'rgba(144,148,155,0.07)' : 'transparent',
                               fontWeight: deliverableFilter===f.key ? 600 : 400,
                               display:'flex', alignItems:'center', justifyContent:'space-between',
                               transition:'background 0.12s',
                             }}
-                            onMouseEnter={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='rgba(79,70,229,0.04)' }}
+                            onMouseEnter={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='rgba(144,148,155,0.04)' }}
                             onMouseLeave={e=>{ if(deliverableFilter!==f.key) e.currentTarget.style.background='transparent' }}
                           >
                             {f.label}
@@ -1782,14 +1841,14 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
       <div style={{ flex:1,overflowY:'auto',padding: isMobile?'16px 18px 20px':'24px 40px 32px', width:'100%', boxSizing:'border-box' }}>
         <div style={{ maxWidth:1280, margin:'0 auto', width:'100%' }}>
           {dbLoading?(
-            <div style={{ padding:60,textAlign:'center' }}><div style={{ width:22,height:22,border:`2px solid ${t.border}`,borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',margin:'0 auto 10px' }}/><span style={{ fontSize:13,color:t.text4 }}>Loading...</span></div>
+            <div style={{ padding:60,textAlign:'center' }}><div style={{ width:22,height:22,border:`2px solid ${t.border}`,borderTopColor:'#90949b',borderRadius:'50%',animation:'spin 0.8s linear infinite',margin:'0 auto 10px' }}/><span style={{ fontSize:13,color:t.text4 }}>Loading...</span></div>
           ):(
             <>
               {projects.length > 0 && (
                 <div style={{ marginBottom:28 }}>
-                  <div style={{ fontSize:11,fontWeight:700,color:'#4F46E5',letterSpacing:0.8,textTransform:'uppercase',padding:'0 0 10px',display:'flex',alignItems:'center',gap:6 }}>
+                  <div style={{ fontSize:11,fontWeight:700,color:'#90949b',letterSpacing:0.8,textTransform:'uppercase',padding:'0 0 10px',display:'flex',alignItems:'center',gap:6 }}>
                     <span>📁</span> Projects
-                    <span style={{ background:'rgba(79,70,229,0.12)',color:'#4F46E5',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
+                    <span style={{ background:'rgba(144,148,155,0.12)',color:'#90949b',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{projects.length}</span>
                   </div>
                   <div style={gridStyle}>
                     {projects.map(proj => (
@@ -1832,10 +1891,10 @@ function HistoryPage({ conversations, projects, searchQuery, setSearchQuery, fil
       <div style={{ padding: isMobile?'10px 18px':'12px 40px',borderTop:`1px solid ${t.border}`, width:'100%', boxSizing:'border-box' }}>
         <div style={{ maxWidth:1280, margin:'0 auto', width:'100%' }}>
           <div onClick={()=>setShowProfile(true)} style={{ display:'inline-flex',alignItems:'center',gap:10,padding:'8px 10px',borderRadius:10,cursor:'pointer',transition:'background 0.15s' }}
-            onMouseEnter={e=>e.currentTarget.style.background='rgba(79,70,229,0.07)'}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(144,148,155,0.07)'}
             onMouseLeave={e=>e.currentTarget.style.background='transparent'}
           >
-            <div style={{ width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#1a1a2e,#4F46E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 2px 8px rgba(79,70,229,0.2)' }}>{getInitials(profile?.name,session.user.email)}</div>
+            <div style={{ width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#232425,#90949b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 2px 8px rgba(144,148,155,0.2)' }}>{getInitials(profile?.name,session.user.email)}</div>
             <div style={{ overflow:'hidden' }}><div style={{ fontSize:13,fontWeight:500,color:t.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{profile?.name||'My Profile'}</div><div style={{ fontSize:11,color:t.text4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{session.user.email}</div></div>
           </div>
         </div>
@@ -1859,7 +1918,7 @@ function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, 
             onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.2)'}
           >+ New Conversation</button>
         </div>
-        {!topic&&(<div style={{ display:'flex',flexWrap:'wrap',gap:8,marginBottom:18 }}>{TOPICS[mod]?.map(tp=>{const count=conversations.filter(c=>c.module===mod&&c.topic===tp).length;return(<div key={tp} onClick={()=>onSelectConv(null,mod,tp)} style={{ padding:'6px 14px',borderRadius:20,background:count>0?'rgba(79,70,229,0.08)':t.surface2,border:`1.5px solid ${count>0?'rgba(79,70,229,0.25)':t.border}`,cursor:'pointer',fontSize:12,color:count>0?'#4F46E5':t.text3,fontWeight:count>0?600:400,transition:'all 0.15s',display:'flex',alignItems:'center',gap:6 }} onMouseEnter={e=>e.currentTarget.style.borderColor='#4F46E5'} onMouseLeave={e=>e.currentTarget.style.borderColor=count>0?'rgba(79,70,229,0.2)':t.border}>{tp}{count>0&&<span style={{ background:'#4F46E5',color:'#fff',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{count}</span>}</div>)})}</div>)}
+        {!topic&&(<div style={{ display:'flex',flexWrap:'wrap',gap:8,marginBottom:18 }}>{TOPICS[mod]?.map(tp=>{const count=conversations.filter(c=>c.module===mod&&c.topic===tp).length;return(<div key={tp} onClick={()=>onSelectConv(null,mod,tp)} style={{ padding:'6px 14px',borderRadius:20,background:count>0?'rgba(144,148,155,0.08)':t.surface2,border:`1.5px solid ${count>0?'rgba(144,148,155,0.25)':t.border}`,cursor:'pointer',fontSize:12,color:count>0?'#90949b':t.text3,fontWeight:count>0?600:400,transition:'all 0.15s',display:'flex',alignItems:'center',gap:6 }} onMouseEnter={e=>e.currentTarget.style.borderColor='#90949b'} onMouseLeave={e=>e.currentTarget.style.borderColor=count>0?'rgba(144,148,155,0.2)':t.border}>{tp}{count>0&&<span style={{ background:'#90949b',color:'#fff',borderRadius:10,padding:'0 6px',fontSize:10,fontWeight:700 }}>{count}</span>}</div>)})}</div>)}
         {filtered.length===0?(
           <div style={{ textAlign:'center',padding:'40px 0',color:t.text4 }}><div style={{ fontSize:32,marginBottom:12 }}>💬</div><div style={{ fontSize:14,marginBottom:6,color:t.text3 }}>No conversations yet</div><div style={{ fontSize:12 }}>Use the button above to start one</div></div>
         ):(
@@ -1867,7 +1926,7 @@ function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, 
             <div key={group} style={{ marginBottom:18 }}>
               <div style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8 }}>{group}</div>
               <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
-                {convs.map(conv=>(<div key={conv.id} onClick={()=>onSelectConv(conv.id)} style={{ padding:'14px 16px',borderRadius:12,background:t.surface,border:`1.5px solid ${t.border}`,cursor:'pointer',transition:'all 0.15s',display:'flex',alignItems:'center',justifyContent:'space-between' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 4px 12px rgba(79,70,229,0.1)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.boxShadow='none'}}><div style={{ flex:1,minWidth:0 }}><div style={{ fontSize:14,fontWeight:500,color:t.text,marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{conv.title}</div><div style={{ fontSize:12,color:t.text3 }}>{conv.topic} · {new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div><span style={{ color:t.text4,fontSize:18,marginLeft:12 }}>›</span></div>))}
+                {convs.map(conv=>(<div key={conv.id} onClick={()=>onSelectConv(conv.id)} style={{ padding:'14px 16px',borderRadius:12,background:t.surface,border:`1.5px solid ${t.border}`,cursor:'pointer',transition:'all 0.15s',display:'flex',alignItems:'center',justifyContent:'space-between' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.boxShadow='0 4px 12px rgba(144,148,155,0.1)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.boxShadow='none'}}><div style={{ flex:1,minWidth:0 }}><div style={{ fontSize:14,fontWeight:500,color:t.text,marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{conv.title}</div><div style={{ fontSize:12,color:t.text3 }}>{conv.topic} · {new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div><span style={{ color:t.text4,fontSize:18,marginLeft:12 }}>›</span></div>))}
               </div>
             </div>
           ))
@@ -1916,7 +1975,7 @@ export default function Brain({ session }) {
   const [showProfile, setShowProfile]     = useState(false)
   const [showSaveFinding, setShowSaveFinding] = useState(false)
   const [profile, setProfile]             = useState(null)
-  const activeThemeKey = Object.prototype.hasOwnProperty.call(BG_THEMES, profile?.theme) ? profile.theme : 'aurora'
+  const activeThemeKey = Object.prototype.hasOwnProperty.call(BG_THEMES, resolveThemeKey(profile?.theme)) ? resolveThemeKey(profile?.theme) : 'midnight'
   const dark = activeThemeKey !== 'light'
   const t = dark ? T.dark : T.light
   const bgTheme = BG_THEMES[activeThemeKey]
@@ -3196,7 +3255,7 @@ export default function Brain({ session }) {
         @keyframes blob1{0%,100%{transform:translate(-15%,-15%) scale(1)}50%{transform:translate(20%,15%) scale(1.35)}}
         @keyframes blob2{0%,100%{transform:translate(15%,20%) scale(1.1)}50%{transform:translate(-20%,-10%) scale(1.4)}}
         @keyframes blob3{0%,100%{transform:translate(-5%,10%) scale(1)}50%{transform:translate(10%,-15%) scale(1.2)}}
-        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(79,70,229,0.25);border-radius:4px}
+        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(144,148,155,0.25);border-radius:4px}
         @media(max-width:768px){
           .main-topbar{padding:0 18px!important;height:68px!important;min-height:68px!important;}
           .chat-input-wrap{padding:10px 14px 16px!important;margin-bottom:0!important;}
@@ -3209,7 +3268,8 @@ export default function Brain({ session }) {
       {/* Main */}
       <div style={{ flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0,position:'relative' }}>
         <div style={{ position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0,background: isHeroLanding ? '#000000' : bgTheme.bgGrad }}>
-          {!isHeroLanding && (<>
+          {(bgTheme.particles || (isHeroLanding && dark)) && <ParticleField />}
+          {!isHeroLanding && !bgTheme.particles && (<>
           <div style={{ position:'absolute',width:600,height:600,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobA} 0%,transparent 65%)`,top:'-15%',right:'0%',animation:'blob1 9s ease-in-out infinite alternate' }}/>
           <div style={{ position:'absolute',width:500,height:500,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobB} 0%,transparent 65%)`,bottom:'-10%',left:'5%',animation:'blob2 10s ease-in-out infinite alternate' }}/>
           <div style={{ position:'absolute',width:380,height:380,borderRadius:'50%',background:`radial-gradient(circle,${bgTheme.blobC} 0%,transparent 65%)`,top:'35%',right:'25%',animation:'blob3 11s ease-in-out infinite alternate' }}/>
@@ -3221,13 +3281,13 @@ export default function Brain({ session }) {
           <div style={{ display:'flex',alignItems:'center',background:t.surface2,borderRadius:10,padding:2,gap:2,flexShrink:0 }}>
             <button onClick={goHome} title="Chat"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
-                background: view==='chat' ? (dark?'#2A2440':'#fff') : 'transparent',
+                background: view==='chat' ? (dark?'#303134':'#fff') : 'transparent',
                 color: view==='chat' ? t.text : t.text3,
                 boxShadow: view==='chat' ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
               }}><IconChat size={15}/>{!isMobile&&' Chat'}</button>
             <button onClick={()=>setView('history')} title="History"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',
-                background: view==='history' ? (dark?'#2A2440':'#fff') : 'transparent',
+                background: view==='history' ? (dark?'#303134':'#fff') : 'transparent',
                 color: view==='history' ? t.text : t.text3,
                 boxShadow: view==='history' ? '0 1px 4px rgba(0,0,0,0.15)' : 'none',
               }}><IconHistory size={15}/>{!isMobile&&' History'}</button>
@@ -3239,10 +3299,10 @@ export default function Brain({ session }) {
 
           {/* Persistent quick-access icons — always visible, not just inside an active chat */}
           <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-            <button onClick={()=>goChat(null,null,null)} title="New Conversation" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}><IconPlus size={15}/></button>
-            <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s',position:'relative' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
+            <button onClick={()=>goChat(null,null,null)} title="New Conversation" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.color='#90949b'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}><IconPlus size={15}/></button>
+            <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:32,height:32,padding:0,cursor:'pointer',color:t.text3,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s',position:'relative' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.color='#90949b'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
               <IconBook size={15}/>
-              {knowledgeEntries.length > 0 && <span style={{ position:'absolute',top:-4,right:-4,background:'#6366f1',color:'white',borderRadius:'50%',width:14,height:14,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center' }}>{knowledgeEntries.length}</span>}
+              {knowledgeEntries.length > 0 && <span style={{ position:'absolute',top:-4,right:-4,background:'#a6a9ae',color:'white',borderRadius:'50%',width:14,height:14,fontSize:9,display:'flex',alignItems:'center',justifyContent:'center' }}>{knowledgeEntries.length}</span>}
             </button>
           </div>
 
@@ -3251,20 +3311,20 @@ export default function Brain({ session }) {
           {!(view==='chat'||view==='topic')&&<div style={{ flex:1 }}/>}
           {view==='chat'&&messages.some(m=>m.role==='user')&&(
             <>
-              <button onClick={()=>setShowCapabilities(c=>!c)} title="What can Wani do?" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:showCapabilities?'#4F46E5':t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0,borderColor:showCapabilities?'#4F46E5':t.border }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{if(!showCapabilities){e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}}>{isMobile?'✨':'✨ What can I do?'}</button>
-              <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
+              <button onClick={()=>setShowCapabilities(c=>!c)} title="What can Wani do?" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:showCapabilities?'#90949b':t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0,borderColor:showCapabilities?'#90949b':t.border }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.color='#90949b'}} onMouseLeave={e=>{if(!showCapabilities){e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}}>{isMobile?'✨':'✨ What can I do?'}</button>
+              <button onClick={()=>{ setShowKnowledge(true); loadKnowledge() }} title="Knowledge Base" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.color='#90949b'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>
                 <IconBook size={13}/> {!isMobile && 'Knowledge'}
-                {knowledgeEntries.length > 0 && <span style={{ background:'#6366f1',color:'white',borderRadius:'50%',width:16,height:16,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2 }}>{knowledgeEntries.length}</span>}
+                {knowledgeEntries.length > 0 && <span style={{ background:'#a6a9ae',color:'white',borderRadius:'50%',width:16,height:16,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2 }}>{knowledgeEntries.length}</span>}
               </button>
-              <button onClick={()=>setShowExport(true)} title="Export" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color='#4F46E5'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'↓':'↓ Export'}</button>
+              <button onClick={()=>setShowExport(true)} title="Export" style={{ background:'none',border:`1.5px solid ${t.border}`,borderRadius:10,width:isMobile?48:undefined,height:isMobile?48:undefined,padding:isMobile?0:'5px 10px',cursor:'pointer',fontSize:isMobile?20:12,color:t.text3,fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all 0.15s',flexShrink:0 }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.color='#90949b'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3}}>{isMobile?'↓':'↓ Export'}</button>
               {/* Generate Test Cases — only shown for project conversations */}
               {activeConv?.is_project && (
                 <button
                   onClick={()=>{ setInput('Generate SIT and UAT test cases from the functional specification discussed in this conversation. Cover all logic steps, edge cases, and error scenarios.'); setTimeout(()=>document.querySelector('textarea')?.focus(),100) }}
                   title="Generate Test Cases from this FS"
-                  style={{ background:'linear-gradient(135deg,rgba(79,70,229,0.12),rgba(99,102,241,0.08))',border:'1.5px solid rgba(79,70,229,0.4)',borderRadius:10,padding:isMobile?'0 12px':'5px 12px',cursor:'pointer',fontSize:12,color:'#4F46E5',fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:5,transition:'all 0.15s',flexShrink:0,height:isMobile?48:undefined,whiteSpace:'nowrap' }}
-                  onMouseEnter={e=>{e.currentTarget.style.background='rgba(79,70,229,0.18)';e.currentTarget.style.borderColor='#4F46E5'}}
-                  onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(79,70,229,0.12),rgba(99,102,241,0.08))';e.currentTarget.style.borderColor='rgba(79,70,229,0.4)'}}
+                  style={{ background:'linear-gradient(135deg,rgba(144,148,155,0.12),rgba(166,169,174,0.08))',border:'1.5px solid rgba(144,148,155,0.4)',borderRadius:10,padding:isMobile?'0 12px':'5px 12px',cursor:'pointer',fontSize:12,color:'#90949b',fontFamily:"'Inter','DM Sans',sans-serif",fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:5,transition:'all 0.15s',flexShrink:0,height:isMobile?48:undefined,whiteSpace:'nowrap' }}
+                  onMouseEnter={e=>{e.currentTarget.style.background='rgba(144,148,155,0.18)';e.currentTarget.style.borderColor='#90949b'}}
+                  onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(144,148,155,0.12),rgba(166,169,174,0.08))';e.currentTarget.style.borderColor='rgba(144,148,155,0.4)'}}
                 >
                   🧪 {isMobile?'Test Cases':'Generate Test Cases'}
                 </button>
@@ -3284,11 +3344,11 @@ export default function Brain({ session }) {
               style={{
                 display:'flex', alignItems:'center', gap:7, padding:isMobile?'8px 9px':'8px 16px', borderRadius:10, border:'none',
                 cursor:'pointer', fontFamily:"'Inter','DM Sans',sans-serif", fontSize:13, fontWeight:600,
-                background: tab.active ? '#4F46E5' : 'transparent',
+                background: tab.active ? '#90949b' : 'transparent',
                 color: tab.active ? '#fff' : t.text3,
                 transition:'all 0.15s',
               }}
-              onMouseEnter={e=>{ if(!tab.active) e.currentTarget.style.background = t.hoverBg||'rgba(79,70,229,0.06)' }}
+              onMouseEnter={e=>{ if(!tab.active) e.currentTarget.style.background = t.hoverBg||'rgba(144,148,155,0.06)' }}
               onMouseLeave={e=>{ if(!tab.active) e.currentTarget.style.background = 'transparent' }}
             >
               <tab.Icon size={15}/>
@@ -3301,7 +3361,7 @@ export default function Brain({ session }) {
           {/* Profile avatar (initials) + Logout — top right */}
           <button onClick={()=>setShowProfile(true)} title="Profile" style={{
             width:32, height:32, borderRadius:'50%', border:'none', cursor:'pointer',
-            background:'linear-gradient(135deg,#4F46E5,#7C3AED)', color:'#fff',
+            background:'linear-gradient(135deg,#90949b,#8e9299)', color:'#fff',
             fontSize:13, fontWeight:700, fontFamily:"'Inter','DM Sans',sans-serif",
             display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
           }}>
@@ -3318,18 +3378,18 @@ export default function Brain({ session }) {
         {/* Auto-compact progress overlay — like Claude.ai */}
         {autoCompacting&&(
           <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center' }}>
-            <div style={{ background:dark?'#1A1530':'#fff',border:`1px solid ${dark?'#3D3560':'#E0E0E0'}`,borderRadius:20,padding:'32px 40px',width:'min(90vw,380px)',textAlign:'center',boxShadow:'0 24px 64px rgba(0,0,0,0.3)' }}>
-              <div style={{ width:44,height:44,borderRadius:'50%',border:'3px solid rgba(79,70,229,0.2)',borderTopColor:'#4F46E5',animation:'spin 0.9s linear infinite',margin:'0 auto 20px' }}/>
-              <div style={{ fontSize:16,fontWeight:600,color:dark?'#F0EEF8':'#1C1C1E',marginBottom:8,fontFamily:"'Inter','DM Sans',sans-serif" }}>
+            <div style={{ background:dark?'#212224':'#fff',border:`1px solid ${dark?'#484a4d':'#E0E0E0'}`,borderRadius:20,padding:'32px 40px',width:'min(90vw,380px)',textAlign:'center',boxShadow:'0 24px 64px rgba(0,0,0,0.3)' }}>
+              <div style={{ width:44,height:44,borderRadius:'50%',border:'3px solid rgba(144,148,155,0.2)',borderTopColor:'#90949b',animation:'spin 0.9s linear infinite',margin:'0 auto 20px' }}/>
+              <div style={{ fontSize:16,fontWeight:600,color:dark?'#f2f3f4':'#1C1C1E',marginBottom:8,fontFamily:"'Inter','DM Sans',sans-serif" }}>
                 Compacting conversation…
               </div>
-              <div style={{ fontSize:13,color:dark?'#8A849E':'#8A8A8E',marginBottom:20,lineHeight:1.5 }}>
+              <div style={{ fontSize:13,color:dark?'#8f9093':'#8A8A8E',marginBottom:20,lineHeight:1.5 }}>
                 Summarising earlier messages so we can keep chatting
               </div>
-              <div style={{ background:dark?'#2A2440':'#F0F0F0',borderRadius:999,height:6,overflow:'hidden' }}>
-                <div style={{ height:'100%',borderRadius:999,background:'linear-gradient(90deg,#4F46E5,#7C3AED)',width:`${compactProgress}%`,transition:'width 0.3s ease' }}/>
+              <div style={{ background:dark?'#303134':'#F0F0F0',borderRadius:999,height:6,overflow:'hidden' }}>
+                <div style={{ height:'100%',borderRadius:999,background:'linear-gradient(90deg,#90949b,#8e9299)',width:`${compactProgress}%`,transition:'width 0.3s ease' }}/>
               </div>
-              <div style={{ fontSize:12,color:dark?'#5A5470':'#AEAEB2',marginTop:10 }}>{Math.round(compactProgress)}%</div>
+              <div style={{ fontSize:12,color:dark?'#606164':'#AEAEB2',marginTop:10 }}>{Math.round(compactProgress)}%</div>
             </div>
           </div>
         )}
@@ -3347,7 +3407,7 @@ export default function Brain({ session }) {
                   introVideoFailed ? (
                     <div onClick={()=>setShowIntroVideo(false)} style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',minHeight:'60vh',animation:'fadeIn 0.25s ease',background:'#000000' }}>
                       <div style={{ position:'relative',width:60,height:60,display:'flex',alignItems:'center',justifyContent:'center' }}>
-                        <span style={{ position:'absolute',inset:0,borderRadius:'50%',border:'2.5px solid rgba(255,255,255,0.1)',borderTopColor:'#4F46E5',animation:'spin 0.9s linear infinite' }}/>
+                        <span style={{ position:'absolute',inset:0,borderRadius:'50%',border:'2.5px solid rgba(255,255,255,0.1)',borderTopColor:'#90949b',animation:'spin 0.9s linear infinite' }}/>
                         <WaniLogo size={30} dark/>
                       </div>
                     </div>
@@ -3372,18 +3432,18 @@ export default function Brain({ session }) {
                   ) : (
                   <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',height:'100%',minHeight:'60vh',textAlign:'center',animation:'fadeIn 0.4s ease',padding:'8px 20px 12px',background:'#000000',gap:6 }}>
                     <WaniHeroCard widthPx={heroImageWidth} heightPx={heroImageHeight}/>
-                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#F5F5F7' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
+                    {profile?.name&&(<div style={{ fontFamily:"'Inter',sans-serif",fontSize:window.innerWidth<768?18:22,fontWeight:600,color:'#f6f6f6' }}>Hello, <TextRoll text={profile.name.split(' ')[0]} repeat pauseMs={5000} style={{ display:'inline-block' }}/></div>)}
                     <p style={{ fontSize:15,color:'#94A3B8',maxWidth:340,lineHeight:1.5,margin:0 }}>{browseTopic?`Ask anything about ${browseTopic}`:'What SAP question can I help with?'}</p>
                     {browseTopic&&STARTERS[browseTopic]&&(
                       <div style={{ display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',maxWidth:420 }}>
-                        {STARTERS[browseTopic].map((s,i)=>(<div key={i} onClick={()=>setInput(s)} style={{ padding:'7px 14px',background:t.surface,border:`1.5px solid ${t.border}`,borderRadius:20,fontSize:12,color:t.text3,cursor:'pointer',transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3;e.currentTarget.style.background=t.surface}}>{s}</div>))}
+                        {STARTERS[browseTopic].map((s,i)=>(<div key={i} onClick={()=>setInput(s)} style={{ padding:'7px 14px',background:t.surface,border:`1.5px solid ${t.border}`,borderRadius:20,fontSize:12,color:t.text3,cursor:'pointer',transition:'all 0.15s' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.color=t.text;e.currentTarget.style.background=t.surface2}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text3;e.currentTarget.style.background=t.surface}}>{s}</div>))}
                       </div>
                     )}
                     {!browseTopic && !input.trim() && conversations.length>0 && (
-                      <div style={{ width:'100%',maxWidth:440,marginTop:8,textAlign:'left',animation:'fadeIn 0.4s ease',background:'linear-gradient(180deg, transparent 0%, rgba(30,20,50,0.55) 25%, rgba(30,20,50,0.55) 100%)',borderRadius:18,padding:'16px 14px' }}>
+                      <div style={{ width:'100%',maxWidth:440,marginTop:8,textAlign:'left',animation:'fadeIn 0.4s ease',background:'linear-gradient(180deg, transparent 0%, rgba(33,34,37,0.55) 25%, rgba(33,34,37,0.55) 100%)',borderRadius:18,padding:'16px 14px' }}>
                         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10 }}>
                           <span style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:1,textTransform:'uppercase' }}>Recently Updated</span>
-                          <span onClick={()=>setView('history')} style={{ fontSize:12,color:'#4F46E5',cursor:'pointer',fontWeight:600 }}>View all</span>
+                          <span onClick={()=>setView('history')} style={{ fontSize:12,color:'#90949b',cursor:'pointer',fontWeight:600 }}>View all</span>
                         </div>
                         <div style={{ background:t.surface,border:`1px solid ${t.border}`,borderRadius:14,overflow:'hidden' }}>
                           {[...conversations].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,4).map((conv,i)=>{
@@ -3437,7 +3497,7 @@ export default function Brain({ session }) {
                         <div style={{ width:32,height:32,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center' }}><WaniLogo size={28} dark={dark}/></div>
                         <div style={{ background:t.msgAI,border:`1px solid ${t.msgAIBdr}`,borderRadius:'4px 16px 16px 16px',padding:'14px 18px',maxWidth:420 }}>
                           <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:8 }}>
-                            <div style={{ width:14,height:14,border:'2px solid rgba(79,70,229,0.3)',borderTopColor:'#4F46E5',borderRadius:'50%',animation:'spin 0.8s linear infinite',flexShrink:0 }}/>
+                            <div style={{ width:14,height:14,border:'2px solid rgba(144,148,155,0.3)',borderTopColor:'#90949b',borderRadius:'50%',animation:'spin 0.8s linear infinite',flexShrink:0 }}/>
                             <span style={{ fontSize:14,fontWeight:600,color:t.text }}>
                               {streamingIntent === 'FS_SPEC' ? '📄 Building Functional Specification…' : '📊 Building Workshop Presentation…'}
                             </span>
@@ -3456,7 +3516,7 @@ export default function Brain({ session }) {
                             const total = streamingIntent === 'FS_SPEC' ? 17 : '~15'
                             if (count === 0) return null
                             return (
-                              <div style={{ marginTop:10,fontSize:12,color:'#4F46E5',fontWeight:600 }}>
+                              <div style={{ marginTop:10,fontSize:12,color:'#90949b',fontWeight:600 }}>
                                 {streamingIntent === 'FS_SPEC' ? `✓ ${count} of ${total} sections written` : `✓ ${count} slides written`}
                               </div>
                             )
@@ -3497,7 +3557,7 @@ export default function Brain({ session }) {
               <button
                 onClick={goHome}
                 title="New chat"
-                style={{ pointerEvents:'auto', width:52, height:52, borderRadius:'50%', border:'none', background:'#4F46E5', color:'#fff', cursor:'pointer', fontSize:26, fontWeight:300, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 20px rgba(79,70,229,0.45)', animation:'fabIn 0.3s ease' }}
+                style={{ pointerEvents:'auto', width:52, height:52, borderRadius:'50%', border:'none', background:'#90949b', color:'#fff', cursor:'pointer', fontSize:26, fontWeight:300, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 6px 20px rgba(144,148,155,0.45)', animation:'fabIn 0.3s ease' }}
                 onMouseDown={e=>{ e.currentTarget.style.transform='scale(0.92)' }}
                 onMouseUp={e=>{ e.currentTarget.style.transform='scale(1)' }}
                 onMouseLeave={e=>{ e.currentTarget.style.transform='scale(1)' }}
@@ -3511,7 +3571,7 @@ export default function Brain({ session }) {
 
                 {/* Document chip */}
                 {uploadedDoc && (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'rgba(79,70,229,0.1)', border:'1px solid rgba(79,70,229,0.25)', borderRadius:10, fontSize:12 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'rgba(144,148,155,0.1)', border:'1px solid rgba(144,148,155,0.25)', borderRadius:10, fontSize:12 }}>
                     <span style={{ fontSize:14 }}>📄</span>
                     <span style={{ flex:1, color:t.text, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uploadedDoc.name}</span>
                     {docUploadStage==='indexing' ? (
@@ -3519,7 +3579,7 @@ export default function Brain({ session }) {
                     ) : uploadedDoc.indexed===false ? (
                       <span title="Search-based retrieval may not work — full text is still used as fallback" style={{ color:'#DC2626', fontSize:11, fontWeight:600, background:'rgba(220,38,38,0.15)', padding:'2px 7px', borderRadius:6 }}>⚠️ Not indexed</span>
                     ) : (
-                      <span style={{ color:'#6366f1', fontSize:11, fontWeight:600, background:'rgba(99,102,241,0.15)', padding:'2px 7px', borderRadius:6 }}>{uploadedDoc.docType?.replace('_',' ')}</span>
+                      <span style={{ color:'#a6a9ae', fontSize:11, fontWeight:600, background:'rgba(166,169,174,0.15)', padding:'2px 7px', borderRadius:6 }}>{uploadedDoc.docType?.replace('_',' ')}</span>
                     )}
                     <button onClick={()=>setUploadedDoc(null)} style={{ background:'none', border:'none', color:t.text4, cursor:'pointer', fontSize:16, lineHeight:1, padding:0 }}>✕</button>
                   </div>
@@ -3539,13 +3599,13 @@ export default function Brain({ session }) {
                 )}
 
                 <div style={{ display:'flex',flexWrap:'wrap',gap:10,alignItems:isMobile?'center':'flex-end',background:t.inputBg,border:`1.5px solid ${t.border2}`,borderRadius:14,padding:'10px 12px',transition:'border-color 0.2s, box-shadow 0.2s' }}
-                  onFocusCapture={e=>{e.currentTarget.style.borderColor='#4F46E5';e.currentTarget.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)'}}
+                  onFocusCapture={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.boxShadow='0 0 0 3px rgba(144,148,155,0.1)'}}
                   onBlurCapture={e=>{e.currentTarget.style.borderColor=t.border2;e.currentTarget.style.boxShadow='none'}}
                 >
                   {/* Upload button */}
                   <button onClick={()=>docInputRef.current?.click()} disabled={docUploading}
                     title={docUploadStage==='extracting'?'Extracting text…':docUploadStage==='indexing'?'Indexing document — please wait before asking about it':docUploadStage==='failed'?'Indexing failed — click to retry':'Upload document (PDF, DOCX, TXT)'}
-                    style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:uploadedDoc?'#6366f1':t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:uploadedDoc?'#a6a9ae':t.text4,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
                     {docUploadStage==='extracting'?'📄':docUploadStage==='indexing'?'⏳':docUploadStage==='failed'?'⚠️':'📎'}
                   </button>
                   <input ref={docInputRef} type="file" accept=".txt,.pdf,.docx" style={{ display:'none' }} onChange={handleDocUpload} />
@@ -3575,7 +3635,7 @@ export default function Brain({ session }) {
                   <button onClick={handleImprovePrompt}
                     disabled={!input.trim() || !!attachedCode || isImprovingPrompt}
                     title="Improve this SAP question"
-                    style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:input.trim()&&!attachedCode?'#6366F1':t.text4,cursor:input.trim()&&!attachedCode?'pointer':'not-allowed',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    style={{ width:32,height:32,borderRadius:8,border:`1px solid ${t.border}`,background:'transparent',color:input.trim()&&!attachedCode?'#a6a9ae':t.text4,cursor:input.trim()&&!attachedCode?'pointer':'not-allowed',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M12 20h9" />
                       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
@@ -3595,11 +3655,11 @@ export default function Brain({ session }) {
                   </button>
                   {activeConvId && busyConvIds[activeConvId] ? (
                     <button onClick={handleStop} title="Stop generating"
-                      style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:'#4F46E5',color:'#fff',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+                      style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:'#90949b',color:'#fff',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
                     ><span style={{ width:11,height:11,background:'#fff',borderRadius:2,display:'block' }}/></button>
                   ) : (
                     <button onClick={() => handleSend()} disabled={(!input.trim()&&!attachedCode)||(activeConvId&&busyConvIds[activeConvId])}
-                      style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)?'#4F46E5':t.border,color:(input.trim()||attachedCode)?'#fff':t.text4,cursor:(input.trim()||attachedCode)?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
+                      style={{ width:36,height:36,borderRadius:10,border:'none',flexShrink:0,background:(input.trim()||attachedCode)?'#90949b':t.border,color:(input.trim()||attachedCode)?'#fff':t.text4,cursor:(input.trim()||attachedCode)?'pointer':'not-allowed',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s' }}
                     >→</button>
                   )}
                 </div>
@@ -3609,14 +3669,14 @@ export default function Brain({ session }) {
 
             {/* Knowledge toast notification */}
             {knowledgeToast && (
-              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:'rgba(79,70,229,0.95)', color:'white', padding:'8px 18px', borderRadius:10, fontSize:13, fontWeight:600, zIndex:100, boxShadow:'0 4px 20px rgba(79,70,229,0.4)' }}>
+              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:'rgba(144,148,155,0.95)', color:'white', padding:'8px 18px', borderRadius:10, fontSize:13, fontWeight:600, zIndex:100, boxShadow:'0 4px 20px rgba(144,148,155,0.4)' }}>
                 {knowledgeToast}
               </div>
             )}
 
             {/* Save to Memory confirmation popup */}
             {pendingMemorySave && (
-              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:'1px solid rgba(79,70,229,0.4)', borderRadius:14, padding:'16px 18px', zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:440, width:'90vw' }}>
+              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:'1px solid rgba(144,148,155,0.4)', borderRadius:14, padding:'16px 18px', zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:440, width:'90vw' }}>
                 <div style={{ fontWeight:700, color:t.text, marginBottom:6, fontSize:14 }}>🧠 Save to Wani's Memory?</div>
                 <div style={{ color:t.text2, fontSize:12, lineHeight:1.6, marginBottom:12, whiteSpace:'pre-wrap', maxHeight:180, overflowY:'auto', background:dark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.03)', borderRadius:8, padding:'8px 10px' }}>
                   {pendingMemorySave.summary}
@@ -3637,7 +3697,7 @@ export default function Brain({ session }) {
                       setKnowledgeToast("🧠 Saved to Wani's memory")
                       setTimeout(() => setKnowledgeToast(null), 3000)
                     } catch { setPendingMemorySave(null) }
-                  }} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background:'#4F46E5', color:'white', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:"'Inter',sans-serif" }}>
+                  }} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background:'#90949b', color:'white', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:"'Inter',sans-serif" }}>
                     ✓ Save to Memory
                   </button>
                 </div>
@@ -3669,9 +3729,9 @@ export default function Brain({ session }) {
 
             {/* Pending finding confirmation — editable before saving */}
             {pendingFinding && (
-              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:`1px solid rgba(79,70,229,0.3)`, borderRadius:14, padding:'14px 18px', fontSize:13, zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:420, width:'90vw' }}>
+              <div style={{ position:'fixed', bottom:100, left:'50%', transform:'translateX(-50%)', background:t.surface, border:`1px solid rgba(144,148,155,0.3)`, borderRadius:14, padding:'14px 18px', fontSize:13, zIndex:100, boxShadow:'0 8px 32px rgba(0,0,0,0.3)', maxWidth:420, width:'90vw' }}>
                 <div style={{ fontWeight:700, color:t.text, marginBottom:6 }}>💡 Save this finding?</div>
-                <div style={{ color:t.text2, marginBottom:6, fontSize:12 }}><span style={{ color:'#6366f1', fontWeight:600 }}>{pendingFinding.module} › {pendingFinding.topic} › {pendingFinding.object}</span></div>
+                <div style={{ color:t.text2, marginBottom:6, fontSize:12 }}><span style={{ color:'#a6a9ae', fontWeight:600 }}>{pendingFinding.module} › {pendingFinding.topic} › {pendingFinding.object}</span></div>
                 <textarea
                   value={editedFindingText}
                   onChange={(e)=>setEditedFindingText(e.target.value)}
@@ -3682,7 +3742,7 @@ export default function Brain({ session }) {
                 <div style={{ display:'flex', gap:6 }}>
                   <button onClick={()=>setPendingFinding(null)} style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:12 }}>Dismiss</button>
                   <button onClick={rejectFinding} title="Don't suggest this again" style={{ flex:1, padding:'7px', borderRadius:8, border:`1px solid ${t.border}`, background:'transparent', color:t.text3, cursor:'pointer', fontFamily:"'Inter',sans-serif", fontSize:12 }}>Not needed</button>
-                  <button onClick={()=>saveFinding(pendingFinding)} disabled={!editedFindingText.trim()} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background: editedFindingText.trim() ? '#4F46E5' : '#9ca3af', color:'white', cursor: editedFindingText.trim() ? 'pointer' : 'not-allowed', fontFamily:"'Inter',sans-serif", fontSize:12, fontWeight:600 }}>✓ Save to Knowledge Base</button>
+                  <button onClick={()=>saveFinding(pendingFinding)} disabled={!editedFindingText.trim()} style={{ flex:2, padding:'7px', borderRadius:8, border:'none', background: editedFindingText.trim() ? '#90949b' : '#9ca3af', color:'white', cursor: editedFindingText.trim() ? 'pointer' : 'not-allowed', fontFamily:"'Inter',sans-serif", fontSize:12, fontWeight:600 }}>✓ Save to Knowledge Base</button>
                 </div>
               </div>
             )}
@@ -3703,19 +3763,19 @@ export default function Brain({ session }) {
               <div>• Follow-up questions use recent conversation context more carefully.</div>
               <div>• Improving a prompt does not use one of your Wani questions.</div>
             </div>
-            <button onClick={()=>setShowUpdateNotice(false)} style={{ width:'100%', padding:'10px 14px', border:0, borderRadius:10, background:'#4F46E5', color:'#fff', fontWeight:650, cursor:'pointer' }}>Got it</button>
+            <button onClick={()=>setShowUpdateNotice(false)} style={{ width:'100%', padding:'10px 14px', border:0, borderRadius:10, background:'#90949b', color:'#fff', fontWeight:650, cursor:'pointer' }}>Got it</button>
           </div>
         </div>
       )}
 
       {/* Optional prompt suggestion — the original is never silently replaced */}
       {pendingPromptSuggestion && (
-        <div style={{ position:'fixed', left:'50%', bottom:isMobile?82:92, transform:'translateX(-50%)', zIndex:260, width:'min(620px,92vw)', background:t.surface, border:'1px solid rgba(79,70,229,0.38)', borderRadius:14, padding:'14px 16px', boxShadow:'0 10px 36px rgba(0,0,0,0.28)' }}>
-          <div style={{ fontSize:12, fontWeight:700, color:'#6366F1', marginBottom:6 }}>Improve your question?</div>
+        <div style={{ position:'fixed', left:'50%', bottom:isMobile?82:92, transform:'translateX(-50%)', zIndex:260, width:'min(620px,92vw)', background:t.surface, border:'1px solid rgba(144,148,155,0.38)', borderRadius:14, padding:'14px 16px', boxShadow:'0 10px 36px rgba(0,0,0,0.28)' }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'#a6a9ae', marginBottom:6 }}>Improve your question?</div>
           <div style={{ fontSize:13, color:t.text, lineHeight:1.55, marginBottom:12 }}>{pendingPromptSuggestion.suggestion}</div>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={()=>setPendingPromptSuggestion(null)} style={{ flex:1, padding:'8px 10px', borderRadius:9, border:`1px solid ${t.border}`, background:'transparent', color:t.text2, cursor:'pointer', fontWeight:600 }}>Keep original</button>
-            <button onClick={()=>{ setInput(pendingPromptSuggestion.suggestion); setPendingPromptSuggestion(null); setTimeout(()=>inputRef.current?.focus(),0) }} style={{ flex:1, padding:'8px 10px', borderRadius:9, border:0, background:'#4F46E5', color:'#fff', cursor:'pointer', fontWeight:650 }}>Use suggestion</button>
+            <button onClick={()=>{ setInput(pendingPromptSuggestion.suggestion); setPendingPromptSuggestion(null); setTimeout(()=>inputRef.current?.focus(),0) }} style={{ flex:1, padding:'8px 10px', borderRadius:9, border:0, background:'#90949b', color:'#fff', cursor:'pointer', fontWeight:650 }}>Use suggestion</button>
           </div>
         </div>
       )}
@@ -3733,30 +3793,30 @@ export default function Brain({ session }) {
       {isAdmin && debugData && (
         <div style={{ position:'fixed', bottom:16, right:16, zIndex:300 }}>
           <button onClick={()=>setShowDebug(p=>!p)}
-            style={{ background:'#1a1a2e', border:'1px solid #4F46E5', borderRadius:10, padding:'6px 12px', color:'#a5b4fc', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:"'Inter',sans-serif", letterSpacing:0.5 }}>
+            style={{ background:'#232425', border:'1px solid #90949b', borderRadius:10, padding:'6px 12px', color:'#ced0d3', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:"'Inter',sans-serif", letterSpacing:0.5 }}>
             {showDebug ? '✕ Debug' : '🔍 Debug'}
           </button>
           {showDebug && (
-            <div style={{ position:'absolute', bottom:36, right:0, width:380, maxHeight:'70vh', overflowY:'auto', background:'#0D0D1A', border:'1px solid #2A2440', borderRadius:14, padding:16, boxShadow:'0 8px 32px rgba(0,0,0,0.6)', fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:'#a5b4fc' }}>
-              <div style={{ fontWeight:700, color:'#818cf8', marginBottom:10, fontSize:12 }}>🔍 Wani Debug Panel</div>
+            <div style={{ position:'absolute', bottom:36, right:0, width:380, maxHeight:'70vh', overflowY:'auto', background:'#131314', border:'1px solid #303134', borderRadius:14, padding:16, boxShadow:'0 8px 32px rgba(0,0,0,0.6)', fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:'#ced0d3' }}>
+              <div style={{ fontWeight:700, color:'#b9bbc0', marginBottom:10, fontSize:12 }}>🔍 Wani Debug Panel</div>
 
               {/* Intent */}
               <div style={{ marginBottom:8 }}>
-                <span style={{ color:'#6366f1' }}>Intent: </span>
+                <span style={{ color:'#a6a9ae' }}>Intent: </span>
                 <span style={{ color:'#e2e8f0' }}>{debugData.intent}</span>
                 <span style={{ color:'#475569', marginLeft:8 }}>({(debugData.confidence*100).toFixed(0)}%)</span>
               </div>
 
               {/* Routing */}
               <div style={{ marginBottom:8 }}>
-                <span style={{ color:'#6366f1' }}>Routing: </span>
+                <span style={{ color:'#a6a9ae' }}>Routing: </span>
                 <span style={{ color:'#fbbf24' }}>{debugData.routing}</span>
               </div>
 
               {/* Module */}
               {debugData.detectedModule && (
                 <div style={{ marginBottom:8 }}>
-                  <span style={{ color:'#6366f1' }}>Module: </span>
+                  <span style={{ color:'#a6a9ae' }}>Module: </span>
                   <span style={{ color:'#34d399' }}>{debugData.detectedModule}</span>
                 </div>
               )}
@@ -3764,22 +3824,22 @@ export default function Brain({ session }) {
               {/* Search query */}
               {debugData.searchQuery && (
                 <div style={{ marginBottom:8 }}>
-                  <span style={{ color:'#6366f1' }}>Search query: </span>
+                  <span style={{ color:'#a6a9ae' }}>Search query: </span>
                   <span style={{ color:'#e2e8f0' }}>"{debugData.searchQuery}"</span>
                 </div>
               )}
 
               {/* Sources */}
               <div style={{ marginBottom:8, display:'flex', gap:12, flexWrap:'wrap' }}>
-                <span><span style={{ color:'#6366f1' }}>Book chunks: </span><span style={{ color: debugData.bookChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.bookChunks}</span></span>
-                <span><span style={{ color:'#6366f1' }}>Web search: </span><span style={{ color: debugData.openAISources > 0 ? '#34d399' : '#ef4444' }}>{debugData.openAISources}</span></span>
-                <span><span style={{ color:'#6366f1' }}>Knowledge: </span><span style={{ color: debugData.knowledgeChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.knowledgeChunks}</span></span>
+                <span><span style={{ color:'#a6a9ae' }}>Book chunks: </span><span style={{ color: debugData.bookChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.bookChunks}</span></span>
+                <span><span style={{ color:'#a6a9ae' }}>Web search: </span><span style={{ color: debugData.openAISources > 0 ? '#34d399' : '#ef4444' }}>{debugData.openAISources}</span></span>
+                <span><span style={{ color:'#a6a9ae' }}>Knowledge: </span><span style={{ color: debugData.knowledgeChunks > 0 ? '#34d399' : '#ef4444' }}>{debugData.knowledgeChunks}</span></span>
               </div>
 
               {/* Timing */}
               {debugData.timing && (
-                <div style={{ marginBottom:8, borderTop:'1px solid #2A2440', paddingTop:8 }}>
-                  <div style={{ color:'#6366f1', marginBottom:4 }}>Timing:</div>
+                <div style={{ marginBottom:8, borderTop:'1px solid #303134', paddingTop:8 }}>
+                  <div style={{ color:'#a6a9ae', marginBottom:4 }}>Timing:</div>
                   <div style={{ color:'#94a3b8', paddingLeft:8 }}>
                     {debugData.timing.parallelMs && <div>Parallel fetch: {debugData.timing.parallelMs}ms</div>}
                     {debugData.timing.modelsMs && <div>Models: {debugData.timing.modelsMs}ms</div>}
@@ -3791,14 +3851,14 @@ export default function Brain({ session }) {
 
               {/* Raw answers */}
               {debugData.rawAnswers?.gpt && (
-                <div style={{ borderTop:'1px solid #2A2440', paddingTop:8, marginTop:4 }}>
-                  <div style={{ color:'#6366f1', marginBottom:4 }}>GPT-4o raw (first 300):</div>
+                <div style={{ borderTop:'1px solid #303134', paddingTop:8, marginTop:4 }}>
+                  <div style={{ color:'#a6a9ae', marginBottom:4 }}>GPT-4o raw (first 300):</div>
                   <div style={{ color:'#94a3b8', fontSize:10, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{debugData.rawAnswers.gpt.slice(0,300)}...</div>
                 </div>
               )}
               {debugData.rawAnswers?.claude && (
-                <div style={{ borderTop:'1px solid #2A2440', paddingTop:8, marginTop:4 }}>
-                  <div style={{ color:'#6366f1', marginBottom:4 }}>Claude raw (first 300):</div>
+                <div style={{ borderTop:'1px solid #303134', paddingTop:8, marginTop:4 }}>
+                  <div style={{ color:'#a6a9ae', marginBottom:4 }}>Claude raw (first 300):</div>
                   <div style={{ color:'#94a3b8', fontSize:10, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{debugData.rawAnswers.claude.slice(0,300)}...</div>
                 </div>
               )}
@@ -3829,7 +3889,7 @@ export default function Brain({ session }) {
             <div key={item.label}
               onClick={() => { setInput(`${item.hint}`); setShowCapabilities(false); setTimeout(()=>inputRef.current?.focus(),100) }}
               style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'8px 10px', borderRadius:10, cursor:'pointer', marginBottom:4, transition:'background 0.15s' }}
-              onMouseEnter={e=>e.currentTarget.style.background='rgba(99,102,241,0.08)'}
+              onMouseEnter={e=>e.currentTarget.style.background='rgba(166,169,174,0.08)'}
               onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
               <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>{item.icon}</span>
               <div>
@@ -3866,12 +3926,12 @@ export default function Brain({ session }) {
                 return acc
               }, {})).map(([module, entries]) => (
                 <div key={module} style={{ marginBottom:20 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#6366f1', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>{module}</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'#a6a9ae', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>{module}</div>
                   {entries.map(entry => (
                     <div key={entry.id} style={{ background:t.inputBg, border:`1px solid ${t.border}`, borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
                       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
                         <div style={{ flex:1 }}>
-                          <div style={{ fontSize:11, color:'#6366f1', fontWeight:600, marginBottom:4 }}>{entry.topic} › {entry.object}</div>
+                          <div style={{ fontSize:11, color:'#a6a9ae', fontWeight:600, marginBottom:4 }}>{entry.topic} › {entry.object}</div>
                           <div style={{ fontSize:13, color:t.text, lineHeight:1.5 }}>{entry.finding}</div>
                           <div style={{ fontSize:11, color:t.text4, marginTop:4 }}>{new Date(entry.created_at).toLocaleDateString()} · {entry.confidence}</div>
                         </div>

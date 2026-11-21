@@ -1345,6 +1345,14 @@ const IMAGE_THEME_PROFILES = {
     cards: 'slightly lighter charcoal panels with subtle silver-gray borders',
     footer: 'the same neutral graphite background',
   },
+  midnight: {
+    name: 'Midnight',
+    page: 'jet black canvas (#000000 to #0A0A0B)',
+    text: 'high-contrast white and light grey text (#F2F2F3 / #D4D4D8)',
+    accents: 'neutral silver and cool grey accents (#A1A1AA / #71717A); no purple, violet or saturated colours',
+    cards: 'slightly lighter near-black panels (#111113) with subtle grey borders',
+    footer: 'the same jet black background',
+  },
   light: {
     name: 'Light',
     page: 'clean white to very pale ice-blue canvas (#FFFFFF / #F5F8FD)',

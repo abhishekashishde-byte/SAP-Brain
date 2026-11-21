@@ -23,7 +23,7 @@ function GoogleButton({ onClick }) {
       background:'#fff', border:'1.5px solid #E2E8F0',
       borderRadius:12, cursor:'pointer',
       display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-      fontSize:14, fontWeight:500, color:'#1a1a2e',
+      fontSize:14, fontWeight:500, color:'#232425',
       fontFamily:"'DM Sans',sans-serif",
       boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
       transition:'all 0.18s',
@@ -62,11 +62,11 @@ function Input({ type, value, onChange, onKeyDown, placeholder, label }) {
         style={{
           width:'100%', padding:'11px 14px', boxSizing:'border-box',
           border:'1.5px solid #E2E8F0', borderRadius:10,
-          fontSize:14, color:'#1a1a2e', background:'#FAFBFC',
+          fontSize:14, color:'#232425', background:'#FAFBFC',
           fontFamily:"'DM Sans',sans-serif", outline:'none',
           transition:'border-color 0.18s, box-shadow 0.18s',
         }}
-        onFocus={e => { e.target.style.borderColor='#4F46E5'; e.target.style.boxShadow='0 0 0 3px rgba(79,70,229,0.1)' }}
+        onFocus={e => { e.target.style.borderColor='#90949b'; e.target.style.boxShadow='0 0 0 3px rgba(144,148,155,0.1)' }}
         onBlur={e => { e.target.style.borderColor='#E2E8F0'; e.target.style.boxShadow='none' }}
       />
     </div>
@@ -108,11 +108,11 @@ function SignInForm({ onSwitch }) {
       )}
       <button onClick={handleSignIn} disabled={loading} style={{
         width:'100%', padding:'13px', border:'none', borderRadius:12,
-        background: loading ? '#94A3B8' : 'linear-gradient(135deg,#4F46E5,#7C3AED)',
+        background: loading ? '#94A3B8' : 'linear-gradient(135deg,#90949b,#8e9299)',
         color:'#fff', fontSize:14, fontWeight:700,
         fontFamily:"'DM Sans',sans-serif", cursor: loading ? 'not-allowed' : 'pointer',
         display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-        boxShadow: loading ? 'none' : '0 4px 14px rgba(79,70,229,0.35)',
+        boxShadow: loading ? 'none' : '0 4px 14px rgba(144,148,155,0.35)',
         transition:'all 0.2s',
       }}>
         {loading ? <Spinner/> : 'Sign In →'}
@@ -120,7 +120,7 @@ function SignInForm({ onSwitch }) {
       <p style={{ textAlign:'center', fontSize:13, color:'#94A3B8', margin:0 }}>
         No account?{' '}
         <button onClick={onSwitch} style={{ background:'none', border:'none', cursor:'pointer',
-          color:'#4F46E5', fontWeight:600, fontSize:13, fontFamily:"'DM Sans',sans-serif",
+          color:'#90949b', fontWeight:600, fontSize:13, fontFamily:"'DM Sans',sans-serif",
           textDecoration:'underline', textUnderlineOffset:3 }}>Sign up free</button>
       </p>
     </div>
@@ -189,11 +189,11 @@ function SignUpForm({ onSwitch }) {
       )}
       <button onClick={handleSignUp} disabled={loading} style={{
         width:'100%', padding:'13px', border:'none', borderRadius:12,
-        background: loading ? '#94A3B8' : 'linear-gradient(135deg,#4F46E5,#7C3AED)',
+        background: loading ? '#94A3B8' : 'linear-gradient(135deg,#90949b,#8e9299)',
         color:'#fff', fontSize:14, fontWeight:700,
         fontFamily:"'DM Sans',sans-serif", cursor: loading ? 'not-allowed' : 'pointer',
         display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-        boxShadow: loading ? 'none' : '0 4px 14px rgba(79,70,229,0.35)',
+        boxShadow: loading ? 'none' : '0 4px 14px rgba(144,148,155,0.35)',
         transition:'all 0.2s',
       }}>
         {loading ? <Spinner/> : 'Create Account →'}
@@ -201,7 +201,7 @@ function SignUpForm({ onSwitch }) {
       <p style={{ textAlign:'center', fontSize:13, color:'#94A3B8', margin:0 }}>
         Have an account?{' '}
         <button onClick={onSwitch} style={{ background:'none', border:'none', cursor:'pointer',
-          color:'#4F46E5', fontWeight:600, fontSize:13, fontFamily:"'DM Sans',sans-serif",
+          color:'#90949b', fontWeight:600, fontSize:13, fontFamily:"'DM Sans',sans-serif",
           textDecoration:'underline', textUnderlineOffset:3 }}>Sign in</button>
       </p>
     </div>
@@ -214,7 +214,7 @@ export default function Login() {
   return (
     <div style={{
       minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center',
-      background:'linear-gradient(135deg,#F8F7FF 0%,#EEF2FF 50%,#F0F4FF 100%)',
+      background:'linear-gradient(135deg,#fbfbfb 0%,#f6f6f7 50%,#F0F4FF 100%)',
       fontFamily:"'DM Sans',sans-serif", padding:'20px',
       position:'relative', overflow:'hidden',
     }}>
@@ -229,10 +229,10 @@ export default function Login() {
       {/* Background blobs */}
       <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0 }}>
         <div style={{ position:'absolute', width:600, height:600, borderRadius:'50%',
-          background:'radial-gradient(circle,rgba(79,70,229,0.08) 0%,transparent 70%)',
+          background:'radial-gradient(circle,rgba(144,148,155,0.08) 0%,transparent 70%)',
           top:'-10%', left:'-10%', animation:'float1 12s ease-in-out infinite' }}/>
         <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%',
-          background:'radial-gradient(circle,rgba(124,58,237,0.07) 0%,transparent 70%)',
+          background:'radial-gradient(circle,rgba(142,146,153,0.07) 0%,transparent 70%)',
           bottom:'-10%', right:'-5%', animation:'float2 15s ease-in-out infinite' }}/>
       </div>
 
@@ -242,7 +242,7 @@ export default function Login() {
         width:'100%', maxWidth:420,
         background:'#ffffff',
         borderRadius:20,
-        boxShadow:'0 8px 40px rgba(79,70,229,0.12), 0 1px 3px rgba(0,0,0,0.06)',
+        boxShadow:'0 8px 40px rgba(144,148,155,0.12), 0 1px 3px rgba(0,0,0,0.06)',
         padding:'36px 36px 32px',
         animation:'fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) forwards',
       }}>
@@ -256,7 +256,7 @@ export default function Login() {
         </div>
 
         {/* Title */}
-        <h1 style={{ fontSize:20, fontWeight:700, color:'#1a1a2e', textAlign:'center',
+        <h1 style={{ fontSize:20, fontWeight:700, color:'#232425', textAlign:'center',
           margin:'0 0 20px', fontFamily:"'DM Sans',sans-serif" }}>
           {isSignUp ? 'Create Account' : 'Sign In'}
         </h1>

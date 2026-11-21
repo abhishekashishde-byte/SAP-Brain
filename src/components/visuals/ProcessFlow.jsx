@@ -27,7 +27,7 @@ function ProcessFlowDesktop({ data, dark }) {
   return (
     <div style={{
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-      borderRadius: 16, padding: 24, background: dark ? '#12121A' : '#fff',
+      borderRadius: 16, padding: 24, background: dark ? '#161616' : '#fff',
     }}>
       <h3 style={{ margin: '0 0 18px', fontSize: 18, fontWeight: 700, color: dark ? '#fff' : '#111' }}>
         {data.title}
@@ -37,7 +37,7 @@ function ProcessFlowDesktop({ data, dark }) {
           <div key={i} style={{
             position: 'relative', padding: 16, borderRadius: 12,
             border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-            background: dark ? '#0A0A12' : '#FAFAF8',
+            background: dark ? '#0e0e0e' : '#FAFAF8',
           }}>
             <div style={{
               width: 26, height: 26, borderRadius: 8, display: 'grid', placeItems: 'center',
@@ -72,7 +72,7 @@ function ProcessFlowMobile({ data, dark, onViewFull }) {
   return (
     <div style={{
       border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-      borderRadius: 14, padding: 16, background: dark ? '#12121A' : '#fff',
+      borderRadius: 14, padding: 16, background: dark ? '#161616' : '#fff',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: dark ? '#fff' : '#111' }}>
@@ -98,7 +98,7 @@ function ProcessFlowMobile({ data, dark, onViewFull }) {
               <div style={{
                 position: 'absolute', left: -20, top: 2, width: 20, height: 20, borderRadius: '50%',
                 display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800,
-                background: isOpen ? '#0A6ED1' : (dark ? '#1E1E2A' : '#EEF2F5'),
+                background: isOpen ? '#0A6ED1' : (dark ? '#232425' : '#EEF2F5'),
                 color: isOpen ? '#fff' : (dark ? '#94A3B8' : '#666'),
               }}>{i + 1}</div>
               <button
@@ -106,7 +106,7 @@ function ProcessFlowMobile({ data, dark, onViewFull }) {
                 style={{
                   width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10,
                   border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-                  background: dark ? '#0A0A12' : '#FAFAF8', cursor: 'pointer',
+                  background: dark ? '#0e0e0e' : '#FAFAF8', cursor: 'pointer',
                 }}
               >
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: dark ? '#fff' : '#111' }}>
@@ -130,7 +130,7 @@ function ProcessFlowMobile({ data, dark, onViewFull }) {
 function FullscreenOverlay({ data, dark, onClose }) {
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 50, background: dark ? '#0A0A12' : '#fff',
+      position: 'fixed', inset: 0, zIndex: 50, background: dark ? '#0e0e0e' : '#fff',
       overflow: 'auto', padding: 20,
     }}>
       <button onClick={onClose} style={{
