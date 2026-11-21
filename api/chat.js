@@ -1280,6 +1280,10 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
         // We just track that it happened for cost/credibility visibility in the debug doc.
         if (json.type === 'content_block_start' && json.content_block?.type === 'server_tool_use' && json.content_block?.name === 'web_search') {
           webSearchCount++
+          opts.onActivity?.('active')
+        }
+        if (json.type === 'content_block_start' && json.content_block?.type === 'web_search_tool_result') {
+          opts.onActivity?.('done')
         }
         if (json.type === 'content_block_delta' && json.delta?.type === 'input_json_delta' && json.delta?.partial_json) {
           // Query text streams in as partial JSON on the server_tool_use block — best-effort capture, not critical
@@ -2317,6 +2321,11 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
 
     const t0 = Date.now()
 
+    // Live activity for the waiting screen: each event reports a step Wani is really doing
+    // (never a decorative animation), so the user sees which sources are being checked.
+    const activity = (id, label, state = 'active') => send({ type: 'activity', id, label, state })
+    activity('understand', 'Understanding your question')
+
     // ── STEP 1: Classify + load corrections in parallel ────────────────────
     const [classification, globalCorrections] = await Promise.all([
       groqClassify(lastMsg, { deliverableRequested, docWizardStage }),
@@ -2330,6 +2339,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     debugLog.intent     = intent
     debugLog.confidence = confidence
     debugLog.needsSearch = needsSearch
+    activity('understand', 'Question understood', 'done')
 
     // ── STEP 1b: Stage 2 Excel/validation classifier ────────────────────────
     // Only fires when Groq flags possible tabular/comparison signal — keeps cost low
@@ -2463,6 +2473,18 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
       openAIResultPromise = searchQueryPromise.then(q => callOpenAISearch(q)).catch(() => null)
     }
 
+    // Report each source as it starts and when it returns (side branches; values unchanged).
+    if (!isDeliverable && (SAP_QA_INTENTS.has(intent) || isBapiSearch || isExitSearch)) {
+      activity('books', 'Searching your SAP books')
+      bookRagPromise.then(c => activity('books', c?.length ? `Found ${c.length} relevant passage${c.length === 1 ? '' : 's'} in your SAP books` : 'Checked your SAP books', 'done')).catch(() => {})
+    }
+    if (!isDeliverable && needsSearch) {
+      activity('web', 'Searching SAP Help & SAP Community')
+      tavilyResultsPromise.then(r => activity('web', r?.length ? `Found ${r.length} SAP page${r.length === 1 ? '' : 's'}` : 'Searched SAP Help & SAP Community', 'done')).catch(() => {})
+      activity('notes', 'Looking for SAP Notes')
+      tavilyNotesResultsPromise.then(r => activity('notes', r?.length ? `Found ${r.length} SAP Note result${r.length === 1 ? '' : 's'}` : 'Checked SAP Notes', 'done')).catch(() => {})
+    }
+
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
     const [
       bookChunks,
@@ -2507,6 +2529,8 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     // 5f. Web fetch top 2 Tavily URLs for full content
     // Runs in parallel for speed — enriches snippets significantly
     if (tavilyFiltered.length > 0) {
+      const readCount = Math.min(2, tavilyFiltered.length)
+      activity('read', `Reading ${readCount} SAP page${readCount === 1 ? '' : 's'} in full`)
       const fetchPromises = tavilyFiltered.slice(0, 2).map(async (r, i) => {
         const fullContent = await fetchUrlContent(r.url).catch(() => '')
         if (fullContent && fullContent.length > r.snippet.length) {
@@ -2515,6 +2539,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
         }
       })
       await Promise.all(fetchPromises)
+      activity('read', `Read ${readCount} SAP page${readCount === 1 ? '' : 's'}`, 'done')
     }
 
     // Filter the community lane through the same relevance check — it was
@@ -2779,6 +2804,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
         content: String(m.content).trim().slice(0, hasCodeInHistory ? 6000 : 3000)
       })))
 
+    activity('write', 'Writing the answer')
     send({ type: 'start', intent })
     let fullAnswer = ''
     let modelUsed  = ''
@@ -2998,6 +3024,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
         {
           enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true',
           forceWebSearch: forceSonnetVerification && process.env.WANI_DISABLE_SEARCH !== 'true',
+          onActivity: state => activity('verify', state === 'done' ? 'Checked details on SAP sites' : 'Verifying details on SAP sites', state),
         }
       )
       fullAnswer = sonnetResult.text

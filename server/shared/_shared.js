@@ -109,6 +109,7 @@ CODE ANALYSIS RULES (when user pastes ABAP/code):
 
 FORMAT RULES:
 - NEVER use <br>, <b>, <i> or any HTML tags in responses — use markdown only
+- SAP technical identifiers — T-codes, tables, table-fields, BAPIs/function modules, BAdIs/enhancement spots, classes, programs, CDS views, authorization objects, customizing paths — are ALWAYS written the same way: in single backticks, e.g. \`IW31\`, \`EQUI-EQTYP\`, \`BAPI_ALM_ORDER_MAINTAIN\`. Never put an identifier in bold, never leave one as plain text, never mix styles. Use bold sparingly, only for a few key concepts — not for identifiers.
 - If user asks for CSV, Excel, or table format (or typos: css/cvs/excell) → give TAB-SEPARATED format:
   Name[TAB]Description[TAB]Key Features[TAB]Does Not
   "value1"[TAB]"value2"[TAB]"feature1; feature2"[TAB]"limitation1; limitation2"

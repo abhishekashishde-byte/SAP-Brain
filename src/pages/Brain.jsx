@@ -82,7 +82,7 @@ const T = {
     inputBg:'#FAFAF8',msgUser:'#FDF4FF',msgUserBdr:'#E8C8F0',msgAI:'#FFFFFF',msgAIBdr:'#EDEDED',
     blob1:'rgba(200,80,192,0.12)',blob2:'rgba(255,107,53,0.09)',blob3:'rgba(255,204,112,0.11)',
     bgGrad:'linear-gradient(160deg,#FDF8FF 0%,#FFF5F0 40%,#FFFBF0 100%)',
-    codeBg:'rgba(200,80,192,0.1)',codeTxt:'#7C3A7A',
+    codeBg:'rgba(15,23,42,0.05)',codeTxt:'#1F2937',
     summarise:'linear-gradient(135deg,rgba(200,80,192,0.08),rgba(255,107,53,0.06))',
     summariseBdr:'rgba(200,80,192,0.2)',summariseTxt:'#7C3A7A',
   },
@@ -93,7 +93,7 @@ const T = {
     inputBg:'#1A1530',msgUser:'#1E1535',msgUserBdr:'#4A2060',msgAI:'#16132A',msgAIBdr:'#2A2440',
     blob1:'rgba(200,80,192,0.18)',blob2:'rgba(255,107,53,0.14)',blob3:'rgba(255,204,112,0.12)',
     bgGrad:'linear-gradient(160deg,#0E0C1E 0%,#120A18 40%,#0C0E18 100%)',
-    codeBg:'rgba(200,80,192,0.18)',codeTxt:'#D070D0',
+    codeBg:'rgba(255,255,255,0.07)',codeTxt:'#E5E7EB',
     summarise:'linear-gradient(135deg,rgba(200,80,192,0.15),rgba(255,107,53,0.1))',
     summariseBdr:'rgba(200,80,192,0.35)',summariseTxt:'#D090D0',
   }
@@ -217,6 +217,47 @@ function ModuleBadge({ module, small }) {
       border:`1px solid ${meta.border}`,
       borderRadius:20,fontSize:small?10:11,fontWeight:600,letterSpacing:0.3,flexShrink:0,
     }}>{meta.label}</span>
+  )
+}
+
+// ── LIVE ACTIVITY — what Wani is really doing while you wait ─────────────────
+// Each row comes from a server 'activity' event at a real pipeline step (books,
+// SAP Help/Community search, SAP Notes, reading pages, verifying, writing).
+const ACTIVITY_ICON = {
+  understand: 'spark', books: 'book', web: 'sap', notes: 'sap', read: 'sap', verify: 'sap', write: 'pen',
+}
+function ActivityIcon({ kind, color }) {
+  if (kind === 'sap') return (
+    <span style={{ fontSize:8.5,fontWeight:800,letterSpacing:'0.03em',lineHeight:1,padding:'3px 4px',borderRadius:4,border:`1px solid ${color}`,color,fontFamily:"'Inter',sans-serif",whiteSpace:'nowrap',flexShrink:0 }}>SAP</span>
+  )
+  const paths = {
+    spark: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>,
+    book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5"/></>,
+    pen: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+  }
+  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[kind] || paths.spark}</svg>
+}
+function ActivityTrail({ steps, dark, compact = false }) {
+  if (!steps?.length) return null
+  const shown = compact ? steps.filter(s => s.state === 'active').slice(-1) : steps.slice(-6)
+  if (!shown.length) return null
+  const muted = dark ? '#94A3B8' : '#6B7280'
+  const strong = dark ? '#E5E7EB' : '#1F2937'
+  const accent = dark ? '#7DB7F0' : '#0A6ED1'
+  return (
+    <div role="status" aria-live="polite" style={{ display:'flex',flexDirection:'column',gap:7,margin: compact ? '0 0 10px' : '4px 0 2px',fontFamily:"'Inter',sans-serif" }}>
+      <style>{`@keyframes waniShimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}`}</style>
+      {shown.map(s => {
+        const active = s.state === 'active'
+        return (
+          <div key={s.id} style={{ display:'flex',alignItems:'center',gap:9,fontSize:13.5,color: active ? strong : muted,animation:'msgSlide 0.25s ease forwards' }}>
+            <span style={{ width:26,display:'inline-flex',justifyContent:'center',opacity: active ? 1 : 0.7 }}><ActivityIcon kind={ACTIVITY_ICON[s.id] || 'spark'} color={active ? accent : muted}/></span>
+            <span style={ active ? { backgroundImage:`linear-gradient(90deg, ${strong} 0%, ${strong} 40%, ${muted} 50%, ${strong} 60%, ${strong} 100%)`,backgroundSize:'200% 100%',WebkitBackgroundClip:'text',backgroundClip:'text',color:'transparent',animation:'waniShimmer 2.2s linear infinite' } : undefined }>{s.label}{active ? '…' : ''}</span>
+            {!active && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={dark ? '#4ADE80' : '#16A34A'} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label="done"><path d="M5 12l4.5 4.5L19 7"/></svg>}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -696,7 +737,7 @@ function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, onRequestHandout, session }) {
+function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, onRequestHandout, session, activity }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -747,7 +788,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
           : { color:'#4F46E5',textDecoration:'underline',fontWeight:600,wordBreak:'break-word' } }>{isCitation ? `[${label}]` : label}</a>
       }
       if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ fontWeight:600,color:t.text }}>{part.slice(2,-2)}</strong>
-      if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily:"'IBM Plex Mono',monospace",background:t.codeBg,padding:'2px 6px',borderRadius:4,fontSize:'0.88em',color:t.codeTxt }}>{part.slice(1,-1)}</code>
+      if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily:"'IBM Plex Mono',ui-monospace,monospace",background:t.codeBg,padding:'1px 5px',borderRadius:5,fontSize:'0.86em',color:t.text,border:`1px solid ${t.border}`,whiteSpace:'nowrap' }}>{part.slice(1,-1)}</code>
       if (part.startsWith('_') && part.endsWith('_')) return <span key={i} style={{ fontSize:11,color:t.text4,fontStyle:'italic' }}>{part.slice(1,-1)}</span>
       if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:'#4F46E5',textDecoration:'underline',wordBreak:'break-all' }}>{part}</a>
       return <span key={i}>{part}</span>
@@ -997,11 +1038,19 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
                   the first chunk of that arrives. Same component as the
                   finished-state version below, so nothing shifts when the
                   message flips from streaming to done. */}
+              {/* While nothing is written yet, show what Wani is actually doing;
+                  once text streams, only a live "verifying" step stays visible. */}
+              {isStreaming && !content && !streamingQuickAnswer && activity?.length > 0 && (
+                <ActivityTrail steps={activity} dark={dark} />
+              )}
+              {isStreaming && (content || streamingQuickAnswer) && (
+                <ActivityTrail steps={(activity || []).filter(s => s.id === 'verify')} dark={dark} compact />
+              )}
               {isStreaming && streamingQuickAnswer && (
                 <QuickAnswer text={streamingQuickAnswer} showCursor={!content} />
               )}
               {renderMarkdown(content)}
-              {isStreaming && !isFinalizing && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
+              {isStreaming && !isFinalizing && !(!content && !streamingQuickAnswer && activity?.length > 0) && <span style={{ display:'inline-block',width:2,height:'1em',background:'#4F46E5',marginLeft:2,animation:'cursorBlink 0.8s infinite',verticalAlign:'middle' }}/>}
               {isStreaming && isFinalizing && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, color: dark ? '#94A3B8' : '#666', fontSize: 13 }}>
                   <span style={{
@@ -1851,6 +1900,7 @@ export default function Brain({ session }) {
   const activeConvIdRef                   = useRef(null)
   const [streamingText, setStreamingText] = useState('')
   const [isPreparingAnswer, setIsPreparingAnswer] = useState(false)
+  const [activitySteps, setActivitySteps] = useState([])
   const [isFinalizing, setIsFinalizing] = useState(false) // true while Sonnet is still writing the trailing references/follow-ups JSON after the visible answer finished
   const [streamingQuickAnswer, setStreamingQuickAnswer] = useState('') // arrives first — shown above the streaming answer text, never pops in later
   const [streamingIntent, setStreamingIntent] = useState('SAP_QA')
@@ -2550,7 +2600,7 @@ export default function Brain({ session }) {
 
       if (!res.ok) throw new Error('Network error')
 
-      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true); setIsPreparingAnswer(false); setIsFinalizing(false) }
+      if (isMine(convId)) { setIsLoading(false); setIsStreaming(true); setIsPreparingAnswer(false); setIsFinalizing(false); setActivitySteps([]) }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -2617,6 +2667,12 @@ export default function Brain({ session }) {
               if (isMine(convId)) setDualText(prev => prev + evt.text)
             } else if (evt.type === 'dual_done') {
               if (isMine(convId)) setDualStreaming(false)
+            } else if (evt.type === 'activity') {
+              if (isMine(convId)) setActivitySteps(prev => {
+                const i = prev.findIndex(x => x.id === evt.id)
+                const next = { id: evt.id, label: evt.label, state: evt.state }
+                return i >= 0 ? prev.map((x, j) => j === i ? next : x) : [...prev, next]
+              })
             } else if (evt.type === 'start') {
               if (isMine(convId)) setStreamingIntent(evt.intent || 'SAP_QA')
             } else if (evt.type === 'search_results') {
@@ -3409,7 +3465,7 @@ export default function Brain({ session }) {
                       </div>
                     ) : isStreaming ? (
                       <>
-                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} streamingQuickAnswer={streamingQuickAnswer} isPreparing={isPreparingAnswer} isFinalizing={isFinalizing} t={t} dark={dark} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
+                        <MessageBubble msg={{role:'assistant',content:''}} isStreaming={true} streamingText={streamingText} streamingQuickAnswer={streamingQuickAnswer} isPreparing={isPreparingAnswer} isFinalizing={isFinalizing} t={t} dark={dark} activity={activitySteps} userInitial={profile?.name?profile.name[0].toUpperCase():session.user.email[0].toUpperCase()}/>
                       </>
                     ) : null}
                     {/* Dual model bubble — only show while actively streaming */}
