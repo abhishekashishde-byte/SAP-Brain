@@ -21,6 +21,16 @@ import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from '../server/sha
 import { assessEvidenceRouting, attachSelectedTavilyResults } from '../lib/evidence-routing.js'
 import { createClient } from '@supabase/supabase-js'
 
+// ── ANSWER MODEL ──────────────────────────────────────────────────────────────
+// One place for the Claude model that writes Wani's answers (Q&A, code, deliverables).
+// Override with WANI_ANSWER_MODEL (e.g. back to ANSWER_MODEL) without a code change.
+const ANSWER_MODEL = process.env.WANI_ANSWER_MODEL || 'claude-sonnet-5-5'
+// USD per million tokens: input, 5-minute cache write, cache read, output.
+const CLAUDE_PRICES = {
+  'claude-sonnet-5-5': { input: 2, cacheWrite: 2.5, cacheRead: 0.2, output: 10 },
+  'claude-sonnet-4-5': { input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15 },
+}
+
 // ── APPROVED SOURCE DOMAINS ───────────────────────────────────────────────────
 // The ONLY domains allowed to appear as links in a final answer. Tavily lanes are
 // already restricted to these via include_domains; this list also backstops the final
@@ -1234,6 +1244,13 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
   })
   if (!res.ok) {
     const errText = await res.text()
+    // Safety net for the model upgrade: if the newer model rejects the request (bad request,
+    // unknown model, permission), answer with Sonnet 4.5 instead of failing — and log it.
+    if (model !== 'claude-sonnet-4-5' && [400, 403, 404].includes(res.status) && !opts._fallback) {
+      console.error(`[MODEL_FALLBACK] ${model} → claude-sonnet-4-5: ${res.status} ${errText.slice(0, 200)}`)
+      const fallback = await streamClaude('claude-sonnet-4-5', systemPrompt, messages, onChunk, maxTokens, { ...opts, _fallback: true })
+      return { ...fallback, fallbackFrom: model }
+    }
     throw new Error(`Claude ${res.status}: ${errText.slice(0, 100)}`)
   }
   const reader = res.body.getReader()
@@ -1286,10 +1303,13 @@ async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 
   // Per-tier pricing for claude-sonnet-4-5: input $3/MTok, cache write (5m,
   // the default ephemeral duration) $3.75/MTok, cache read $0.30/MTok,
   // output $15/MTok. Only ordinary input + output are ever non-zero today.
+  // Per-model pricing (USD per million tokens); unknown models fall back to Sonnet 4.5 prices
+  // so cost is over- rather than under-estimated.
+  const price = CLAUDE_PRICES[model] || CLAUDE_PRICES['claude-sonnet-4-5']
   const estimatedCostUsd =
-    (inputTokens * 3 + cacheCreationTokens * 3.75 + cacheReadTokens * 0.30 + outputTokens * 15) / 1_000_000
+    (inputTokens * price.input + cacheCreationTokens * price.cacheWrite + cacheReadTokens * price.cacheRead + outputTokens * price.output) / 1_000_000
   const usage = { inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, estimatedCostUsd }
-  return opts.enableWebSearch ? { text: fullText, webSearchCount, webSearchQueries, usage } : { text: fullText, usage }
+  return opts.enableWebSearch ? { text: fullText, webSearchCount, webSearchQueries, usage, model } : { text: fullText, usage, model }
 }
 
 
@@ -2792,11 +2812,11 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     if (isRealCode || isComplexAbap) {
       // Real ABAP code pasted → Claude Sonnet only
       send({ type: 'model_label', label: 'by Claude Sonnet' })
-      const codeResult = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
+      const codeResult = await streamClaude(ANSWER_MODEL, systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
       fullAnswer = codeResult.text
       debugLog.tokenUsage = codeResult.usage
       debugLog.tokenProvider = 'anthropic'
-      debugLog.tokenModel = 'claude-sonnet-4-5'
+      debugLog.tokenModel = codeResult.model || ANSWER_MODEL
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (code)'
       debugLog.rawClaudeAnswer = fullAnswer
@@ -2816,11 +2836,11 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     } else if (isComplexDeliverable || shouldGenerateDoc) {
       // Deliverables → Claude Sonnet only
       send({ type: 'model_label', label: 'by Claude Sonnet' })
-      const deliverableResult = await streamClaude('claude-sonnet-4-5', systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
+      const deliverableResult = await streamClaude(ANSWER_MODEL, systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
       fullAnswer = deliverableResult.text
       debugLog.tokenUsage = deliverableResult.usage
       debugLog.tokenProvider = 'anthropic'
-      debugLog.tokenModel = 'claude-sonnet-4-5'
+      debugLog.tokenModel = deliverableResult.model || ANSWER_MODEL
       modelUsed = 'claude-sonnet'
       debugLog.routing = 'claude-sonnet (deliverable)'
       debugLog.rawClaudeAnswer = fullAnswer
@@ -2970,7 +2990,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       // length on top of the answer itself.
       debugLog.forceSonnetVerification = forceSonnetVerification
       const sonnetResult = await streamClaude(
-        'claude-sonnet-4-5',
+        ANSWER_MODEL,
         enrichedSystemPrompt,
         validMessages,
         onChunk,
@@ -2984,7 +3004,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       debugLog.sonnetVerificationSearches = sonnetResult.webSearchCount || 0
       debugLog.tokenUsage = sonnetResult.usage
       debugLog.tokenProvider = 'anthropic'
-      debugLog.tokenModel = 'claude-sonnet-4-5'
+      debugLog.tokenModel = sonnetResult.model || ANSWER_MODEL
 
       // Final flush: send whatever text was held back mid-stream and never
       // flushed — covers "no marker at all" and "a marker arrived in the
@@ -3401,7 +3421,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       '6c. COST (anthropic_cost_usd for THIS Sonnet call only — Wani also spends on Groq/Tavily/OpenAI, not included here)',
       '─────────────────────────────────────────────────────────',
       `request_id: ${requestId}`,
-      debugLog.tokenUsage ? `model: claude-sonnet-4-5` : 'Token usage: not captured for this routing path',
+      debugLog.tokenUsage ? `model: ${debugLog.tokenModel || ANSWER_MODEL}` : 'Token usage: not captured for this routing path',
       debugLog.tokenUsage ? `input_tokens: ${debugLog.tokenUsage.inputTokens} | output_tokens: ${debugLog.tokenUsage.outputTokens}` : null,
       debugLog.tokenUsage ? `cache_creation_input_tokens: ${debugLog.tokenUsage.cacheCreationTokens || 0} | cache_read_input_tokens: ${debugLog.tokenUsage.cacheReadTokens || 0}` : null,
       debugLog.tokenUsage ? `anthropic_cost_usd: $${debugLog.tokenUsage.estimatedCostUsd.toFixed(6)}` : null,
@@ -3418,10 +3438,10 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     ]).join('\n')
 
     if (debugLog.tokenUsage) {
-      await logUserTokenUsage(userId, debugLog.tokenProvider || 'anthropic', debugLog.tokenModel || 'claude-sonnet-4-5', debugLog.tokenUsage)
+      await logUserTokenUsage(userId, debugLog.tokenProvider || 'anthropic', debugLog.tokenModel || ANSWER_MODEL, debugLog.tokenUsage)
       try {
         await logCostMetric({
-          requestId, intent, visualMode: 'on_demand', model: 'claude-sonnet-4-5',
+          requestId, intent, visualMode: 'on_demand', model: ANSWER_MODEL,
           usage: debugLog.tokenUsage,
           hiddenJsonChars: usedContainerFormat ? (containerResult.hiddenJsonChars || 0) : 0,
           visualDataChars: 0,
