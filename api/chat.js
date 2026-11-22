@@ -2700,7 +2700,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     if (codeLibrary.length > 0) {
       const lines = codeLibrary.map((e, i) => {
         const s = e.summary || {}
-        return `[L${i+1}] ${e.title}\n    Problem: ${s.problem || ''}\n    Approach: ${s.approach || ''}\n    Objects: ${(s.objects || []).join(', ')}\n    Use when: ${s.when_to_use || ''}${s.when_not_to_use ? `\n    Not when: ${s.when_not_to_use}` : ''}${s.standard_alternative ? `\n    Standard alternative: ${s.standard_alternative}` : ''}`
+        return `[L${i+1}] ${e.title}\n    Problem: ${s.problem || ''}\n    Approach: ${s.approach || ''}\n    Objects: ${(s.objects || []).join(', ')}\n    Use when: ${s.when_to_use || ''}${s.when_not_to_use ? `\n    Not when: ${s.when_not_to_use}` : ''}${s.standard_alternative ? `\n    Standard alternative: ${s.standard_alternative}` : ''}${typeof s.standard_coverage === 'string' && s.standard_coverage ? ` (standard coverage: ${s.standard_coverage})` : ''}`
       }).join('\n')
       systemPrompt += `\n\n🗂️ CONSULTANT'S CODE LIBRARY (solutions this consultant saved earlier from real programs):\n${lines}\n\nHOW TO USE THE CODE LIBRARY:\n- Only mention an entry when it genuinely solves the problem the consultant is describing now. Most questions match none — then say nothing about the library.\n- When one fits: first say whether standard SAP covers the need (standard first), then add one short line such as "You also have a saved solution for this in your Code library: <title> — <one-line approach>." Do not paste or reconstruct code.\n- Never invent library entries or details beyond what is listed above.`
     }

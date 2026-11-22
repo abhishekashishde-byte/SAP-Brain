@@ -64,6 +64,32 @@ function testsCsv(tests) {
     .map(r => r.map(csvCell).join(',')).join('\r\n')
 }
 
+const COVERAGE = { full: 'Standard can replace it', partial: 'Standard covers part of it', none: 'No standard replacement found' }
+
+function StandardCoverage({ a }) {
+  const c = a.standard_coverage
+  if (!c || typeof c !== 'object') return null
+  const level = COVERAGE[c.level] ? c.level : 'none'
+  return (
+    <div className={'cs-cover cs-cover-' + level}>
+      <div className="cs-cover-head"><h3>Can standard replace it?</h3><span>{COVERAGE[level]}</span></div>
+      {c.summary && <p>{inline(c.summary)}</p>}
+      {c.options?.length > 0 && (
+        <ul className="cs-options">
+          {c.options.map((o, i) => (
+            <li key={i}>
+              <div className="cs-opt-head"><strong>{inline(o.name)}</strong><span className="cs-dim">{[o.kind, o.release].filter(Boolean).join(' · ')}{o.verified === false ? ' · not verified' : ''}</span></div>
+              {o.covers && <p><span className="cs-lbl cs-ok">Covers</span>{inline(o.covers)}</p>}
+              {o.gaps && <p><span className="cs-lbl cs-gap">Limits</span>{inline(o.gaps)}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {c.recommendation && <p className="cs-reco"><strong>Recommendation:</strong> {inline(c.recommendation)}</p>}
+    </div>
+  )
+}
+
 function Analysis({ a }) {
   return (
     <section className="cs-card">
@@ -76,6 +102,8 @@ function Analysis({ a }) {
       </div>
       <p className="cs-lead">{a.purpose}</p>
       {a.verdict_reason && <p className="cs-reason">{inline(a.verdict_reason)}</p>}
+
+      <StandardCoverage a={a} />
 
       {a.how_it_works?.length > 0 && <><h3>How it works</h3><ol className="cs-steps">{a.how_it_works.map((s, i) => <li key={i}>{inline(s)}</li>)}</ol></>}
 
@@ -93,7 +121,7 @@ function Analysis({ a }) {
         <p className="cs-hint">These are candidates. Confirm with the ATC S/4HANA readiness checks before acting on them.</p>
       </>}
 
-      {a.standard_alternative && <><h3>Standard alternative</h3><p>{inline(a.standard_alternative)}</p></>}
+      {!a.standard_coverage && a.standard_alternative && <><h3>Standard alternative</h3><p>{inline(a.standard_alternative)}</p></>}
 
       {a.objects?.length > 0 && <>
         <h3>SAP objects used</h3>
@@ -124,7 +152,7 @@ function Tests({ tests }) {
 
 const SUMMARY_FIELDS = [
   ['problem', 'Problem it solves'], ['approach', 'Approach'], ['when_to_use', 'Use when'],
-  ['when_not_to_use', 'Not when'], ['standard_alternative', 'Standard alternative'], ['s4_notes', 'S/4HANA notes'],
+  ['when_not_to_use', 'Not when'], ['standard_alternative', 'Standard alternative'], ['standard_coverage', 'Standard coverage'], ['s4_notes', 'S/4HANA notes'],
 ]
 
 function SaveDialog({ draft, setDraft, keepCode, setKeepCode, onSave, onCancel, saving }) {

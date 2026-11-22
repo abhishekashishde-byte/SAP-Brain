@@ -17,7 +17,7 @@ const ANALYSE = `${PERSONA}
 Analyse the program the consultant pasted. Work out what it is for from the code itself.
 Then judge it against SAP S/4HANA:
 - Objects that changed or are obsolete in S/4HANA (for example tables replaced by MATDOC/ACDOCA, BAPIs or function modules not supported or replaced, compatibility views, removed transactions). Use web_search to check the Simplification List, SAP Notes/KBAs or SAP Help when you are not sure. Each finding is a candidate with evidence, not a proof — the ATC S/4HANA readiness checks remain the final word.
-- Whether a standard SAP app, transaction or feature in a recent release now covers what the program does.
+- CAN STANDARD REPLACE IT? This is the most important judgement — consultants rarely ask it about old Z-programs. Look at the business need behind the code, not the code itself, and ask whether today's SAP standard meets that need fully, partly, or not at all. Consider every kind of standard: Fiori apps, transactions, configuration/customizing settings, standard reports and mass-change tools, BRF+/workflow, released BAdIs or extensibility (key-user/in-app) that would shrink the custom part, and functions added in newer S/4HANA releases. Use web_search to confirm apps, features and the release they arrived in. For each realistic option, say what it covers and — just as important — what it does NOT cover (limitations, missing fields, different behaviour, needs a newer release, licence or extra configuration). Then give a clear recommendation. If nothing in standard fits, say so plainly rather than stretching a weak match.
 Return ONLY JSON:
 {"title":"short name for what the program does",
  "language":"ABAP|CDS|SQL|JavaScript|other",
@@ -25,7 +25,10 @@ Return ONLY JSON:
  "how_it_works":["short step", "..."],
  "objects":[{"name":"exact object","type":"table|BAPI|BAdI|function module|class|transaction|CDS view|other","role":"what the program uses it for"}],
  "s4_findings":[{"object":"exact object or area","finding":"what changed or why it matters","severity":"high|medium|low","evidence":"SAP Note/KBA/Simplification item/help page you found, or 'not verified'"}],
- "standard_alternative":"standard app/feature that now covers this, with release — or empty string if none found",
+ "standard_coverage":{"level":"full|partial|none","summary":"one or two sentences: can standard replace this program, and how much of it",
+   "options":[{"name":"exact app/transaction/setting/feature","kind":"Fiori app|transaction|configuration|report/tool|BAdI/extensibility|workflow/BRF+|other","release":"release or edition it needs, or empty","covers":"what of the program's job it handles","gaps":"what it does not handle or does differently — be specific","verified":true}],
+   "recommendation":"what to do: retire and use X / use X plus a small extension for Y / keep the Z-program because ..."},
+ "standard_alternative":"one-line version of the best standard option with release, or empty string if none",
  "verdict":"keep|adapt|replace with standard|retire",
  "verdict_reason":"one sentence",
  "risks":["short risk or code issue worth knowing", "..."]}`
@@ -61,7 +64,8 @@ Return ONLY JSON:
  "objects":["exact SAP objects that matter for reuse"],
  "when_to_use":"situations where this is a good fit",
  "when_not_to_use":"situations where standard or another approach is better",
- "standard_alternative":"standard SAP option and release, or empty string",
+ "standard_alternative":"standard SAP option and release with its main limitation, or empty string",
+ "standard_coverage":"full|partial|none — how far standard can replace this",
  "s4_notes":"S/4HANA points to remember, or empty string",
  "tags":["module or topic tags, e.g. PM, MM, BAdI, output"]}`
 
