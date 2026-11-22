@@ -2582,6 +2582,7 @@ export default function Brain({ session }) {
     let localDualLabel = ''
     let localPrimaryLabel = ''
     let localSourceInfo = null
+    let localCaseFile = null
     let localDebugDoc = null
     let localQuickAnswer = null
     let localReferences = []
@@ -2624,7 +2625,12 @@ export default function Brain({ session }) {
       const docChunks = uploadedDoc ? await getDocChunks(msgText) : []
       // Send only role + content for history; chatFetch guarantees a valid JWT.
       const leanMsgs = (currentMsgs || []).map(m => ({ role: m.role, content: m.content }))
-      const res = await chatFetch({ messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent })
+      // Case memory: the latest case file travels back to the server with the index of
+      // the reply it belongs to, so only newer messages need folding into it.
+      let caseAt = -1
+      for (let i = (currentMsgs || []).length - 1; i >= 0; i--) { if (currentMsgs[i]?._case) { caseAt = i; break } }
+      const caseFile = caseAt >= 0 ? currentMsgs[caseAt]._case : null
+      const res = await chatFetch({ ...(caseFile ? { caseFile, caseAt } : {}), messages:leanMsgs, module:currentMod, topic:currentTopic, userName:profile?.name||null, userRole:profile?.role||null, userModules:profile?.modules||[], documentChunks:docChunks, documentName:uploadedDoc?.name||null, documentType:uploadedDoc?.docType||null, docWizardStage, docIntent:docWizardIntent })
 
       if (!res.ok) throw new Error('Network error')
 
@@ -2703,6 +2709,8 @@ export default function Brain({ session }) {
               })
             } else if (evt.type === 'start') {
               if (isMine(convId)) setStreamingIntent(evt.intent || 'SAP_QA')
+            } else if (evt.type === 'case') {
+              localCaseFile = evt.caseFile || null
             } else if (evt.type === 'search_results') {
               searchResults = evt.results || []
             } else if (evt.type === 'further_reading') {
@@ -2842,6 +2850,7 @@ export default function Brain({ session }) {
           ? { _pptText: window.__lastPptText, _deliverable: 'WORKSHOP_PPT' } : {}),
         ...(localSourceInfo ? { _sourceInfo: localSourceInfo } : {}),
         ...(localDebugDoc ? { _debugDoc: localDebugDoc } : {}),
+        ...(localCaseFile ? { _case: localCaseFile } : {}),
         ...(localContainerMode ? {
           _containerMode: true,
           _quickAnswer: localQuickAnswer,

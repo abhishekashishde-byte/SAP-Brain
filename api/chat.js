@@ -20,6 +20,7 @@ import {
 import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from '../server/shared/intent-prompts.js'
 import { assessEvidenceRouting, attachSelectedTavilyResults } from '../lib/evidence-routing.js'
 import { createClient } from '@supabase/supabase-js'
+import { buildHistory, planTurn, updateCaseFile, caseFileText, modePrompt } from '../server/chat/case-memory.js'
 
 // ── ANSWER MODEL ──────────────────────────────────────────────────────────────
 // One place for the Claude model that writes Wani's answers (Q&A, code, deliverables).
@@ -2148,6 +2149,8 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
 
   // ── STREAMING HANDLER ─────────────────────────────────────────────────────
   const { messages, tone = 'balanced', userName, userRole, userModules = [], docWizardStage, deliverableRequested = false } = body
+  const incomingCaseFile = body.caseFile && typeof body.caseFile === 'object' ? body.caseFile : null
+  const incomingCaseAt = Number.isInteger(body.caseAt) && body.caseAt >= 0 ? body.caseAt : 0
   const lastMsg = messages?.[messages.length - 1]?.content || ''
   const prevAssistantMsg = [...(messages || [])].reverse().find(m => m.role === 'assistant')?.content || ''
 
@@ -2350,10 +2353,37 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     activity('understand', 'Understanding your question')
 
     // ── STEP 1: Classify + load corrections in parallel ────────────────────
-    const [classification, globalCorrections] = await Promise.all([
+    // Case memory: full conversation within a character budget (not a fixed last-12).
+    const allMessages = (messages || []).filter(m => m.role && m.content?.trim())
+    const history = buildHistory(allMessages)
+    debugLog.historyKept = history.recentMsgs.length
+    debugLog.historyDropped = history.dropped
+
+    // Planner: decides what the message really asks, what to search, which answer
+    // mode and audience fit. Skipped for an opening one-line question (nothing to resolve).
+    const userTurns = allMessages.filter(m => m.role === 'user').length
+    const needsPlan = !!process.env.ANTHROPIC_API_KEY && (userTurns > 1 || lastMsg.length > 600)
+    const planPromise = needsPlan
+      ? planTurn({ caseFile: incomingCaseFile, recentMsgs: history.recentMsgs, lastMsg }).catch(e => { console.warn('[planner]', e.message); return null })
+      : Promise.resolve(null)
+    // Case file: updated with everything since the last saved case file (including this
+    // message), in parallel; awaited just before the answer is written.
+    const caseWorthy = !!process.env.ANTHROPIC_API_KEY && (userTurns > 1 || lastMsg.length > 1500)
+    const casePromise = caseWorthy
+      ? updateCaseFile({ caseFile: incomingCaseFile, newMessages: allMessages.slice(Math.min(incomingCaseAt, Math.max(0, allMessages.length - 1))) })
+          .catch(e => { console.warn('[case-file]', e.message); return null })
+      : Promise.resolve(null)
+
+    const [classification, globalCorrections, plan] = await Promise.all([
       groqClassify(lastMsg, { deliverableRequested, docWizardStage }),
       loadGlobalCorrections().catch(() => []),
+      planPromise,
     ])
+    debugLog.plan = plan && { mode: plan.mode, register: plan.register, standalone: plan.standalone, searchQuery: plan.searchQuery, needsWeb: plan.needsWeb, reason: plan.reason }
+    if (plan) console.log(`[planner] mode=${plan.mode} register=${plan.register} web=${plan.needsWeb} model=${plan.model} in=${plan.usage?.input_tokens} out=${plan.usage?.output_tokens}`)
+    // The question as it stands on its own — used for every retrieval step.
+    const retrievalQ = plan?.standalone || lastMsg
+    const planMode = plan?.mode || 'quick'
 
     let { intent, confidence, secondaryIntent, isCorrection, needsSearch, isCode, isError,
           isBapiSearch, isExitSearch, isNoteSearch, isErrorSearch, isExplicitSearchRequest, isDocConfirm, isDocDeny,
@@ -2444,8 +2474,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     const shouldGenerateDoc = docWizardStage === 'generate' || docWizardStage === 'gathering'
 
     // ── STEP 3: Conversation context — last 12 messages, no summarization ──
-    const allMessages = (messages || []).filter(m => m.role && m.content?.trim())
-    const { recentMsgs } = getConversationContext(allMessages)
+    const { recentMsgs } = history
     // Lightweight, non-LLM context string for search rewriting/module detection —
     // just the last real exchange verbatim. Deliberately not a summarized/compressed
     // version: that approach was removed earlier for causing context loss and wrong
@@ -2453,7 +2482,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     const recentContext = recentMsgs.slice(-2).map(m => `${m.role}: ${m.content.slice(0, 300)}`).join('\n')
 
     // ── STEP 4: Detect module for RAG filtering ────────────────────────────
-    const detectedModule = detectModule(lastMsg + ' ' + recentContext, intent)
+    const detectedModule = detectModule(retrievalQ + ' ' + recentContext, intent)
     debugLog.detectedModule = detectedModule
 
     // ── STEP 5: Fire parallel async operations ─────────────────────────────
@@ -2462,18 +2491,20 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
 
     // 5a. Book RAG — always fires for SAP Q&A intents, skip for code/deliverables
     const SAP_QA_INTENTS = new Set(['SAP_QA','PROCESS_QA','ERROR_ANALYSIS','PROBLEM_ANALYSIS','CUSTOMIZING','BEST_PRACTICES','FIORI_REC','CODE_ANALYSIS'])
-    const bookRagPromise = (!isDeliverable && (SAP_QA_INTENTS.has(intent) || isBapiSearch || isExitSearch))
-      ? fetchBookChunks(lastMsg, detectedModule, userToken).catch(() => [])
+    if (plan && planMode !== 'rewrite' && plan.needsWeb && !isDeliverable) needsSearch = true
+    if (planMode === 'rewrite') needsSearch = false
+    const bookRagPromise = (!isDeliverable && planMode !== 'rewrite' && (SAP_QA_INTENTS.has(intent) || isBapiSearch || isExitSearch))
+      ? fetchBookChunks(retrievalQ, detectedModule, userToken).catch(() => [])
       : Promise.resolve([])
 
     // 5b. Search query rewrite (context-aware, uses recent real messages)
     const searchQueryPromise = (!isDeliverable && needsSearch)
-      ? rewriteForSearch(lastMsg, recentContext).catch(() => lastMsg)
-      : Promise.resolve(lastMsg)
+      ? (plan?.searchQuery ? Promise.resolve(plan.searchQuery) : rewriteForSearch(retrievalQ, recentContext).catch(() => retrievalQ))
+      : Promise.resolve(retrievalQ)
 
     // 5c. User knowledge + memories
-    const knowledgePromise = userId ? fetchRelevantKnowledge(lastMsg, userId, userToken).catch(() => []) : Promise.resolve([])
-    const memoriesPromise  = userId ? fetchUserMemories(lastMsg, userId).catch(() => []) : Promise.resolve([])
+    const knowledgePromise = userId ? fetchRelevantKnowledge(retrievalQ, userId, userToken).catch(() => []) : Promise.resolve([])
+    const memoriesPromise  = userId ? fetchUserMemories(retrievalQ, userId).catch(() => []) : Promise.resolve([])
 
     // 5d. Search — Tavily (general + community-only) and OpenAI, all run in parallel,
     // all fed the SAME rewritten, conversation-aware query — not each other's raw
@@ -2842,7 +2873,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       .filter(m => m.role && m.role !== 'system' && m.content?.trim())
       .map(m => ({
         role: m.role,
-        content: String(m.content).trim().slice(0, hasCodeInHistory ? 6000 : 3000)
+        content: String(m.content).trim()
       })))
 
     activity('write', 'Writing the answer')
@@ -2869,12 +2900,32 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       (/\b(function module|bapi|rfc|user exit|badi|enhancement spot|custom logic|custom code|z-program|z program|abap program)\b/i.test(lastMsg) && !body.attachedCode && !/(SELECT |DATA:|LOOP AT|ENDLOOP|METHOD |CLASS |FORM |PERFORM )/i.test(lastMsg))
     const isRealCode = isCode && !isBapiFmQuestion && !evidenceDecision.pushback?.detected
 
+    // ── Case memory + answer mode (non-deliverable answers) ───────────────
+    const caseUpdate = await casePromise
+    const activeCaseFile = caseUpdate?.caseFile || incomingCaseFile
+    if (caseUpdate) {
+      send({ type: 'case', caseFile: caseUpdate.caseFile })
+      console.log(`[case-file] model=${caseUpdate.model} in=${caseUpdate.usage?.input_tokens} out=${caseUpdate.usage?.output_tokens} is_case=${caseUpdate.caseFile?.is_case}`)
+    }
+    debugLog.caseFile = activeCaseFile
+    if (!isDeliverable && !shouldGenerateDoc) {
+      const caseText = caseFileText(activeCaseFile)
+      if (caseText) {
+        systemPrompt += `\n\n🗂️ CASE FILE — running memory of this conversation${history.dropped ? ` (the ${history.dropped} oldest messages are no longer shown; this file carries what they established)` : ''}. Use it to stay on the case. If it conflicts with the messages themselves, the messages win.\n${caseText}`
+      }
+      const modeText = modePrompt(plan)
+      if (modeText) systemPrompt += `\n\n${modeText}`
+      if (plan?.standalone && plan.standalone !== lastMsg) {
+        systemPrompt += `\n\nWHAT THE LATEST MESSAGE ASKS (resolved against the conversation): ${plan.standalone}`
+      }
+    }
+
     const isComplexAbap = isRealCode && (
       /\b(CLASS|INTERFACE|BADI|ENHANCEMENT|METHOD\s+\w+|CALL METHOD)\b/i.test(systemPrompt) ||
       /\b(risk|vulnerabilit|impact|performance|optimi[sz]e)\b/i.test(lastMsg)
     )
     const isComplexDeliverable = ['FS_SPEC', 'TECH_SPEC', 'WORKSHOP_PPT', 'GENERAL_DOC'].includes(intent)
-    const isMeaningfulQuery = lastMsg.trim().split(/\s+/).length >= 4
+    const isMeaningfulQuery = lastMsg.trim().split(/\s+/).length >= 4 || (!!plan && allMessages.length > 1)
 
     if (isRealCode || isComplexAbap) {
       // Real ABAP code pasted → Claude Sonnet only
@@ -2949,7 +3000,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
 
       send({ type: 'model_label', label: 'by Claude Sonnet' })
 
-      const useContainer = VISUAL_ELIGIBLE_INTENTS.has(intent)
+      const useContainer = VISUAL_ELIGIBLE_INTENTS.has(intent) && planMode === 'quick'
       usedContainerFormat = useContainer
 
       // Four-phase server-side buffering so the client never sees raw marker
