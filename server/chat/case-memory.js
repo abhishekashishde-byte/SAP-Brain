@@ -14,7 +14,9 @@ const SMALL_MODEL = process.env.WANI_SMALL_MODEL || 'claude-haiku-5-5'
 const SMALL_FALLBACK = 'claude-haiku-4-5'
 
 export const HISTORY_BUDGET_CHARS = Number(process.env.WANI_HISTORY_BUDGET || 110_000)
-const PER_MESSAGE_MAX = 30_000
+const PER_MESSAGE_MAX = 45_000
+// The newest message may carry a large program that the model reads in full once.
+const NEWEST_MESSAGE_MAX = 450_000
 
 const clip = (s, n) => {
   const t = String(s || '')
@@ -28,7 +30,7 @@ export function buildHistory(allMessages, budget = HISTORY_BUDGET_CHARS) {
   let used = 0
   for (let i = allMessages.length - 1; i >= 0; i--) {
     const m = allMessages[i]
-    const text = clip(String(m.content).trim(), PER_MESSAGE_MAX)
+    const text = clip(String(m.content).trim(), i === allMessages.length - 1 ? NEWEST_MESSAGE_MAX : PER_MESSAGE_MAX)
     if (out.length > 0 && used + text.length > budget) break
     out.unshift({ ...m, content: text })
     used += text.length
@@ -85,7 +87,7 @@ export function caseFileText(caseFile) {
 // ── PLANNER ────────────────────────────────────────────────────────────────
 const PLANNER_SYSTEM = `You prepare the next reply of Wani, an AI assistant for senior SAP consultants.
 Read the case so far and the consultant's NEW message. Decide what the reply needs. Return ONLY JSON:
-{"standalone_question": "...", "search_query": "...", "mode": "quick|investigation|review|rewrite", "register": "expert|plain|tech_team|ticket|customer", "needs_web": true|false, "reason": "..."}
+{"standalone_question": "...", "search_query": "...", "mode": "quick|investigation|review|rewrite", "register": "expert|plain|tech_team|ticket|customer", "needs_web": true|false, "code_sections": [{"program": 1, "start": 120, "end": 180}], "reason": "..."}
 
 standalone_question: the new message rewritten so it is fully understandable WITHOUT the conversation. Resolve every reference ("this", "that BAdI", "does this make sense", "the note above") to the concrete SAP objects, plants, documents and findings involved. Keep SAP identifiers exactly as written. If the message pastes material (an SAP Note, code, a debugger result, another person's or AI's answer), say in one or two sentences what the consultant wants done with it and name the key objects it contains.
 
@@ -101,14 +103,16 @@ register — who the reply is for: expert (default, consultant to consultant), p
 
 needs_web: true when checking SAP sources online would make the reply more reliable (release behaviour, notes, object existence, standard functionality); false for rewrites and for questions fully answered by material already in the conversation.
 
+code_sections: only when PROGRAM MAPS are given. Large programs pasted earlier are no longer shown in full to the answering model — only the line ranges you list here. Pick the blocks the reply needs to be correct (the block asked about, the blocks it calls or that set the data it uses, declarations when types matter). Up to ~900 lines in total; prefer whole blocks. Empty list when no code is needed.
+
 reason: one short sentence explaining the mode choice.`
 
-export async function planTurn({ caseFile, recentMsgs, lastMsg }) {
+export async function planTurn({ caseFile, recentMsgs, lastMsg, programMaps = '' }) {
   const caseText = caseFileText(caseFile)
   const turns = recentMsgs.slice(-7, -1)
     .map(m => `${m.role === 'user' ? 'CONSULTANT' : 'WANI'}: ${clip(m.content, 1800)}`).join('\n\n')
-  const user = `${caseText ? `CASE FILE:\n${caseText}\n\n` : ''}${turns ? `RECENT CONVERSATION:\n${turns}\n\n` : ''}NEW MESSAGE FROM THE CONSULTANT:\n${clip(lastMsg, 6000)}`
-  const r = await withTimeout(callSmall(PLANNER_SYSTEM, user, 600), 7000)
+  const user = `${caseText ? `CASE FILE:\n${caseText}\n\n` : ''}${programMaps ? `PROGRAM MAPS:\n${programMaps}\n\n` : ''}${turns ? `RECENT CONVERSATION:\n${turns}\n\n` : ''}NEW MESSAGE FROM THE CONSULTANT:\n${clip(lastMsg, 6000)}`
+  const r = await withTimeout(callSmall(PLANNER_SYSTEM, user, 900), 8000)
   const p = parseJson(r.text)
   const modes = ['quick', 'investigation', 'review', 'rewrite']
   const registers = ['expert', 'plain', 'tech_team', 'ticket', 'customer']
@@ -118,6 +122,7 @@ export async function planTurn({ caseFile, recentMsgs, lastMsg }) {
     mode: modes.includes(p.mode) ? p.mode : 'quick',
     register: registers.includes(p.register) ? p.register : 'expert',
     needsWeb: p.needs_web !== false,
+    codeSections: Array.isArray(p.code_sections) ? p.code_sections.slice(0, 20) : [],
     reason: String(p.reason || '').slice(0, 300),
     model: r.model, usage: r.usage,
   }

@@ -181,7 +181,12 @@ function SaveDialog({ draft, setDraft, keepCode, setKeepCode, onSave, onCancel, 
 function Analyse({ session, onSaved, initial }) {
   const [code, setCode] = useState(initial?.code || '')
   const [fileName, setFileName] = useState(initial?.code ? pastedFileName(initial.code) : '')
-  const asFile = text => { setCode(text); setFileName(pastedFileName(text)) }
+  const tooLong = text => {
+    const n = text.split('\n').length
+    if (n > 10000) { setError(`This program has ${n.toLocaleString()} lines. Wani accepts up to 10,000 lines — paste the relevant part (e.g. the includes or methods in question).`); return true }
+    return false
+  }
+  const asFile = text => { if (tooLong(text)) return; setError(''); setCode(text); setFileName(pastedFileName(text)) }
   const onPaste = e => {
     const text = e.clipboardData?.getData('text') || ''
     if (text.split('\n').length >= 8 || text.length >= 400) { e.preventDefault(); asFile(text) }
@@ -189,8 +194,8 @@ function Analyse({ session, onSaved, initial }) {
   const onUpload = async e => {
     const f = e.target.files?.[0]; e.target.value = ''
     if (!f) return
-    if (f.size > 400_000) { setError('That file is too large (max ~400 KB).'); return }
-    const text = await f.text(); setCode(text); setFileName(f.name.replace(/\.[^.]+$/, '') + '.txt')
+    if (f.size > 900_000) { setError('That file is too large (max ~900 KB).'); return }
+    const text = await f.text(); if (tooLong(text)) return; setError(''); setCode(text); setFileName(f.name.replace(/\.[^.]+$/, '') + '.txt')
   }
   const clearFile = () => { setCode(''); setFileName('') }
   const [note, setNote] = useState('')

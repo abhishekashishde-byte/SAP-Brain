@@ -22,7 +22,7 @@ const MAX_BODY_BYTES = {
   'discovery-find': 4_000,
   'discovery-correct': 8_000,
   chat: 2_000_000,
-  code: 400_000,
+  code: 1_000_000,
   categorise: 30_000,
   extract: 50_000,
   recall: 30_000,

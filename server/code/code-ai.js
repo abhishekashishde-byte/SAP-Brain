@@ -6,7 +6,7 @@ import { requireApprovedUser, requireJsonBody, sendAuthError } from '../shared/_
 
 const MODEL = process.env.WANI_CODE_MODEL || process.env.WANI_ANSWER_MODEL || 'claude-sonnet-5-5'
 const FALLBACK_MODEL = 'claude-sonnet-4-5'
-const MAX_CODE = 120_000
+const MAX_CODE = 450_000 // ~10,000 lines
 
 const PERSONA = `You are Wani, a senior SAP S/4HANA consultant and ABAP reviewer talking to a senior functional/technical consultant.
 Write SAP identifiers (T-codes, tables, fields, BAPIs, BAdIs, function modules, classes, programs) in single backticks.
@@ -69,10 +69,14 @@ Return ONLY JSON:
  "s4_notes":"S/4HANA points to remember, or empty string",
  "tags":["module or topic tags, e.g. PM, MM, BAdI, output"]}`
 
-async function callModel(system, user, { search = false, maxTokens = 6000, model = MODEL } = {}) {
+async function callModel(system, user, { search = false, maxTokens = 6000, model = MODEL, cachedContext = '' } = {}) {
+  // The program is sent as a cached system block: follow-up questions, documentation
+  // and test cases on the same program reread it at ~10× lower cost.
   const body = {
     model, max_tokens: maxTokens,
-    system: [{ type: 'text', text: system }],
+    system: cachedContext
+      ? [{ type: 'text', text: cachedContext, cache_control: { type: 'ephemeral' } }, { type: 'text', text: system }]
+      : [{ type: 'text', text: system }],
     messages: [{ role: 'user', content: user }],
   }
   if (search) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4, allowed_domains: ['help.sap.com', 'me.sap.com', 'userapps.support.sap.com', 'community.sap.com', 'blogs.sap.com', 'api.sap.com', 'learning.sap.com', 'support.sap.com'] }]
@@ -85,12 +89,12 @@ async function callModel(system, user, { search = false, maxTokens = 6000, model
   if (!r.ok) {
     if ([400, 403, 404].includes(r.status) && model !== FALLBACK_MODEL && /model/i.test(data.error?.message || '')) {
       console.warn('[MODEL_FALLBACK] code', model, '→', FALLBACK_MODEL, data.error?.message)
-      return callModel(system, user, { search, maxTokens, model: FALLBACK_MODEL })
+      return callModel(system, user, { search, maxTokens, model: FALLBACK_MODEL, cachedContext })
     }
     throw Error(data.error?.message || 'Wani could not analyse the code')
   }
   const u = data.usage || {}
-  console.log(`[code-ai] model=${model} in=${u.input_tokens} out=${u.output_tokens} searches=${u.server_tool_use?.web_search_requests || 0}`)
+  console.log(`[code-ai] model=${model} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens || 0} cache_write=${u.cache_creation_input_tokens || 0} out=${u.output_tokens} searches=${u.server_tool_use?.web_search_requests || 0}`)
   // With web search the reply has several text blocks; the answer is the final stretch of text.
   return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim()
 }
@@ -106,7 +110,7 @@ const str = (v, n) => String(v ?? '').slice(0, n)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' })
-  if (!requireJsonBody(req, res, 400_000)) return
+  if (!requireJsonBody(req, res, 1_000_000)) return
   const auth = await requireApprovedUser(req)
   if (!auth.ok) return sendAuthError(res, auth)
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI is not configured' })
@@ -117,32 +121,33 @@ export default async function handler(req, res) {
   const history = Array.isArray(req.body.history) ? req.body.history.slice(-12).map(m => ({ role: m.role === 'user' ? 'consultant' : 'wani', text: str(m.text, 4000) })) : []
   if (code.trim().length < 20) return res.status(400).json({ error: 'Paste the program code first' })
   const context = `PROGRAM:\n\`\`\`\n${code}\n\`\`\``
+  const cached = { cachedContext: context }
   const withAnalysis = analysis ? `\n\nEARLIER ANALYSIS:\n${JSON.stringify(analysis)}` : ''
 
   try {
     if (action === 'analyse') {
       const note = str(req.body.note, 1500)
-      const out = parseJson(await callModel(ANALYSE, context + (note ? `\n\nCONSULTANT NOTE: ${note}` : ''), { search: true, maxTokens: 7000 }))
+      const out = parseJson(await callModel(ANALYSE, note ? `CONSULTANT NOTE: ${note}\n\nAnalyse the program.` : 'Analyse the program.', { search: true, maxTokens: 7000, ...cached }))
       return res.status(200).json({ analysis: out })
     }
     if (action === 'ask') {
       const question = str(req.body.question, 3000).trim()
       if (!question) return res.status(400).json({ error: 'Ask a question' })
       const convo = history.length ? `\n\nCONVERSATION SO FAR:\n${history.map(m => `${m.role}: ${m.text}`).join('\n')}` : ''
-      const answer = await callModel(ASK, `${context}${withAnalysis}${convo}\n\nQUESTION: ${question}`, { search: true, maxTokens: 4000 })
+      const answer = await callModel(ASK, `${withAnalysis}${convo}\n\nQUESTION: ${question}`.trim(), { search: true, maxTokens: 4000, ...cached })
       return res.status(200).json({ answer })
     }
     if (action === 'document') {
-      const doc = await callModel(DOCUMENT, context + withAnalysis, { maxTokens: 5000 })
+      const doc = await callModel(DOCUMENT, (withAnalysis || 'Document the program.').trim(), { maxTokens: 5000, ...cached })
       return res.status(200).json({ documentation: doc })
     }
     if (action === 'tests') {
-      const out = parseJson(await callModel(TESTS, context + withAnalysis, { maxTokens: 6000 }))
+      const out = parseJson(await callModel(TESTS, (withAnalysis || 'Write the test cases.').trim(), { maxTokens: 6000, ...cached }))
       return res.status(200).json({ test_cases: Array.isArray(out.test_cases) ? out.test_cases : [] })
     }
     if (action === 'library') {
       const convo = history.length ? `\n\nCONVERSATION:\n${history.map(m => `${m.role}: ${m.text}`).join('\n')}` : ''
-      const out = parseJson(await callModel(LIBRARY, context + withAnalysis + convo, { maxTokens: 2500 }))
+      const out = parseJson(await callModel(LIBRARY, (withAnalysis + convo || 'Prepare the library entry.').trim(), { maxTokens: 2500, ...cached }))
       return res.status(200).json({ summary: out })
     }
     return res.status(400).json({ error: 'Unknown action' })

@@ -3001,6 +3001,10 @@ export default function Brain({ session }) {
     const detected = detectCode(pasted)
     if (detected) {
       e.preventDefault()
+      if (detected.lines > 10000) {
+        window.alert(`This program has ${detected.lines.toLocaleString()} lines. Wani accepts up to 10,000 lines per paste — please paste the relevant part (e.g. the includes or methods in question).`)
+        return
+      }
       setAttachedCode(detected)
       // Clear any existing code from input
       setInput(prev => prev.replace(pasted, '').trim())

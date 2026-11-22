@@ -21,11 +21,13 @@ import { INTENT_PROMPTS, CODE_INTENTS, DELIVERABLE_INTENTS } from '../server/sha
 import { assessEvidenceRouting, attachSelectedTavilyResults } from '../lib/evidence-routing.js'
 import { createClient } from '@supabase/supabase-js'
 import { buildHistory, planTurn, updateCaseFile, caseFileText, modePrompt } from '../server/chat/case-memory.js'
+import { findLargePrograms, renderMap, applyProgramMaps } from '../server/chat/program-map.js'
 
 // ── ANSWER MODEL ──────────────────────────────────────────────────────────────
 // One place for the Claude model that writes Wani's answers (Q&A, code, deliverables).
 // Override with WANI_ANSWER_MODEL (e.g. back to ANSWER_MODEL) without a code change.
 const ANSWER_MODEL = process.env.WANI_ANSWER_MODEL || 'claude-sonnet-5-5'
+const REWRITE_MODEL = process.env.WANI_REWRITE_MODEL || 'claude-haiku-5-5'
 // USD per million tokens: input, 5-minute cache write, cache read, output.
 const CLAUDE_PRICES = {
   'claude-sonnet-5-5': { input: 2, cacheWrite: 2.5, cacheRead: 0.2, output: 10 },
@@ -1220,11 +1222,33 @@ async function streamGPT(systemPrompt, messages, onChunk, model = 'gpt-4o', maxT
 // ── 11. Claude streaming ──────────────────────────────────────────────────────
 async function streamClaude(model, systemPrompt, messages, onChunk, maxTokens = 4000, opts = {}) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set')
+  // Prompt caching: the fixed instructions (BASE + intent prompt) stay in a cached
+  // system block; everything that changes per turn (book passages, search results,
+  // case file, mode) moves into the latest user message, so the conversation history
+  // before it is cached too. Cached input costs ~10× less than fresh input.
+  let system = systemPrompt
+  let msgs = messages
+  const staticSystem = opts.cacheStatic
+  if (staticSystem && typeof systemPrompt === 'string' && systemPrompt.startsWith(staticSystem) && messages.length) {
+    const dynamic = systemPrompt.slice(staticSystem.length).trim()
+    system = [{ type: 'text', text: staticSystem, cache_control: { type: 'ephemeral' } }]
+    msgs = messages.map(m => ({ ...m }))
+    const last = msgs[msgs.length - 1]
+    if (dynamic && last.role === 'user' && typeof last.content === 'string') {
+      last.content = `<wani_context>\nInstructions and sources for THIS answer (they apply on top of your standing instructions):\n${dynamic}\n</wani_context>\n\n${last.content}`
+    }
+    if (msgs.length >= 2) {
+      const prev = msgs[msgs.length - 2]
+      if (typeof prev.content === 'string' && prev.content.trim()) {
+        prev.content = [{ type: 'text', text: prev.content, cache_control: { type: 'ephemeral' } }]
+      }
+    }
+  }
   const body = {
     model,
     max_tokens: maxTokens,
-    system: systemPrompt,
-    messages,
+    system,
+    messages: msgs,
     stream: true,
   }
   if (opts.enableWebSearch) {
@@ -2362,9 +2386,14 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     // Planner: decides what the message really asks, what to search, which answer
     // mode and audience fit. Skipped for an opening one-line question (nothing to resolve).
     const userTurns = allMessages.filter(m => m.role === 'user').length
+    // Large programs pasted earlier: the planner sees their maps and picks the sections
+    // this question needs; the answer model then gets map + those sections only.
+    const largePrograms = findLargePrograms(allMessages)
+    const programMaps = largePrograms.map((p, i) => renderMap(p, i + 1)).join('\n\n')
+    debugLog.largePrograms = largePrograms.map(p => ({ name: p.name, lines: p.lineCount, blocks: p.blocks.length }))
     const needsPlan = !!process.env.ANTHROPIC_API_KEY && (userTurns > 1 || lastMsg.length > 600)
     const planPromise = needsPlan
-      ? planTurn({ caseFile: incomingCaseFile, recentMsgs: history.recentMsgs, lastMsg }).catch(e => { console.warn('[planner]', e.message); return null })
+      ? planTurn({ caseFile: incomingCaseFile, recentMsgs: history.recentMsgs, lastMsg, programMaps }).catch(e => { console.warn('[planner]', e.message); return null })
       : Promise.resolve(null)
     // Case file: updated with everything since the last saved case file (including this
     // message), in parallel; awaited just before the answer is written.
@@ -2474,7 +2503,21 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     const shouldGenerateDoc = docWizardStage === 'generate' || docWizardStage === 'gathering'
 
     // ── STEP 3: Conversation context — last 12 messages, no summarization ──
-    const { recentMsgs } = history
+    // How much history goes to the answer model depends on the kind of turn:
+    // quick questions need recent context only; investigations, reviews and code
+    // need the whole case; rewrites only need the text being rewritten.
+    // Earlier large programs → map + planner-chosen sections (full program if the
+    // planner is unavailable, so the answer never rests on code it cannot see).
+    const answerMessages = largePrograms.length && plan
+      ? applyProgramMaps(allMessages, largePrograms, plan.codeSections)
+      : allMessages
+    debugLog.codeSections = plan?.codeSections || []
+    const recentMsgs = planMode === 'quick' && !isCode
+      ? buildHistory(answerMessages, 24_000).recentMsgs.slice(-12)
+      : planMode === 'rewrite'
+        ? buildHistory(answerMessages, 30_000).recentMsgs.slice(-6)
+        : buildHistory(answerMessages).recentMsgs
+    debugLog.historySent = recentMsgs.length
     // Lightweight, non-LLM context string for search rewriting/module detection —
     // just the last real exchange verbatim. Deliberately not a summarized/compressed
     // version: that approach was removed earlier for causing context loss and wrong
@@ -2687,6 +2730,8 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
     let systemPrompt = isDeliverable
       ? intentPrompt + toneAddition
       : BASE_SYSTEM_PROMPT + '\n\n' + intentPrompt + toneAddition
+    // Fixed part of the prompt — cached across turns (see streamClaude).
+    const cacheStatic = systemPrompt
 
     if (todayTopicHint && !isDeliverable) {
       systemPrompt += `\n\n📅 TODAY'S PATTERN (background only): This user has asked ${todayTopicHint.count} of their ${todayTopicHint.totalToday} questions today about ${todayTopicHint.module}. You MAY make ONE brief, light, natural callback to this if it genuinely fits the moment — e.g. noticing it's been a real ${todayTopicHint.module} kind of day. Keep it to a single short aside, never a recurring habit — do NOT mention this in every answer, only when it would land naturally, and never force it if the current question doesn't call for it. If in doubt, skip it and just answer.`
@@ -2733,7 +2778,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
         const s = e.summary || {}
         return `[L${i+1}] ${e.title}\n    Problem: ${s.problem || ''}\n    Approach: ${s.approach || ''}\n    Objects: ${(s.objects || []).join(', ')}\n    Use when: ${s.when_to_use || ''}${s.when_not_to_use ? `\n    Not when: ${s.when_not_to_use}` : ''}${s.standard_alternative ? `\n    Standard alternative: ${s.standard_alternative}` : ''}${typeof s.standard_coverage === 'string' && s.standard_coverage ? ` (standard coverage: ${s.standard_coverage})` : ''}`
       }).join('\n')
-      systemPrompt += `\n\n🗂️ CONSULTANT'S CODE LIBRARY (solutions this consultant saved earlier from real programs):\n${lines}\n\nHOW TO USE THE CODE LIBRARY:\n- Only mention an entry when it genuinely solves the problem the consultant is describing now. Most questions match none — then say nothing about the library.\n- When one fits: first say whether standard SAP covers the need (standard first), then add one short line such as "You also have a saved solution for this in your Code library: <title> — <one-line approach>." Do not paste or reconstruct code.\n- Never invent library entries or details beyond what is listed above.`
+      systemPrompt += `\n\n🗂️ CONSULTANT'S CODE LIBRARY (solutions this consultant saved earlier from real programs):\n${lines}\n\nHOW TO USE THE CODE LIBRARY:\n- Standard SAP always comes first. Suggest a saved entry ONLY when (a) it genuinely solves the problem the consultant is describing now AND standard SAP has no real solution for it (or only one whose gaps clearly matter here), or (b) the consultant explicitly asks for a custom / Z solution or for their earlier code. In every other case say nothing about the library — not even that an entry exists.\n- When it does apply: state briefly why standard does not cover it, then one short line such as "You have a saved solution for this in your Code library: <title> — <one-line approach>." Do not paste or reconstruct code.\n- Never invent library entries or details beyond what is listed above.`
     }
 
     // ── Inject verified knowledge ──────────────────────────────────────────
@@ -2930,7 +2975,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     if (isRealCode || isComplexAbap) {
       // Real ABAP code pasted → Claude Sonnet only
       send({ type: 'model_label', label: 'by Claude Sonnet' })
-      const codeResult = await streamClaude(ANSWER_MODEL, systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000)
+      const codeResult = await streamClaude(ANSWER_MODEL, systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 8000, { cacheStatic })
       fullAnswer = codeResult.text
       debugLog.tokenUsage = codeResult.usage
       debugLog.tokenProvider = 'anthropic'
@@ -2954,7 +2999,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     } else if (isComplexDeliverable || shouldGenerateDoc) {
       // Deliverables → Claude Sonnet only
       send({ type: 'model_label', label: 'by Claude Sonnet' })
-      const deliverableResult = await streamClaude(ANSWER_MODEL, systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000)
+      const deliverableResult = await streamClaude(ANSWER_MODEL, systemPrompt, validMessages, chunk => send({ type: 'chunk', text: chunk }), 16000, { cacheStatic })
       fullAnswer = deliverableResult.text
       debugLog.tokenUsage = deliverableResult.usage
       debugLog.tokenProvider = 'anthropic'
@@ -3107,15 +3152,19 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       // answer block plus the trailing references/follow-ups JSON add real
       // length on top of the answer itself.
       debugLog.forceSonnetVerification = forceSonnetVerification
+      // Rewrites only re-word what the conversation already established, so the
+      // smaller model handles them; everything else stays on the answer model.
+      const isRewrite = planMode === 'rewrite'
       const sonnetResult = await streamClaude(
-        ANSWER_MODEL,
+        isRewrite ? REWRITE_MODEL : ANSWER_MODEL,
         enrichedSystemPrompt,
         validMessages,
         onChunk,
         useContainer ? 6144 : 4096,
         {
-          enableWebSearch: process.env.WANI_DISABLE_SEARCH !== 'true',
-          forceWebSearch: forceSonnetVerification && process.env.WANI_DISABLE_SEARCH !== 'true',
+          cacheStatic,
+          enableWebSearch: !isRewrite && process.env.WANI_DISABLE_SEARCH !== 'true',
+          forceWebSearch: !isRewrite && forceSonnetVerification && process.env.WANI_DISABLE_SEARCH !== 'true',
           onActivity: state => activity('verify', state === 'done' ? 'Checked details on SAP sites' : 'Verifying details on SAP sites', state),
         }
       )
