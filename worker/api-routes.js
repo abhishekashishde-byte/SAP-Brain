@@ -13,6 +13,7 @@ const HANDLERS = {
   'generate-ppt': () => import('../api/generate-ppt.js'),
   'external-chat': () => import('../api/external-chat.js'),
   discovery: () => import('../api/discovery.js'),
+  code: () => import('../server/code/code-ai.js'),
 }
 
 // Same limits middleware.js enforced on Vercel.
@@ -21,6 +22,7 @@ const MAX_BODY_BYTES = {
   'discovery-find': 4_000,
   'discovery-correct': 8_000,
   chat: 2_000_000,
+  code: 400_000,
   categorise: 30_000,
   extract: 50_000,
   recall: 30_000,

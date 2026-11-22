@@ -1688,6 +1688,21 @@ async function fetchUserMemories(question, userId) {
   } catch (e) { console.error('fetchUserMemories error:', e.message); return [] }
 }
 
+async function fetchCodeLibraryIndex(userToken) {
+  try {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+    if (!url || !anonKey || !userToken) return []
+    const userClient = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${userToken}` } } })
+    const { data, error } = await userClient.from('code_library').select('title,summary').order('created_at', { ascending: false }).limit(40)
+    if (error) { if (!/does not exist|schema cache/i.test(error.message)) console.error('code library error:', error.message); return [] }
+    return data || []
+  } catch (err) {
+    console.error('fetchCodeLibraryIndex error:', err.message)
+    return []
+  }
+}
+
 async function fetchRelevantKnowledge(question, userId, userToken) {
   try {
     const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -2493,6 +2508,12 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
       tavilyNotesResultsPromise.then(r => activity('notes', r?.length ? `Found ${r.length} SAP Note result${r.length === 1 ? '' : 's'}` : 'Checked SAP Notes', 'done')).catch(() => {})
     }
 
+    // Consultant's saved code library (Code section). Small per user, so the whole
+    // index goes to the model and it judges relevance itself — no keyword matching.
+    const codeLibraryPromise = (!isDeliverable && SAP_QA_INTENTS.has(intent) && userToken)
+      ? fetchCodeLibraryIndex(userToken).catch(() => [])
+      : Promise.resolve([])
+
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
     const [
       bookChunks,
@@ -2511,6 +2532,9 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
       tavilyNotesResultsPromise,
       openAIResultPromise,
     ])
+
+    const codeLibrary = await codeLibraryPromise
+    debugLog.codeLibraryEntries = codeLibrary.length
 
     const t2 = Date.now()
     debugLog.parallelMs = t2 - t1
@@ -2670,6 +2694,15 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
         return `[Book ${i+1}] ${c.source_book}, p.${c.page_number}${versionNote}\n${c.lesson_title ? `Topic: ${c.lesson_title}\n` : ''}${c.content}`
       }).join('\n\n---\n\n')
       systemPrompt += `\n\n📚 SAP DOCUMENTATION (from indexed books — use as primary reference):\n${chunkText}\n\nCITATION RULES — MANDATORY:\n- You MUST cite book chunks when they cover the topic. Never state a fact from your own training when the book covers it.\n- Every fact derived from a book chunk MUST include an inline citation: (Book Title, p.XX)\n- If multiple chunks are relevant, cite each one where used\n- Book citations are not optional — they are the primary value Wani provides\n- Example: "The call horizon is configured in IP10 (PM Maintenance Planning, p.129)"`
+    }
+
+    // ── Inject the consultant's code library index ─────────────────────────
+    if (codeLibrary.length > 0) {
+      const lines = codeLibrary.map((e, i) => {
+        const s = e.summary || {}
+        return `[L${i+1}] ${e.title}\n    Problem: ${s.problem || ''}\n    Approach: ${s.approach || ''}\n    Objects: ${(s.objects || []).join(', ')}\n    Use when: ${s.when_to_use || ''}${s.when_not_to_use ? `\n    Not when: ${s.when_not_to_use}` : ''}${s.standard_alternative ? `\n    Standard alternative: ${s.standard_alternative}` : ''}`
+      }).join('\n')
+      systemPrompt += `\n\n🗂️ CONSULTANT'S CODE LIBRARY (solutions this consultant saved earlier from real programs):\n${lines}\n\nHOW TO USE THE CODE LIBRARY:\n- Only mention an entry when it genuinely solves the problem the consultant is describing now. Most questions match none — then say nothing about the library.\n- When one fits: first say whether standard SAP covers the need (standard first), then add one short line such as "You also have a saved solution for this in your Code library: <title> — <one-line approach>." Do not paste or reconstruct code.\n- Never invent library entries or details beyond what is listed above.`
     }
 
     // ── Inject verified knowledge ──────────────────────────────────────────
