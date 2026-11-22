@@ -2048,7 +2048,7 @@ export default function Brain({ session }) {
   useEffect(() => {
     const userId = session?.user?.id
     if (!userId) return
-    const key = `wani_release_seen_prompt_suggestions_v1_${userId}`
+    const key = `wani_release_seen_2026_11_code_v2_${userId}`
     try {
       if (!window.localStorage.getItem(key)) {
         window.localStorage.setItem(key, '1')
@@ -3760,16 +3760,18 @@ export default function Brain({ session }) {
       {showUpdateNotice && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ width:'min(460px,94vw)', background:t.surface, border:`1px solid ${t.border}`, borderRadius:18, padding:22, boxShadow:'0 20px 60px rgba(0,0,0,0.35)' }}>
-            <div style={{ fontSize:18, fontWeight:750, color:t.text, marginBottom:6 }}>Wani has been updated</div>
-            <div style={{ fontSize:13, color:t.text3, lineHeight:1.6, marginBottom:14 }}>You can now ask Wani to improve a question before sending it.</div>
-            <div style={{ fontSize:13, color:t.text2, lineHeight:1.7, marginBottom:18 }}>
-              <div>• Click ✨ only when you want help improving your prompt.</div>
-              <div>• Wani never interrupts your typing or checks every question automatically.</div>
-              <div>• You always choose <b>Use suggestion</b> or <b>Use my original</b>.</div>
-              <div>• Follow-up questions use recent conversation context more carefully.</div>
-              <div>• Improving a prompt does not use one of your Wani questions.</div>
+            <div style={{ fontSize:18, fontWeight:750, color:t.text, marginBottom:6 }}>What's new in Wani</div>
+            <div style={{ fontSize:13, color:t.text3, lineHeight:1.6, marginBottom:14 }}>A sharper answer model, a new Code section and a new look.</div>
+            <div style={{ fontSize:13, color:t.text2, lineHeight:1.7, marginBottom:18, display:'grid', gap:10 }}>
+              <div><b style={{color:t.text}}>Code section (new).</b> Paste a Z-program: Wani explains it, checks it against S/4HANA and tells you whether standard can replace it — fully, partly, or not — with each option's limits. Ask follow-ups, generate documentation or test cases, and save solutions to your private library. Chat will point you to a saved solution when you describe a similar problem.</div>
+              <div><b style={{color:t.text}}>More accurate, more to the point.</b> Answers now run on a newer Claude model. "Which app / which T-code" questions get a short answer listing all matching options, newest first; ask "tell me more" for detail.</div>
+              <div><b style={{color:t.text}}>See what Wani is doing.</b> While you wait, Wani shows its steps — reading your books, checking SAP sources and notes.</div>
+              <div><b style={{color:t.text}}>Cleaner look.</b> New jet-black theme and consistent formatting for T-codes and SAP objects.</div>
             </div>
-            <button onClick={()=>setShowUpdateNotice(false)} style={{ width:'100%', padding:'10px 14px', border:0, borderRadius:10, background:'#90949b', color:'#fff', fontWeight:650, cursor:'pointer' }}>Got it</button>
+            <div style={{ display:'flex', gap:8 }}>
+              <a href="/code" onClick={()=>setShowUpdateNotice(false)} style={{ flex:1, textAlign:'center', padding:'10px 14px', borderRadius:10, border:`1px solid ${t.border}`, color:t.text, fontWeight:650, textDecoration:'none', fontSize:14 }}>Try Code</a>
+            <button onClick={()=>setShowUpdateNotice(false)} style={{ flex:1, padding:'10px 14px', border:0, borderRadius:10, background: dark ? '#ececef' : '#18181b', color: dark ? '#0a0a0b' : '#fff', fontWeight:650, cursor:'pointer', fontSize:14 }}>Got it</button>
+            </div>
           </div>
         </div>
       )}
