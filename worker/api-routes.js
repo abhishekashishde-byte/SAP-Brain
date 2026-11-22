@@ -14,6 +14,7 @@ const HANDLERS = {
   'external-chat': () => import('../api/external-chat.js'),
   discovery: () => import('../api/discovery.js'),
   code: () => import('../server/code/code-ai.js'),
+  'case-test': () => import('../server/chat/case-test.js'),
 }
 
 // Same limits middleware.js enforced on Vercel.
@@ -23,6 +24,7 @@ const MAX_BODY_BYTES = {
   'discovery-correct': 8_000,
   chat: 2_000_000,
   code: 400_000,
+  'case-test': 2_000_000,
   categorise: 30_000,
   extract: 50_000,
   recall: 30_000,
