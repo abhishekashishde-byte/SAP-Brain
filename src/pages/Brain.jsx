@@ -1,3 +1,4 @@
+import PastedFile, { pastedFileName } from '../components/PastedFile.jsx'
 import { useState, useEffect, useRef } from 'react'
 import { TOPICS, MODULE_META, STARTERS, SUMMARISE_THRESHOLD } from '../constants'
 import { WaniLogo, WaniWordmark } from './Login.jsx'
@@ -181,41 +182,11 @@ const getInitials = (name, email) => {
 const isMobileWidth = () => window.innerWidth < 768
 
 // ── CODE ATTACHMENT CARD ──────────────────────────────────────────────────────
-function CodeCard({ language, lines, content, expanded, onToggle, onRemove, t, dark }) {
-  const langColors = { ABAP: '#1E6B4A', SQL: '#1A56DB', XML: '#9A3412', JSON: '#7a7e87', Code: '#374151' }
-  const bgColor = dark ? '#252627' : '#fafafa'
-  const borderColor = dark ? '#343536' : '#E2E8F0'
-
-  return (
-    <div style={{ borderRadius:10, border:`1.5px solid ${borderColor}`, background:bgColor, overflow:'hidden', marginBottom:6 }}>
-      {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', cursor:'pointer', userSelect:'none' }}
-        onClick={onToggle}>
-        <span style={{ fontSize:14 }}>📄</span>
-        <span style={{ fontSize:12, fontWeight:600, color: langColors[language] || '#374151',
-          background: `${langColors[language] || '#374151'}18`, padding:'1px 7px', borderRadius:6 }}>
-          {language}
-        </span>
-        <span style={{ fontSize:12, color: t?.text4 || '#888' }}>{lines} lines</span>
-        <span style={{ marginLeft:'auto', fontSize:11, color: t?.text4 || '#888' }}>
-          {expanded ? '▲ collapse' : '▼ expand'}
-        </span>
-        {onRemove && (
-          <span onClick={e=>{ e.stopPropagation(); onRemove() }}
-            style={{ fontSize:14, color:'#DC2626', cursor:'pointer', marginLeft:4, lineHeight:1 }}>×</span>
-        )}
-      </div>
-      {/* Code preview */}
-      {expanded && (
-        <div style={{ borderTop:`1px solid ${borderColor}`, background: dark ? '#161718' : '#F1F5F9',
-          padding:'10px 14px', maxHeight:240, overflowY:'auto' }}>
-          <pre style={{ margin:0, fontSize:11, fontFamily:"'Fira Code','Courier New',monospace",
-            color: dark ? '#A8D8A8' : '#1E293B', whiteSpace:'pre-wrap', wordBreak:'break-word',
-            lineHeight:1.6 }}>{content}</pre>
-        </div>
-      )}
-    </div>
-  )
+// Titles saved before code attachments were handled can contain the raw tag.
+function cleanConvTitle(title) {
+  const s = String(title || '')
+  if (!s.includes('[ATTACHED_CODE')) return s
+  return s.replace(/\[ATTACHED_CODE[\s\S]*$/, '').trim() || 'Code analysis'
 }
 
 function ModuleBadge({ module, small }) {
@@ -803,10 +774,10 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
-  const codeAttachment = msg._code || null
+  const savedCode = isUser ? String(msg.content || '').match(/\[ATTACHED_CODE(?:\s+lang=(\S+))?[^\]]*\]\n?([\s\S]*?)\n?\[\/ATTACHED_CODE\]/) : null
+  const codeAttachment = savedCode ? { language: msg._code?.language || savedCode[1] || 'Code', content: savedCode[2] } : null
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(null)
-  const [codeExpanded, setCodeExpanded] = useState(false)
 
   // Backward-compatible recovery for answers saved while the server sometimes
   // emitted `_references: []` despite having real web results. Prefer the stored
@@ -1044,15 +1015,9 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         <div style={{ maxWidth:'80%', display:'flex', flexDirection:'column', gap:6 }}>
           {/* Code attachment card */}
           {codeAttachment && (
-            <CodeCard
-              language={codeAttachment.language}
-              lines={codeAttachment.lines}
-              content={msg.content?.match(/\[ATTACHED_CODE[^\]]*\]([\s\S]*?)\[\/ATTACHED_CODE\]/)?.[1]?.trim() || ''}
-              expanded={codeExpanded}
-              onToggle={() => setCodeExpanded(p => !p)}
-              onRemove={null}
-              t={t} dark={dark}
-            />
+            <div style={{ display:'flex', justifyContent:'flex-end' }}>
+              <PastedFile content={codeAttachment.content} label={codeAttachment.language} light={!dark} />
+            </div>
           )}
           {/* Message text */}
           {displayContent && (
@@ -1637,7 +1602,7 @@ function ConversationItem({ conv, isActive, onClick, onDelete, t }) {
         {conv.module && <ModuleBadge module={conv.module} small/>}
         {conv.is_summarised && <span style={{ fontSize:9,color:t.text4,background:t.surface2,padding:'1px 5px',borderRadius:10 }}>∑ summarised</span>}
       </div>
-      <div style={{ fontSize:14,fontWeight:isActive?600:500,color:isActive?'#90949b':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>{conv.title}</div>
+      <div style={{ fontSize:14,fontWeight:isActive?600:500,color:isActive?'#90949b':t.text,lineHeight:1.35,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',paddingRight:hovered?22:0,flex:1 }}>{cleanConvTitle(conv.title)}</div>
       <div style={{ fontSize:11.5,color:t.text3,marginTop:10,fontWeight:400,display:'flex',alignItems:'center',gap:5 }}>
         <span style={{ overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{conv.topic}</span>
         <span style={{ color:t.text4,flexShrink:0 }}>·</span>
@@ -1929,7 +1894,7 @@ function TopicView({ module:mod, topic, conversations, onSelectConv, onNewChat, 
             <div key={group} style={{ marginBottom:18 }}>
               <div style={{ fontSize:11,fontWeight:700,color:t.text4,letterSpacing:0.8,textTransform:'uppercase',marginBottom:8 }}>{group}</div>
               <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
-                {convs.map(conv=>(<div key={conv.id} onClick={()=>onSelectConv(conv.id)} style={{ padding:'14px 16px',borderRadius:12,background:t.surface,border:`1.5px solid ${t.border}`,cursor:'pointer',transition:'all 0.15s',display:'flex',alignItems:'center',justifyContent:'space-between' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.boxShadow='0 4px 12px rgba(144,148,155,0.1)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.boxShadow='none'}}><div style={{ flex:1,minWidth:0 }}><div style={{ fontSize:14,fontWeight:500,color:t.text,marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{conv.title}</div><div style={{ fontSize:12,color:t.text3 }}>{conv.topic} · {new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div><span style={{ color:t.text4,fontSize:18,marginLeft:12 }}>›</span></div>))}
+                {convs.map(conv=>(<div key={conv.id} onClick={()=>onSelectConv(conv.id)} style={{ padding:'14px 16px',borderRadius:12,background:t.surface,border:`1.5px solid ${t.border}`,cursor:'pointer',transition:'all 0.15s',display:'flex',alignItems:'center',justifyContent:'space-between' }} onMouseEnter={e=>{e.currentTarget.style.borderColor='#90949b';e.currentTarget.style.boxShadow='0 4px 12px rgba(144,148,155,0.1)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.boxShadow='none'}}><div style={{ flex:1,minWidth:0 }}><div style={{ fontSize:14,fontWeight:500,color:t.text,marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{cleanConvTitle(conv.title)}</div><div style={{ fontSize:12,color:t.text3 }}>{conv.topic} · {new Date(conv.updated_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div><span style={{ color:t.text4,fontSize:18,marginLeft:12 }}>›</span></div>))}
               </div>
             </div>
           ))
@@ -2628,7 +2593,8 @@ export default function Brain({ session }) {
     let currentMsgs = [...messages, userMsg]
 
     if (!convId) {
-      const cleanTitle = msgText.replace(/\b[A-Z]{2,4}\d{2,3}N?\b/g,'').replace(/\s+/g,' ').trim().slice(0,50)||'New Conversation'
+      const titleSource = msgText.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g,'').trim() || (attachedCode ? `Analyse ${pastedFileName(attachedCode.content)}` : '')
+      const cleanTitle = titleSource.replace(/\b[A-Z]{2,4}\d{2,3}N?\b/g,'').replace(/\s+/g,' ').trim().slice(0,50)||'New Conversation'
       const newConv = await createConversation(session.user.id,{ title:cleanTitle,module:currentMod,topic:currentTopic,messages:[userMsg] })
       convId = newConv.id; currentMsgs = [userMsg]
       setConversations(prev=>[newConv,...prev])
@@ -3312,7 +3278,7 @@ export default function Brain({ session }) {
             </button>
           </div>
 
-          {view==='chat'&&activeConv&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><ModuleBadge module={activeConv.module} small={isMobile}/>{!isMobile&&<div style={{ fontSize:13,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0 }}>{activeConv.title}</div>}{isMobile&&<div style={{ fontSize:14,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:1 }}>{activeConv.topic||activeConv.module?.split('–')[0].trim()}</div>}</div>)}
+          {view==='chat'&&activeConv&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><ModuleBadge module={activeConv.module} small={isMobile}/>{!isMobile&&<div style={{ fontSize:13,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0 }}>{cleanConvTitle(activeConv.title)}</div>}{isMobile&&<div style={{ fontSize:14,fontWeight:500,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:1 }}>{activeConv.topic||activeConv.module?.split('–')[0].trim()}</div>}</div>)}
           {view==='topic'&&(<div style={{ display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0 }}><span style={{ color:t.text4,fontSize:16 }}>›</span><div style={{ fontSize:isMobile?15:13,fontWeight:500,color:t.text2 }}>{browseTopic||browseModule?.split('–')[0].trim()}</div></div>)}
           {!(view==='chat'||view==='topic')&&<div style={{ flex:1 }}/>}
           {view==='chat'&&messages.some(m=>m.role==='user')&&(
@@ -3461,7 +3427,7 @@ export default function Brain({ session }) {
                                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}
                               >
                                 <span style={{ width:22,height:22,borderRadius:'50%',background:'rgba(16,185,129,0.15)',color:'#10B981',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0 }}>✓</span>
-                                <span style={{ flex:1,fontSize:13,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>"{conv.title}"</span>
+                                <span style={{ flex:1,fontSize:13,color:t.text2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>"{cleanConvTitle(conv.title)}"</span>
                                 <span style={{ fontSize:11.5,color:t.text4,flexShrink:0 }}>{rel}</span>
                               </div>
                             )
@@ -3626,15 +3592,8 @@ export default function Brain({ session }) {
                   {/* Attached code card */}
                   {attachedCode && (
                     <div style={{ width:'100%', marginBottom:6, ...(isMobile?{ order:-2 }:{}) }}>
-                      <CodeCard
-                        language={attachedCode.language}
-                        lines={attachedCode.lines}
-                        content={attachedCode.content}
-                        expanded={expandedCode}
-                        onToggle={() => setExpandedCode(p => !p)}
-                        onRemove={() => { setAttachedCode(null); setExpandedCode(false) }}
-                        t={t} dark={dark}
-                      />
+                      <PastedFile content={attachedCode.content} label={attachedCode.language} light={!dark} compact
+                        onRemove={() => { setAttachedCode(null); setExpandedCode(false) }} />
                     </div>
                   )}
 

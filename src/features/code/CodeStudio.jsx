@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabaseClient.js'
 import { WaniLogo, WaniWordmark } from '../../pages/Login.jsx'
+import PastedFile, { pastedFileName } from '../../components/PastedFile.jsx'
 import './CodeStudio.css'
 
 // Code section: paste a program → Wani explains it and checks it against S/4HANA.
@@ -179,6 +180,19 @@ function SaveDialog({ draft, setDraft, keepCode, setKeepCode, onSave, onCancel, 
 
 function Analyse({ session, onSaved, initial }) {
   const [code, setCode] = useState(initial?.code || '')
+  const [fileName, setFileName] = useState(initial?.code ? pastedFileName(initial.code) : '')
+  const asFile = text => { setCode(text); setFileName(pastedFileName(text)) }
+  const onPaste = e => {
+    const text = e.clipboardData?.getData('text') || ''
+    if (text.split('\n').length >= 8 || text.length >= 400) { e.preventDefault(); asFile(text) }
+  }
+  const onUpload = async e => {
+    const f = e.target.files?.[0]; e.target.value = ''
+    if (!f) return
+    if (f.size > 400_000) { setError('That file is too large (max ~400 KB).'); return }
+    const text = await f.text(); setCode(text); setFileName(f.name.replace(/\.[^.]+$/, '') + '.txt')
+  }
+  const clearFile = () => { setCode(''); setFileName('') }
   const [note, setNote] = useState('')
   const [analysis, setAnalysis] = useState(null)
   const [busy, setBusy] = useState('')
@@ -237,19 +251,25 @@ function Analyse({ session, onSaved, initial }) {
         <section className="cs-card">
           <h2 className="cs-title">Paste a program</h2>
           <p className="cs-lead">Wani explains what it does, checks it against S/4HANA and tells you whether standard now covers it.</p>
-          <textarea className="cs-code" spellCheck={false} wrap="off" value={code} onChange={e => setCode(e.target.value)}
-            placeholder={'REPORT zpm_order_check.\n\n* paste ABAP, CDS, SQL or JavaScript here'} />
+          {fileName ? (
+            <div className="cs-file"><PastedFile content={code} name={fileName} onRemove={clearFile} /></div>
+          ) : (
+            <textarea className="cs-code" spellCheck={false} wrap="off" value={code} onChange={e => setCode(e.target.value)} onPaste={onPaste}
+              placeholder={'Paste the program here — long code becomes a .txt file you can open any time.\n\nREPORT zpm_order_check.'} />
+          )}
+          <label className="cs-upload">or upload a file<input type="file" accept=".txt,.abap,.sql,.js,.ts,.cds,.xml,.json,text/*" onChange={onUpload} /></label>
           <input className="cs-note" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional: what you already know about it (where it runs, what it should do)" />
           <div className="cs-row">
             <button className="cs-btn cs-primary" disabled={!!busy || code.trim().length < 20} onClick={analyse}>Analyse</button>
-            <span className="cs-dim">{code.length ? `${code.split('\n').length} lines` : ''}</span>
+            <span className="cs-dim">{!fileName && code.length ? `${code.split('\n').length} lines` : ''}</span>
           </div>
         </section>
       )}
 
       {analysis && <>
         <div className="cs-row cs-toolbar">
-          <button className="cs-btn" onClick={() => { setAnalysis(null); setSavedId(null) }}>← New program</button>
+          <button className="cs-btn" onClick={() => { setAnalysis(null); setSavedId(null); clearFile() }}>← New program</button>
+          <PastedFile content={code} name={fileName || pastedFileName(code)} compact />
           <span className="cs-spacer" />
           <button className="cs-btn" disabled={!!busy} onClick={writeDoc}>Write documentation</button>
           <button className="cs-btn" disabled={!!busy} onClick={makeTests}>Create test cases</button>
@@ -329,7 +349,7 @@ function Library({ entries, loading, error, onDelete, onOpenCode }) {
                   {s.analysis && <details><summary>Full analysis</summary><Analysis a={s.analysis} /></details>}
                   {e.documentation && <details><summary>Documentation</summary><Markdown text={e.documentation} /></details>}
                   {Array.isArray(e.test_cases) && e.test_cases.length > 0 && <details><summary>Test cases ({e.test_cases.length})</summary><Tests tests={e.test_cases} /></details>}
-                  {e.code && <details><summary>Code</summary><pre className="cs-pre">{e.code}</pre></details>}
+                  {e.code && <div className="cs-file"><PastedFile content={e.code} name={pastedFileName(e.code, e.title.replace(/[^\w-]+/g, '_'))} /></div>}
                   <div className="cs-row">
                     {e.code && <button className="cs-btn" onClick={() => onOpenCode(e)}>Analyse again</button>}
                     <button className="cs-btn cs-danger" onClick={() => { if (window.confirm(`Delete "${e.title}" from your library?`)) onDelete(e.id) }}>Delete</button>
