@@ -6,6 +6,7 @@ import { requireApprovedUser, requireJsonBody, sendAuthError } from '../shared/_
 
 const MODEL = process.env.WANI_CODE_MODEL || process.env.WANI_ANSWER_MODEL || 'claude-sonnet-5-5'
 const FALLBACK_MODEL = 'claude-sonnet-4-5'
+const REPAIR_MODEL = process.env.WANI_SMALL_MODEL || 'claude-haiku-5-5'
 const MAX_CODE = 450_000 // ~10,000 lines
 
 const PERSONA = `You are Wani, a senior SAP S/4HANA consultant and ABAP reviewer talking to a senior functional/technical consultant.
@@ -18,7 +19,7 @@ Analyse the program the consultant pasted. Work out what it is for from the code
 Then judge it against SAP S/4HANA:
 - Objects that changed or are obsolete in S/4HANA (for example tables replaced by MATDOC/ACDOCA, BAPIs or function modules not supported or replaced, compatibility views, removed transactions). Use web_search to check the Simplification List, SAP Notes/KBAs or SAP Help when you are not sure. Each finding is a candidate with evidence, not a proof — the ATC S/4HANA readiness checks remain the final word.
 - CAN STANDARD REPLACE IT? This is the most important judgement — consultants rarely ask it about old Z-programs. Look at the business need behind the code, not the code itself, and ask whether today's SAP standard meets that need fully, partly, or not at all. Consider every kind of standard: Fiori apps, transactions, configuration/customizing settings, standard reports and mass-change tools, BRF+/workflow, released BAdIs or extensibility (key-user/in-app) that would shrink the custom part, and functions added in newer S/4HANA releases. Use web_search to confirm apps, features and the release they arrived in. For each realistic option, say what it covers and — just as important — what it does NOT cover (limitations, missing fields, different behaviour, needs a newer release, licence or extra configuration). Then give a clear recommendation. If nothing in standard fits, say so plainly rather than stretching a weak match.
-Return ONLY JSON:
+Return ONLY strictly valid JSON. Inside JSON strings escape every double quote as \\" — ABAP comments start with " — or describe code instead of quoting it.
 {"title":"short name for what the program does",
  "language":"ABAP|CDS|SQL|JavaScript|other",
  "purpose":"2-3 sentences, plain words",
@@ -96,14 +97,39 @@ async function callModel(system, user, { search = false, maxTokens = 6000, model
   const u = data.usage || {}
   console.log(`[code-ai] model=${model} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens || 0} cache_write=${u.cache_creation_input_tokens || 0} out=${u.output_tokens} searches=${u.server_tool_use?.web_search_requests || 0}`)
   // With web search the reply has several text blocks; the answer is the final stretch of text.
+  if (data.stop_reason === 'max_tokens') console.warn('[code-ai] hit max_tokens', maxTokens)
   return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim()
 }
 
-function parseJson(text) {
-  const clean = text.replace(/```(?:json)?/gi, '')
+function extractJson(text) {
+  const clean = String(text || '').replace(/```(?:json)?/gi, '')
   const start = clean.indexOf('{'), end = clean.lastIndexOf('}')
-  if (start < 0 || end <= start) throw Error('Wani returned an unreadable result. Try again.')
-  return JSON.parse(clean.slice(start, end + 1))
+  if (start < 0 || end <= start) return null
+  return clean.slice(start, end + 1)
+}
+
+// Large analyses sometimes come back as almost-valid JSON (typically an unescaped
+// quote from an ABAP comment inside a string). Rather than failing the whole — often
+// expensive — analysis, a small model repairs the syntax without changing content.
+async function parseJson(text) {
+  const raw = extractJson(text)
+  if (!raw) throw Error('Wani returned an unreadable result. Try again.')
+  try { return JSON.parse(raw) } catch (firstError) {
+    console.warn('[code-ai] JSON invalid, repairing:', firstError.message)
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: REPAIR_MODEL, max_tokens: 16000,
+        system: 'You repair JSON syntax. Return the same data as strictly valid JSON: escape quotes and control characters inside strings, fix missing commas or brackets. Do not add, remove, shorten or reword any content. Output only the JSON.',
+        messages: [{ role: 'user', content: `Parser error: ${firstError.message}\n\n${raw}` }],
+      }),
+    })
+    const data = await r.json().catch(() => ({}))
+    const fixed = extractJson((data.content || []).filter(b => b.type === 'text').map(b => b.text).join(''))
+    if (!r.ok || !fixed) throw Error('Wani returned an unreadable result. Try again.')
+    try { return JSON.parse(fixed) } catch { throw Error('Wani returned an unreadable result. Try again.') }
+  }
 }
 
 const str = (v, n) => String(v ?? '').slice(0, n)
@@ -127,7 +153,7 @@ export default async function handler(req, res) {
   try {
     if (action === 'analyse') {
       const note = str(req.body.note, 1500)
-      const out = parseJson(await callModel(ANALYSE, note ? `CONSULTANT NOTE: ${note}\n\nAnalyse the program.` : 'Analyse the program.', { search: true, maxTokens: 7000, ...cached }))
+      const out = await parseJson(await callModel(ANALYSE, note ? `CONSULTANT NOTE: ${note}\n\nAnalyse the program.` : 'Analyse the program.', { search: true, maxTokens: 14000, ...cached }))
       return res.status(200).json({ analysis: out })
     }
     if (action === 'ask') {
@@ -142,12 +168,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ documentation: doc })
     }
     if (action === 'tests') {
-      const out = parseJson(await callModel(TESTS, (withAnalysis || 'Write the test cases.').trim(), { maxTokens: 6000, ...cached }))
+      const out = await parseJson(await callModel(TESTS, (withAnalysis || 'Write the test cases.').trim(), { maxTokens: 6000, ...cached }))
       return res.status(200).json({ test_cases: Array.isArray(out.test_cases) ? out.test_cases : [] })
     }
     if (action === 'library') {
       const convo = history.length ? `\n\nCONVERSATION:\n${history.map(m => `${m.role}: ${m.text}`).join('\n')}` : ''
-      const out = parseJson(await callModel(LIBRARY, (withAnalysis + convo || 'Prepare the library entry.').trim(), { maxTokens: 2500, ...cached }))
+      const out = await parseJson(await callModel(LIBRARY, (withAnalysis + convo || 'Prepare the library entry.').trim(), { maxTokens: 2500, ...cached }))
       return res.status(200).json({ summary: out })
     }
     return res.status(400).json({ error: 'Unknown action' })
