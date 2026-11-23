@@ -13,7 +13,7 @@ const T = {
     on_track: 'On track', attention: 'Needs attention', at_risk: 'At risk', coverage: 'Progress by area',
     area: 'Area', fields: 'Fields', questions: 'Questions', decisions: 'Decisions', done: 'Done',
     discussed: 'What has been discussed', decisionsTaken: 'Decisions taken', decision: 'Decision',
-    open: 'Open points', point: 'Point', owner: 'Owner', due: 'Due', none: 'No open points.',
+    why: 'Why', open: 'Open points', point: 'Point', owner: 'Owner', due: 'Due', none: 'No open points.',
     todos: 'Open action items', action: 'Action', risks: 'Risks', risk: 'Risk', mitigation: 'Mitigation',
     left: 'Overview — what is still left', audience: { client: 'Customer version', internal: 'Internal version' },
   },
@@ -23,7 +23,7 @@ const T = {
     on_track: 'Im Plan', attention: 'Aufmerksamkeit erforderlich', at_risk: 'Gefährdet', coverage: 'Fortschritt nach Bereich',
     area: 'Bereich', fields: 'Felder', questions: 'Fragen', decisions: 'Entscheidungen', done: 'Erledigt',
     discussed: 'Was bisher besprochen wurde', decisionsTaken: 'Getroffene Entscheidungen', decision: 'Entscheidung',
-    open: 'Offene Punkte', point: 'Punkt', owner: 'Verantwortlich', due: 'Fällig', none: 'Keine offenen Punkte.',
+    why: 'Begründung', open: 'Offene Punkte', point: 'Punkt', owner: 'Verantwortlich', due: 'Fällig', none: 'Keine offenen Punkte.',
     todos: 'Offene Aufgaben', action: 'Aufgabe', risks: 'Risiken', risk: 'Risiko', mitigation: 'Maßnahme',
     left: 'Überblick – was noch offen ist', audience: { client: 'Kundenversion', internal: 'Interne Version' },
   },
@@ -58,7 +58,7 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
     width: width ? { size: Math.round(PAGE_DXA * width / 100), type: WidthType.DXA } : undefined,
     shading: head ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F4F4F5' } : undefined,
     margins: { top: 60, bottom: 60, left: 100, right: 100 },
-    children: [new Paragraph({ children: [new TextRun({ text: String(text ?? ''), font: FONT, size: 20, bold: head })] })],
+    children: String(text ?? '').split('\n').map((line, i) => new Paragraph({ spacing: { after: i ? 0 : 40 }, children: [new TextRun({ text: line, font: FONT, size: i ? 18 : 20, bold: head, color: i ? '52525B' : undefined })] })),
   })
   const table = (head, rows, widths) => new Table({
     width: { size: PAGE_DXA, type: WidthType.DXA }, borders,
@@ -102,11 +102,14 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
     }
   }
   if (report.decisions?.length) {
-    children.push(h(t.decisionsTaken), table([t.area, t.decision], report.decisions.map(x => [x.area, x.decision]), [28, 72]))
+    const withWhy = report.decisions.some(x => x.rationale)
+    children.push(h(t.decisionsTaken), withWhy
+      ? table([t.area, t.decision, t.why], report.decisions.map(x => [x.area, x.decision, x.rationale || '']), [22, 42, 36])
+      : table([t.area, t.decision], report.decisions.map(x => [x.area, x.decision]), [28, 72]))
   }
   children.push(h(t.open))
   if (report.open_points?.length) {
-    children.push(table([t.area, t.point, t.owner, t.due], report.open_points.map(x => [x.area, x.point, x.owner, x.due]), [20, 50, 16, 14]))
+    children.push(table([t.area, t.point, t.owner, t.due], report.open_points.map(x => [x.area, x.context ? `${x.point}\n${x.context}` : x.point, x.owner, x.due]), [18, 54, 15, 13]))
   } else children.push(p(t.none))
   const openTodos = (todos || []).filter(x => !x.done)
   if (openTodos.length) {

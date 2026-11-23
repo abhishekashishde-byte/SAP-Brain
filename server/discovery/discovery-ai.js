@@ -161,13 +161,13 @@ export default async function handler(req,res) {
     const report=await runStructured(
      'Write in '+(de?'native, professional German (Sie-Form, business register)':'clear, professional English')+'. You write the implementation STATUS REPORT for an SAP PM project, for '+(audience==='client'?'the customer':'the internal project team')+'. '+
      'Use ONLY the captured information supplied (entries, decisions, answers, to-dos, requests, parking lot, gaps, risks, interfaces, forms/reports, sessions, coverage figures). Never invent facts, names, dates or decisions. Item IDs in entries are resolved with catalogLookup. '+
-     'Be concise and factual — a status report a project lead reads in five minutes, not minutes of every detail. Group by SAP area. '+
-     'Return STRICT JSON ONLY: {"title":"report title","executive_summary":"3-5 sentences: where the project stands, what was achieved, the main open topics","overall_status":"on_track|attention|at_risk","status_reason":"one sentence why",'+
-     '"discussed":[{"area":"SAP area or topic","summary":"2-4 sentences: what was discussed and clarified"}],'+
-     '"decisions":[{"area":"...","decision":"what was decided"}],'+
-     '"open_points":[{"area":"...","point":"what is still open","owner":"name if captured, else empty","due":"date if captured, else empty"}],'+
+     'Be factual and moderately detailed — a status report a project lead reads in about ten minutes: concrete enough to act on (name the SAP objects, values, structures and agreements captured), but not minutes of every field. Group by SAP area. '+
+     'Return STRICT JSON ONLY: {"title":"report title","executive_summary":"4-6 sentences: where the project stands, what was achieved, the main open topics and what they block","overall_status":"on_track|attention|at_risk","status_reason":"one or two sentences why",'+
+     '"discussed":[{"area":"SAP area or topic","summary":"3-6 sentences: what was discussed and clarified — the concrete objects, structures, values and agreements, and how the legacy situation maps to SAP"}],'+
+     '"decisions":[{"area":"...","decision":"what was decided","rationale":"why, in one short sentence, if captured or evident from the discussion; else empty"}],'+
+     '"open_points":[{"area":"...","point":"what is still open","context":"one sentence: why it matters or what it blocks, and the next step","owner":"name if captured, else empty","due":"date if captured, else empty"}],'+
      '"risks":[{"risk":"...","mitigation":"if captured, else empty"}],'+
-     '"remaining_overview":["short bullet: what is still left to do until this phase is complete"]}. '+
+     '"remaining_overview":["bullet: what is still left until this phase is complete, with a few words on why or what it depends on"]}. '+
      'If nothing is open, return an empty open_points list and say so in remaining_overview. Keep each list to what matters most (at most ~15 open points; merge minor ones).',
      {...context,catalogLookup:labels,processLookup:processLabels,sessions,coverage},
      v=>v&&typeof v.executive_summary==='string'&&Array.isArray(v.discussed)&&Array.isArray(v.open_points)&&Array.isArray(v.remaining_overview))
