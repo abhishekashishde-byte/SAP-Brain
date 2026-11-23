@@ -8,7 +8,7 @@ import { getAreaTitle } from './i18n.js'
 
 const T = {
   en: {
-    report: 'Implementation status report', customer: 'Customer', project: 'Project', date: 'Report date', consultant: 'Consultant',
+    report: 'Status report – work in progress', finalReport: 'Final discovery report', wip: 'Work in progress', final: 'Final', progress: 'Progress', keyPoints: 'Key points', point2: 'Key point', nextPhase: 'Overview — what the next phase picks up', customer: 'Customer', project: 'Project', date: 'Report date', consultant: 'Consultant',
     sessions: 'Sessions so far', legacy: 'Legacy system', summary: 'Summary', status: 'Overall status',
     on_track: 'On track', attention: 'Needs attention', at_risk: 'At risk', coverage: 'Progress by area',
     area: 'Area', fields: 'Fields', questions: 'Questions', decisions: 'Decisions', done: 'Done',
@@ -18,7 +18,7 @@ const T = {
     left: 'Overview — what is still left', audience: { client: 'Customer version', internal: 'Internal version' },
   },
   de: {
-    report: 'Statusbericht Implementierung', customer: 'Kunde', project: 'Projekt', date: 'Berichtsdatum', consultant: 'Berater',
+    report: 'Statusbericht – Zwischenstand', finalReport: 'Abschlussbericht Discovery', wip: 'Zwischenstand', final: 'Abschluss', progress: 'Fortschritt', keyPoints: 'Wichtige Punkte', point2: 'Punkt', nextPhase: 'Überblick – was die nächste Phase aufgreift', customer: 'Kunde', project: 'Projekt', date: 'Berichtsdatum', consultant: 'Berater',
     sessions: 'Bisherige Termine', legacy: 'Altsystem', summary: 'Zusammenfassung', status: 'Gesamtstatus',
     on_track: 'Im Plan', attention: 'Aufmerksamkeit erforderlich', at_risk: 'Gefährdet', coverage: 'Fortschritt nach Bereich',
     area: 'Bereich', fields: 'Felder', questions: 'Fragen', decisions: 'Entscheidungen', done: 'Erledigt',
@@ -44,6 +44,7 @@ export function coverageByArea(workshop, entries, todos, audience, extras, langu
 }
 
 export async function downloadStatusReport({ workshop, report, coverage, todos, sessions, audience, language }) {
+  const isFinal = report.report_type === 'final'
   const d = await import('docx')
   const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, ShadingType, BorderStyle, AlignmentType } = d
   const t = T[language === 'de' ? 'de' : 'en']
@@ -66,7 +67,6 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
     rows: [...(head ? [new TableRow({ tableHeader: true, children: head.map((x, i) => cell(x, { head: true, width: widths?.[i] })) })] : []),
       ...rows.map(r => new TableRow({ children: r.map((x, i) => cell(x, { width: widths?.[i] })) }))],
   })
-  const pct = ([done, total]) => total ? `${done}/${total} (${Math.round(done / total * 100)}%)` : '–'
   const locale = language === 'de' ? 'de-DE' : 'en-GB'
   const fmt = v => { if (!v) return ''; const dt = new Date(String(v).length <= 10 ? v + 'T12:00:00' : v); return isNaN(dt) ? String(v) : dt.toLocaleDateString(locale) }
   const today = fmt(new Date().toISOString())
@@ -79,8 +79,8 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
   ].filter(([, v]) => v)
 
   const children = [
-    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: t.audience[audience] || '', font: FONT, size: 18, color: '71717A' })] }),
-    new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: report.title || t.report, font: FONT, size: 40, bold: true })] }),
+    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: `${isFinal ? t.final : t.wip} · ${t.audience[audience] || ''}`, font: FONT, size: 18, color: '71717A' })] }),
+    new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: report.title || (isFinal ? t.finalReport : t.report), font: FONT, size: 40, bold: true })] }),
     table(null, meta, [28, 72]),
     h(t.summary),
     new Paragraph({ spacing: { after: 120 }, children: [
@@ -92,8 +92,8 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
   ]
 
   if (coverage?.length) {
-    children.push(h(t.coverage), table([t.area, t.fields, t.questions, t.decisions],
-      coverage.map(c => [c.area, pct(c.fields), pct(c.questions), pct(c.decisions)]), [34, 22, 22, 22]))
+    const overall = c => { const done = c.fields[0] + c.questions[0] + c.decisions[0], total = c.fields[1] + c.questions[1] + c.decisions[1]; return total ? Math.round(done / total * 100) : 0 }
+    children.push(h(t.coverage), table([t.area, t.progress], coverage.map(c => [c.area, `${overall(c)} %`]), [70, 30]))
   }
   if (report.discussed?.length) {
     children.push(h(t.discussed))
@@ -101,25 +101,28 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
       children.push(new Paragraph({ spacing: { before: 120, after: 60 }, children: [new TextRun({ text: x.area, font: FONT, size: 22, bold: true })] }), p(x.summary))
     }
   }
-  if (report.decisions?.length) {
+  if (report.key_points?.length) {
+    children.push(h(t.keyPoints), table([t.area, t.point2], report.key_points.map(x => [x.area, x.point]), [26, 74]))
+  }
+  if (isFinal && report.decisions?.length) {
     const withWhy = report.decisions.some(x => x.rationale)
     children.push(h(t.decisionsTaken), withWhy
       ? table([t.area, t.decision, t.why], report.decisions.map(x => [x.area, x.decision, x.rationale || '']), [22, 42, 36])
       : table([t.area, t.decision], report.decisions.map(x => [x.area, x.decision]), [28, 72]))
   }
-  children.push(h(t.open))
-  if (report.open_points?.length) {
+  if (isFinal) children.push(h(t.open))
+  if (isFinal && report.open_points?.length) {
     children.push(table([t.area, t.point, t.owner, t.due], report.open_points.map(x => [x.area, x.context ? `${x.point}\n${x.context}` : x.point, x.owner, x.due]), [18, 54, 15, 13]))
-  } else children.push(p(t.none))
-  const openTodos = (todos || []).filter(x => !x.done)
+  } else if (isFinal) children.push(p(t.none))
+  const openTodos = isFinal ? (todos || []).filter(x => !x.done) : []
   if (openTodos.length) {
     children.push(h(t.todos, HeadingLevel.HEADING_2), table([t.action, t.owner, t.due], openTodos.map(x => [x.text, x.owner || '', fmt(x.due_date)]), [60, 22, 18]))
   }
-  if (report.risks?.length) {
+  if (isFinal && report.risks?.length) {
     children.push(h(t.risks), table([t.risk, t.mitigation], report.risks.map(x => [x.risk, x.mitigation]), [55, 45]))
   }
   if (report.remaining_overview?.length) {
-    children.push(h(t.left))
+    children.push(h(isFinal ? t.nextPhase : t.left))
     for (const x of report.remaining_overview) children.push(bullet(x))
   }
 
@@ -130,7 +133,8 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
   })
   const blob = await Packer.toBlob(doc)
   const safe = s => String(s || '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_')
-  const name = `${safe(workshop.client_name) || 'Customer'}_${language === 'de' ? 'Statusbericht' : 'Status_report'}_${new Date().toISOString().slice(0, 10)}.docx`
+  const kind = isFinal ? (language === 'de' ? 'Abschlussbericht' : 'Final_report') : (language === 'de' ? 'Statusbericht_Zwischenstand' : 'Status_report_WIP')
+  const name = `${safe(workshop.client_name) || 'Customer'}_${kind}_${new Date().toISOString().slice(0, 10)}.docx`
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = name; a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1500)

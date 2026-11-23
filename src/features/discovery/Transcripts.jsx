@@ -85,6 +85,9 @@ function when(t) {
 export default function Transcripts({ workshop, session, transcripts, suggestions, onRefresh, onAccept, onExisting, presenter, onOpenObject }) {
   const L = useCatalogLookup()
   const [consent, setConsent] = useState(false)
+  const [meetingTitle, setMeetingTitle] = useState('')
+  const [meetingDate, setMeetingDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [participants, setParticipants] = useState('')
   const [source, setSource] = useState('paste')
   const [file, setFile] = useState(null)
   const [pastedText, setPastedText] = useState('')
@@ -102,11 +105,11 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
 
   const hasInput = source === 'paste' ? !!pastedText.trim() : !!file
   async function upload(analyseAfter = false) {
-    if (!consent || !hasInput) return
+    if (!consent || !hasInput || !meetingTitle.trim() || !meetingDate) return
     setBusy(true); setNotice('')
     try {
       const src = source === 'paste' ? new File([pastedText], 'workshop-transcript-' + Date.now() + '.txt', { type: 'text/plain' }) : file
-      const saved = await uploadTranscript(workshop, session.user, src, Number(retention) || null, consentText)
+      const saved = await uploadTranscript(workshop, session.user, src, Number(retention) || null, consentText, { title: meetingTitle, date: meetingDate, participants })
       await onRefresh(); setConsent(false); setFile(null); setPastedText('')
       if (analyseAfter) await analyse(saved)
       else setNotice('Transcript saved. Run the analysis whenever you are ready.')
@@ -244,14 +247,20 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
               <p className="dw-caption">{pastedText.length.toLocaleString()} characters</p></>
           : <label className="dw-ts-drop"><input type="file" accept=".txt,.vtt,.docx,.mp3,.m4a,.wav" onChange={e => setFile(e.target.files?.[0] || null)} />
               <strong>{file ? file.name : 'Choose a file'}</strong><small>{file ? `${(file.size / 1024).toFixed(0)} KB` : 'TXT, VTT, DOCX, or audio (MP3, M4A, WAV) up to 20 MB'}</small></label>}
+        <div className="dw-ts-meeting">
+          <label>Which meeting? <span aria-hidden="true">*</span><input value={meetingTitle} onChange={e => setMeetingTitle(e.target.value)} placeholder="e.g. Workshop 2 – Maintenance planning" required /></label>
+          <label>Held on <span aria-hidden="true">*</span><input type="date" value={meetingDate} onChange={e => setMeetingDate(e.target.value)} required /></label>
+          <label className="dw-ts-meeting-wide">Between whom <small>(optional)</small><input value={participants} onChange={e => setParticipants(e.target.value)} placeholder="e.g. Customer: Hr. Maier, Fr. Schulz · Consultant: A. Ashish" /></label>
+        </div>
         <div className="dw-ts-row">
           <label className="dw-mini-checkbox"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />All participants agreed to recording / transcription</label>
           <label className="dw-ts-retention">Delete after <select value={retention} onChange={e => setRetention(e.target.value)}><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="0">Keep until I delete</option></select></label>
         </div>
         <div className="dw-actions">
-          <button className="dw-button dw-primary" onClick={() => upload(true)} disabled={!consent || !hasInput || busy}>{busy && analysingId ? 'Analysing…' : 'Save & analyse with AI'}</button>
-          <button type="button" className="dw-button" onClick={() => upload(false)} disabled={!consent || !hasInput || busy}>Save only</button>
-          {!consent && hasInput && <span className="dw-caption">Confirm participant consent to continue.</span>}
+          <button className="dw-button dw-primary" onClick={() => upload(true)} disabled={!consent || !hasInput || !meetingTitle.trim() || !meetingDate || busy}>{busy && analysingId ? 'Analysing…' : 'Save & analyse with AI'}</button>
+          <button type="button" className="dw-button" onClick={() => upload(false)} disabled={!consent || !hasInput || !meetingTitle.trim() || !meetingDate || busy}>Save only</button>
+          {hasInput && !meetingTitle.trim() && <span className="dw-caption">Say which meeting this transcript is from.</span>}
+          {hasInput && meetingTitle.trim() && !consent && <span className="dw-caption">Confirm participant consent to continue.</span>}
         </div>
       </details>
 
@@ -268,7 +277,8 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
                 <li key={t.id}>
                   <div className="dw-ts-item">
                     <div className="dw-ts-item-main">
-                      <strong>Transcript · {when(t)}</strong>
+                      <strong>{t.meeting_title || 'Transcript'} · {t.meeting_date ? new Date(t.meeting_date + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : when(t)}</strong>
+                      {t.participants && <small>{t.participants}</small>}
                       <small>{(t.audio_path ? 'Audio' : (t.file_path || '').split('.').at(-1)?.toUpperCase() || 'Text')}{t.transcript_text ? ` · ${t.transcript_text.length.toLocaleString()} characters` : ''} · {count} suggestions · {applied} applied · {t.delete_after ? `deletes ${t.delete_after}` : 'kept until deleted'}</small>
                     </div>
                     <span className={`dw-ts-state dw-ts-state-${state[0]}`}>{state[1]}</span>

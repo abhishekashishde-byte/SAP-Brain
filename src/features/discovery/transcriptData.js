@@ -3,7 +3,7 @@ const expect=r=>{if(r.error)throw r.error;return r.data}
 export const loadTranscripts=id=>supabase.from('discovery_transcripts').select('*').eq('workshop_id',id).order('created_at',{ascending:false}).then(expect)
 export const loadTranscriptSuggestions=id=>supabase.from('discovery_transcript_suggestions').select('*').eq('workshop_id',id).order('created_at',{ascending:false}).then(expect)
 export const updateTranscriptSuggestion=(id,patch)=>supabase.from('discovery_transcript_suggestions').update(patch).eq('id',id).select('*').single().then(expect)
-export async function uploadTranscript(workshop,user,file,days,consentText){
+export async function uploadTranscript(workshop,user,file,days,consentText,meeting={}){
  const ext=file.name.split('.').at(-1).toLowerCase()
  if(!['txt','vtt','docx','mp3','m4a','wav'].includes(ext))throw Error('Unsupported file type')
  if(file.size>20*1024*1024)throw Error('Maximum file size is 20 MB')
@@ -13,10 +13,15 @@ export async function uploadTranscript(workshop,user,file,days,consentText){
  const audio=['mp3','m4a','wav'].includes(ext)
  const deleteAfter=days?new Date(Date.now()+days*86400000).toISOString().slice(0,10):null
  try{
-  return expect(await supabase.from('discovery_transcripts').insert({
+  const row={
    workshop_id:workshop.id,consent_given_at:new Date().toISOString(),consent_text:consentText,
    file_path:audio?null:path,audio_path:audio?path:null,delete_after:deleteAfter,status:'uploaded'
-  }).select('*').single())
+  }
+  const meta={meeting_title:meeting.title?.trim()||null,meeting_date:meeting.date||null,participants:meeting.participants?.trim()||null}
+  const first=await supabase.from('discovery_transcripts').insert({...row,...meta}).select('*').single()
+  // Before migration 023 the meeting columns don't exist yet — save the transcript without them.
+  if(first.error&&/meeting_title|meeting_date|participants|column/i.test(first.error.message||''))return expect(await supabase.from('discovery_transcripts').insert(row).select('*').single())
+  return expect(first)
  }catch(e){await supabase.storage.from('discovery-transcripts').remove([path]);throw e}
 }
 export async function deleteTranscript(t){
