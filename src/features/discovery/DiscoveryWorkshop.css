@@ -496,7 +496,14 @@
 .dw-tx-hint.dw-tx-correcting{border-style:solid;border-color:#3a4a58;background:#14181d}
 .dw-ts-corrected{margin:-4px 0 10px;font-size:11.5px;color:#9fd0f0}
 @media(max-width:700px){.dw-correct-manual{grid-template-columns:1fr}}
-.dw .dw-report-box{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--dw-line,#2a2a2f);border-radius:12px;padding:14px 16px;margin:14px 0}
+.dw .dw-report-box{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:14px 0}
 .dw .dw-report-box>div{flex:1 1 260px;display:flex;flex-direction:column;gap:4px}
 .dw .dw-report-box select{padding:8px 10px;border-radius:8px}
 .dw .dw-report-lang{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+/* Sidebar hierarchy: area headings stand out, objects sit underneath them */
+.dw .dw-area>summary{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.01em;padding-top:10px;padding-bottom:6px}
+.dw .dw-area>summary .dw-nav-count{font-weight:600}
+.dw .dw-area[open]>summary{margin-bottom:2px}
+.dw .dw-area>.dw-nav-object{margin-left:12px;padding-left:14px;border-left:1px solid var(--border);border-radius:0 8px 8px 0;font-size:13px;font-weight:400}
+.dw .dw-area>.dw-nav-object .dw-nav-label{color:var(--muted)}
+.dw .dw-area>.dw-nav-object.dw-active .dw-nav-label{color:var(--text);font-weight:600}
