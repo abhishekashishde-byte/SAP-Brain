@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { uploadTranscript, deleteTranscript, updateTranscriptSuggestion } from './transcriptData.js'
 import { discoveryCatalog } from './catalog.js'
 import { processCatalog } from './processCatalog.js'
@@ -82,7 +82,7 @@ function when(t) {
   return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function Transcripts({ workshop, session, transcripts, suggestions, onRefresh, onAccept, onExisting, presenter, onOpenObject }) {
+export default function Transcripts({ workshop, session, transcripts, suggestions, onRefresh, onAccept, onExisting, presenter, onOpenObject, autoAnalyseId, onAutoAnalysed }) {
   const L = useCatalogLookup()
   const [consent, setConsent] = useState(false)
   const [meetingTitle, setMeetingTitle] = useState('')
@@ -101,6 +101,12 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
   const [failures, setFailures] = useState({})
   const [filter, setFilter] = useState('pending')
   const [run, setRun] = useState(null) // live analysis: {id, stages:[], part, total, found, applying, result}
+  // Corrections from an uploaded report are analysed straight away.
+  useEffect(() => {
+    if (!autoAnalyseId || busy) return
+    const t = transcripts.find(x => x.id === autoAnalyseId)
+    if (t) { onAutoAnalysed?.(); analyse(t) }
+  }, [autoAnalyseId, transcripts]) // eslint-disable-line react-hooks/exhaustive-deps
   if (presenter) return <p className="dw-caption">Transcript controls are hidden in presenter mode.</p>
 
   const hasInput = source === 'paste' ? !!pastedText.trim() : !!file

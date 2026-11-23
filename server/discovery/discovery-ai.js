@@ -54,7 +54,7 @@ export default async function handler(req,res) {
  try{
   const {db,user}=await authenticated(req)
   const {action,workshopId,payload={}}=req.body||{}
-  if(!['minutes','status_report','followups','ask','suggest_extra_fields','classify_gap','group_gaps','followup_email','template_anonymise','translate_de'].includes(action))return respond(res,400,{error:'Invalid action'})
+  if(!['minutes','status_report','report_corrections','followups','ask','suggest_extra_fields','classify_gap','group_gaps','followup_email','template_anonymise','translate_de'].includes(action))return respond(res,400,{error:'Invalid action'})
   if(!workshopId)return respond(res,400,{error:'Workshop ID required'})
   const {data:w,error}=await db.from('discovery_workshops').select('*').eq('id',workshopId).eq('owner_id',user.id).single()
   if(error||!w)return respond(res,404,{error:'Workshop not found'})
@@ -147,7 +147,7 @@ export default async function handler(req,res) {
    const valid=new Set(gaps.map(g=>g.id))
    return respond(res,200,{groups:output.groups.filter(g=>g.gap_ids.every(x=>valid.has(x))),model:MODEL})
   }
-  if(action==='minutes'||action==='status_report'){
+  if(action==='minutes'||action==='status_report'||action==='report_corrections'){
    const [stakeholdersResult,driversResult,sizingResult,requestsResult,parkingResult,gapsResult,interfacesResult,formsResult,raidResult]=await Promise.all([
     db.from('discovery_stakeholders').select('name,organisation,function_role,project_role,responsible_for,present,note,is_internal').eq('workshop_id',w.id),
     db.from('discovery_drivers').select('kind,text,priority,affected,kpi,baseline,note').eq('workshop_id',w.id),
@@ -170,6 +170,42 @@ export default async function handler(req,res) {
    context.formsReports=formsResult.data||[]
    context.raid=(raidResult.data||[]).map(x=>({...x,note:audience==='internal'||!x.is_internal?x.note:null}))
    if(audience==='client')context.sourceSystems=context.sourceSystems.map(x=>({...x,owner:null}))
+   if(action==='report_corrections'){
+    // The consultant edited a downloaded report in Word and uploads it again. Find what
+    // they changed (against the original Wani generated, kept in their private storage),
+    // and phrase each factual change as a correction the workshop data can absorb.
+    const b64=String(payload.docxBase64||'')
+    if(!b64||b64.length>8_000_000)return respond(res,400,{error:'Upload a .docx report (max ~6 MB).'})
+    const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0))
+    let reportId=null,editedText=''
+    try{
+     const JSZip=(await import('jszip')).default
+     const zip=await JSZip.loadAsync(bytes)
+     const custom=await zip.file('docProps/custom.xml')?.async('string')
+     reportId=custom?.match(/name="WaniReportId"[^>]*>\s*<vt:lpwstr>([0-9a-f-]{36})<\/vt:lpwstr>/i)?.[1]||null
+     const m=await import('mammoth');const mammoth=m.default||m
+     const ab=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)
+     editedText=(await mammoth.extractRawText({arrayBuffer:ab,buffer:typeof Buffer!=='undefined'?Buffer.from(ab):undefined})).value||''
+    }catch(e){return respond(res,400,{error:'This file could not be read as a Word document.'})}
+    if(editedText.trim().length<200)return respond(res,400,{error:'The document looks empty.'})
+    let original=null
+    if(reportId){
+     const dl=await db.storage.from('discovery-transcripts').download(user.id+'/'+w.id+'/reports/'+reportId+'.txt')
+     if(!dl.error&&dl.data){try{original=JSON.parse(await dl.data.text())}catch{}}
+    }
+    const de=w.client_language==='de'
+    const system='You compare an SAP PM discovery status report that Wani generated with the version the consultant edited in Word. '+
+     (original?'You get the ORIGINAL report (as generated) and the EDITED text. Find every change the consultant made.':'The original is not available, so you get the CAPTURED WORKSHOP DATA the report was written from and the EDITED report. Find statements in the edited report that correct, contradict or add to the captured data.')+' '+
+     'Ignore pure wording, style, formatting or translation changes that do not change a fact. '+
+     'For each factual change return: section (report section), kind (changed|added|removed), before (original wording or captured fact, short; empty when added), after (the consultant\'s wording, short; empty when removed), and correction: ONE self-contained sentence stating the correct fact about the customer\'s current situation, naming the SAP area/object it belongs to (e.g. "Equipment: CWorks does not track a cost centre per asset; finance assigns cost centres only at plant level."). '+
+     'Corrections describe the customer\'s current/legacy situation or an explicit decision the consultant wrote — never invent anything beyond the edit. '+
+     'Write before/after in the report language; write correction in English. '+
+     'Return STRICT JSON ONLY: {"changes":[{"section":"...","kind":"changed|added|removed","before":"...","after":"...","correction":"..."}],"style_only_edits":0}'
+    const input=original?{original:original.report||original,edited:editedText.slice(0,120000)}:{captured:{...context,catalogLookup:labels},edited:editedText.slice(0,120000)}
+    const out=await runStructured(system,input,v=>v&&Array.isArray(v.changes),8000)
+    const changes=out.changes.filter(c=>c&&String(c.correction||'').trim()).slice(0,60).map(c=>({section:String(c.section||'').slice(0,120),kind:['changed','added','removed'].includes(c.kind)?c.kind:'changed',before:String(c.before||'').slice(0,600),after:String(c.after||'').slice(0,600),correction:String(c.correction).slice(0,600)}))
+    return respond(res,200,{changes,styleOnly:Number(out.style_only_edits)||0,comparedWith:original?'original':'captured',de})
+   }
    if(action==='status_report'){
     const de=payload.language==='de'||(!payload.language&&w.client_language==='de')
     const final=payload.reportType==='final'
@@ -180,7 +216,10 @@ export default async function handler(req,res) {
     const meetings=tx.error?[]:(tx.data||[]).map(x=>({meeting:x.meeting_title,date:x.meeting_date||String(x.created_at||'').slice(0,10),participants:audience==='internal'?x.participants:null}))
     const common='Write in '+(de?'native, professional German (Sie-Form, business register)':'clear, professional English')+'. '+
      'Use ONLY the captured information supplied (entries, answers, decisions, to-dos, requests, parking lot, gaps, interfaces, forms/reports, sessions, transcribed meetings, coverage). Never invent facts, names, dates or decisions. Item IDs in entries are resolved with catalogLookup. '+
-     'Be factual and moderately detailed — concrete enough to act on (name the SAP objects, values, structures and agreements captured), but not minutes of every field. Group by SAP area. '
+     'Be factual and moderately detailed — concrete enough to act on (name the SAP objects, values, structures and agreements captured), but not minutes of every field. Group by SAP area. '+
+     'HOW TO READ THE CAPTURED DATA: discovery records the customer\'s CURRENT situation in the legacy system'+(w.legacy_system?' ('+String(w.legacy_system).slice(0,60)+')':'')+'. A field marked "needed" means the legacy process uses or needs that information today; "not needed" means the legacy system / current process does not use it today — it is NOT a decision about the SAP design. '+
+     'So describe such points as the legacy situation, e.g. "'+(de?(w.legacy_system||'Das Altsystem')+' verwendet heute keine Buchungskreise':(w.legacy_system||'The legacy system')+' does not use company codes today')+'" — never as "company code will not be used" or any other statement about the future SAP solution. '+
+     'State something about the SAP target design ONLY when an explicit decision entry, an answer or a note says so, and then say it is a decision. '
     const system=final
      ? common+'You write the FINAL DISCOVERY REPORT for an SAP PM project, for '+(audience==='client'?'the customer':'the internal project team')+'. Discovery is complete; the report closes this phase. '+
        'Return STRICT JSON ONLY: {"title":"report title","executive_summary":"5-7 sentences: what was covered, the key outcomes and decisions, what remains and what the next phase needs","overall_status":"on_track|attention|at_risk","status_reason":"one or two sentences",'+

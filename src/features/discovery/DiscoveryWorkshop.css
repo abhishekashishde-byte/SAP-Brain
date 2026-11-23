@@ -516,3 +516,16 @@
 .dw .dw-phase{display:inline-block;margin-left:10px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:99px;border:1px solid var(--border);color:var(--muted);vertical-align:middle}
 .dw .dw-phase-done{color:#86efac;border-color:#1f5135;background:#0e2418}
 .dw .dw-link-button{align-self:flex-start;background:none;border:0;padding:0;margin-top:4px;color:var(--text);text-decoration:underline;text-underline-offset:3px;font:600 12.5px Inter,sans-serif;cursor:pointer}
+.dw .dw-upload-report{position:relative;cursor:pointer}
+.dw .dw-upload-report input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.dw .dw-upload-report.is-busy{opacity:.6;pointer-events:none}
+.dw .dw-corrections{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:0 0 14px;background:var(--panel2)}
+.dw .dw-corrections-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px}
+.dw .dw-corrections-head>div{display:flex;flex-direction:column;gap:4px}
+.dw .dw-correction{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--border);padding:10px 0;cursor:pointer}
+.dw .dw-correction input{margin-top:3px}
+.dw .dw-corr-meta{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dim)}
+.dw .dw-correction p{margin:4px 0 0;font-size:13.5px;line-height:1.5}
+.dw .dw-corr-before{color:var(--dim);text-decoration:line-through}
+.dw .dw-corr-after{color:var(--text)}
+.dw .dw-corr-fix{color:var(--muted);font-size:12.5px!important}

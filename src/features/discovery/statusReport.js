@@ -43,7 +43,7 @@ export function coverageByArea(workshop, entries, todos, audience, extras, langu
   return [...byArea.values()].map(a => ({ ...a, area: localized[a.area] || a.area }))
 }
 
-export async function downloadStatusReport({ workshop, report, coverage, todos, sessions, audience, language }) {
+export async function downloadStatusReport({ workshop, report, coverage, todos, sessions, audience, language, reportId }) {
   const isFinal = report.report_type === 'final'
   const d = await import('docx')
   const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, ShadingType, BorderStyle, AlignmentType } = d
@@ -59,13 +59,15 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
     width: width ? { size: Math.round(PAGE_DXA * width / 100), type: WidthType.DXA } : undefined,
     shading: head ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F4F4F5' } : undefined,
     margins: { top: 60, bottom: 60, left: 100, right: 100 },
-    children: String(text ?? '').split('\n').map((line, i) => new Paragraph({ spacing: { after: i ? 0 : 40 }, children: [new TextRun({ text: line, font: FONT, size: i ? 18 : 20, bold: head, color: i ? '52525B' : undefined })] })),
+    children: Array.isArray(text)
+      ? text.map(line => new Paragraph({ spacing: { after: 60 }, indent: { left: 220, hanging: 220 }, children: [new TextRun({ text: `•\t${line}`, font: FONT, size: 20 })], tabStops: [{ type: 'left', position: 220 }] }))
+      : String(text ?? '').split('\n').map((line, i) => new Paragraph({ spacing: { after: i ? 0 : 40 }, children: [new TextRun({ text: line, font: FONT, size: i ? 18 : 20, bold: head, color: i ? '52525B' : undefined })] })),
   })
   const table = (head, rows, widths) => new Table({
     width: { size: PAGE_DXA, type: WidthType.DXA }, borders,
     columnWidths: (widths || (head || rows[0] || []).map(() => 100 / (head || rows[0] || [1]).length)).map(w => Math.round(PAGE_DXA * w / 100)),
     rows: [...(head ? [new TableRow({ tableHeader: true, children: head.map((x, i) => cell(x, { head: true, width: widths?.[i] })) })] : []),
-      ...rows.map(r => new TableRow({ children: r.map((x, i) => cell(x, { width: widths?.[i] })) }))],
+      ...rows.map(r => new TableRow({ cantSplit: true, children: r.map((x, i) => cell(x, { width: widths?.[i] })) }))],
   })
   const locale = language === 'de' ? 'de-DE' : 'en-GB'
   const fmt = v => { if (!v) return ''; const dt = new Date(String(v).length <= 10 ? v + 'T12:00:00' : v); return isNaN(dt) ? String(v) : dt.toLocaleDateString(locale) }
@@ -102,7 +104,13 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
     }
   }
   if (report.key_points?.length) {
-    children.push(h(t.keyPoints), table([t.area, t.point2], report.key_points.map(x => [x.area, x.point]), [26, 74]))
+    // One row per area with its points as bullets — the area is not repeated per point.
+    const groups = []
+    for (const x of report.key_points) {
+      const g = groups.find(y => y.area === x.area)
+      if (g) g.points.push(x.point); else groups.push({ area: x.area, points: [x.point] })
+    }
+    children.push(h(t.keyPoints), table([t.area, t.point2], groups.map(g => [g.area, g.points]), [26, 74]))
   }
   if (isFinal && report.decisions?.length) {
     const withWhy = report.decisions.some(x => x.rationale)
@@ -128,6 +136,8 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
 
   const doc = new Document({
     creator: 'Wani', title: report.title || t.report,
+    // Lets Wani recognise this report when the consultant uploads an edited version.
+    ...(reportId ? { customProperties: [{ name: 'WaniReportId', value: reportId }] } : {}),
     styles: { default: { document: { run: { font: FONT, size: 22 } } } },
     sections: [{ properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } }, children }],
   })
