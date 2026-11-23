@@ -22,9 +22,13 @@ export default async function handler(req, res) {
 
   const auth = await requireApprovedUser(req)
   if (!auth.ok) return sendAuthError(res, auth)
+  // Tolerate how secrets are often pasted: "ADMIN_EMAIL_1=…", quotes, <…>, or a
+  // comma-separated list — otherwise one stray character silently locks the admin out.
   const adminEmails = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2]
     .filter(Boolean)
-    .map(email => email.trim().toLowerCase())
+    .flatMap(value => String(value).replace(/^\s*ADMIN_EMAIL_\d\s*=\s*/i, '').split(/[,;\s]+/))
+    .map(email => email.replace(/["'<>]/g, '').trim().toLowerCase())
+    .filter(email => email.includes('@'))
   const isAdmin = adminEmails.includes((auth.user.email || '').trim().toLowerCase())
 
   try {
