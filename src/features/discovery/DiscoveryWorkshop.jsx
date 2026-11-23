@@ -9,6 +9,7 @@ import ProcessJobs from './ProcessJobs.jsx'
 import {LegacyImportPanel,LegacyHintsPanel} from './LegacyImport.jsx'
 import {processCatalog} from './processCatalog.js'
 import {exportCSV,exportJSON,exportMarkdown,exportXLSX,printReport,exportScopePack} from './exports.js'
+import {coverageByArea,downloadStatusReport} from './statusReport.js'
 import FirstCall,{FIRST_CALL_SECTIONS} from './FirstCall.jsx'
 import {loadFirstCall,addFirstCall,removeFirstCall,createFirstCallQueue,SIZING_LINKS} from './firstCallData.js'
 import FitGap from './FitGap.jsx'
@@ -141,6 +142,8 @@ export default function DiscoveryWorkshop({session}) {
  const [savingMeta,setSavingMeta]=useState(false)
  const [newTodo,setNewTodo]=useState('')
  const [audience,setAudience]=useState('client')
+ const [reportBusy,setReportBusy]=useState(false)
+ const [reportLang,setReportLang]=useState(null)
  const [showSummary,setShowSummary]=useState(false)
  const [summaryFilter,setSummaryFilter]=useState('all')
  const [customLabel,setCustomLabel]=useState('')
@@ -364,6 +367,23 @@ export default function DiscoveryWorkshop({session}) {
    if(error)throw error
    await refresh();await openWorkshop(data);setNextOpen(false)
   }catch(e){setError('Next session could not be created: '+e.message)}finally{setLoading(false)}
+ }
+ async function makeStatusReport(){
+  setReportBusy(true);setError('')
+  try{
+   const extras={sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories}
+   const language=reportLang||workshop.client_language||'en'
+   const coverage=coverageByArea(workshop,entries,todos,audience,extras,language)
+   const sessions=(engagementSessions.length?engagementSessions:[workshop]).map(w=>({date:w.call_date,title:w.title}))
+   const labels=Object.fromEntries(discoveryCatalog.objects.flatMap(o=>[
+    [o.id,{title:o.title,area:o.area,tcodes:o.tcodes}],
+    ...o.fields.map(x=>[x.id,x.label]),...o.questions.map(x=>[x.id,x.text]),...o.decisions.map(x=>[x.id,x.text])
+   ]))
+   const res=await fetch('/api/discovery-ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},
+    body:JSON.stringify({workshopId:workshop.id,action:'status_report',payload:{audience,language,catalogLookup:labels,processLookup:Object.fromEntries(processCatalog.processes.map(p=>[p.id,p.title])),sessions,coverage}})})
+   const data=await res.json();if(!res.ok)throw new Error(data.error||'Status report failed')
+   await downloadStatusReport({workshop,report:data.report,coverage,todos,sessions,audience,language})
+  }catch(e){setError('Status report could not be created: '+e.message)}finally{setReportBusy(false)}
  }
  async function createPersonalTemplate(values){
   const created=await saveTemplate({...values,owner_id:userId});setTemplates(v=>[created,...v])
@@ -671,6 +691,7 @@ export default function DiscoveryWorkshop({session}) {
    {val('workshop','note','template_suggestions').items?.length>0&&<TemplateSuggestions template={val('workshop','note','template_suggestions').template_name} items={val('workshop','note','template_suggestions').items} accepted={val('workshop','note','template_suggestions').accepted||[]} onAccept={item=>acceptTemplateBatch([item])} onAcceptAll={acceptTemplateBatch} onDismiss={()=>writeEntry('workshop','note','template_suggestions',{items:[],accepted:[]})}/>}
    {carryoverOpen?<CarryoverReview workshop={workshop} entries={entries} previousEntries={previousEntries} todos={todos} requests={firstCall.requests} parking={firstCall.parking} onJump={id=>{selectObject(id);setCarryoverOpen(false)}} onTodo={t=>editTodo(t.id,{done:true})} onRequest={r=>editFirst('requests',r,{status:'received'})} onParking={p=>editFirst('parking',p,{status:'dropped'})}/>:showSummary?<div className="dw-card"><h2>Workshop summary</h2><EngagementTimeline workshops={engagementSessions} current={workshop}/><p className="dw-caption">All catalog items, including unanswered items, are part of the export dataset. Documents are only generated on request.</p><p>{counts.fields} fields marked · {counts.questions} questions answered · {counts.decisions} decisions made · {todos.filter(t=>!t.done).length} open to-dos</p><label>Export audience <select value={audience} onChange={e=>setAudience(e.target.value)}><option value="client">Client — hide internal notes</option><option value="internal">Internal — include all notes</option></select></label><div className="dw-ai-box">
  </div>
+ <div className="dw-report-box"><div><strong>Status report (Word)</strong><span className="dw-caption">What has been discussed, decisions, status, open points and an overview of what is left — written by Wani from the captured data.</span></div><select aria-label="Report language" value={reportLang||workshop.client_language||'en'} onChange={e=>setReportLang(e.target.value)}><option value="en">English</option><option value="de">Deutsch</option></select><button className="dw-button dw-primary" disabled={reportBusy} onClick={makeStatusReport}>{reportBusy?'Writing report…':'Download status report (.docx)'}</button></div>
  <div className="dw-export-actions"><button className="dw-button" onClick={()=>exportScopePack(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Scope pack (.md)</button><button className="dw-button dw-primary" onClick={()=>exportXLSX(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Download Excel (.xlsx)</button><button className="dw-button" onClick={()=>printReport(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Print / Save PDF</button><button className="dw-button" onClick={()=>exportCSV(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>CSV ZIP</button><button className="dw-button" onClick={()=>exportMarkdown(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>Markdown</button><button className="dw-button" onClick={()=>exportJSON(workshop,entries,todos,audience,{sourceSystems,objectSources,legacyFields,processEntries,legacyHints,firstCall,gaps,inventories})}>JSON</button></div>
  <div className="dw-summary-extra">
  <h3>Interfaces / Forms / RAID</h3><p>{inventories.interfaces.length} interfaces · {inventories.forms_reports.length} forms/reports · {inventories.raid.length} risks/assumptions/dependencies</p><h3>Fit-gap</h3><p>{gaps.length} gaps · {gaps.filter(g=>g.status==='open').length} open · {gaps.reduce((a,g)=>a+({S:1,M:3,L:8,XL:13}[g.size]||0),0)} estimated points</p><h3>Workshop essentials</h3><p>{firstCall.stakeholders.length} stakeholders · {firstCall.drivers.length} pain points/goals · {firstCall.sizing.length} sizing values · {firstCall.requests.filter(x=>x.status==='open').length} open requests · {firstCall.parking.filter(x=>x.status==='parked').length} parked topics</p><h3>Legacy manual mapping hints</h3><p>{legacyHints.length} suggestions · {legacyHints.filter(x=>x.accepted===true).length} accepted · {legacyHints.filter(x=>x.accepted==null).length} awaiting review</p><h3>Source systems</h3><p>{sourceSystems.length} sources registered</p>
