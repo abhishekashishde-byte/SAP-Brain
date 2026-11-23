@@ -529,3 +529,10 @@
 .dw .dw-corr-before{color:var(--dim);text-decoration:line-through}
 .dw .dw-corr-after{color:var(--text)}
 .dw .dw-corr-fix{color:var(--muted);font-size:12.5px!important}
+/* Sidebar as a tree: area = folder heading, objects = branches off the guide line */
+.dw .dw-area>summary::before{content:'';width:0;height:0;border-left:5px solid var(--muted);border-top:4px solid transparent;border-bottom:4px solid transparent;font-size:0;transition:transform .15s;flex:none}
+.dw .dw-area[open]>summary::before{transform:rotate(90deg)}
+.dw .dw-area>summary{border-top:1px solid var(--border);border-radius:0;margin-top:4px}
+.dw .dw-area:first-of-type>summary{border-top:0}
+.dw .dw-area>.dw-nav-object{position:relative;margin-left:16px;padding-left:20px}
+.dw .dw-area>.dw-nav-object::before{content:'';position:absolute;left:0;top:50%;width:12px;border-top:1px solid var(--border)}

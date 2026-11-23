@@ -34,6 +34,14 @@ const markCycle=['','needed','not_needed','clarify']
 const statuses=['not_started','in_progress','done','out_of_scope']
 const labels={needed:'Needed',not_needed:'Not needed',clarify:'Clarify',not_started:'Not started',in_progress:'In progress',done:'Done',out_of_scope:'Out of scope'}
 const eKey=(o,t,id)=>entryKey(o,t,id)
+// Drawn icons (not font characters) so every mark sits exactly in the centre of its light.
+function StatusGlyph({mark}){
+ const common={width:11,height:11,viewBox:'0 0 12 12',fill:'none',stroke:'currentColor',strokeWidth:2.2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':true,style:{display:'block'}}
+ if(mark==='needed')return <svg {...common}><polyline points="2.5 6.4 5 8.8 9.6 3.4"/></svg>
+ if(mark==='not_needed')return <svg {...common}><line x1="3.2" y1="3.2" x2="8.8" y2="8.8"/><line x1="8.8" y1="3.2" x2="3.2" y2="8.8"/></svg>
+ if(mark==='clarify')return <svg {...common} strokeWidth={2}><path d="M4.1 4.3a2 2 0 1 1 2.9 1.8c-.6.3-1 .8-1 1.4v.4"/><circle cx="6" cy="10" r=".4" fill="currentColor"/></svg>
+ return <svg {...common} stroke="none"><circle cx="6" cy="6" r="1.4" fill="currentColor"/></svg>
+}
 function Section({title,count,children,open=true,id,summary}){const ref=useRef(null);useEffect(()=>{if(open&&ref.current)ref.current.open=true},[]);return <details ref={ref} id={id} className="dw-section"><summary>{title}{summary&&<span className="dw-section-progress">{summary}</span>}<span className="dw-count">{count}</span></summary><div className="dw-section-body">{children}</div></details>}
 
 function CompactField({field, value={}, onChange, presenter}) {
@@ -46,7 +54,7 @@ function CompactField({field, value={}, onChange, presenter}) {
    <button type="button" className={`dw-compact-status dw-compact-status-${value.mark||'none'}`}
      title={`${value.mark?labels[value.mark]:'Unmarked'} — click to change status`}
      aria-label={`${field.label}: ${value.mark?labels[value.mark]:'Unmarked'}. Click to change status`} onClick={cycle}>
-     <span className={`dw-status-light dw-status-light-${value.mark||'none'}`} aria-hidden="true">{value.mark==='needed'?'✓':value.mark==='not_needed'?'×':value.mark==='clarify'?'?':'·'}</span>
+     <span className={`dw-status-light dw-status-light-${value.mark||'none'}`} aria-hidden="true"><StatusGlyph mark={value.mark}/></span>
     </button>
    <div className="dw-compact-name"><span>{field.label}</span>{value.note?.trim()&&<small className="dw-compact-preview" title={value.note}>{value.note}</small>}</div>
    <span className="dw-compact-tier">{field.tier==='optional'?'Optional':''}</span>
@@ -818,7 +826,7 @@ export default function DiscoveryWorkshop({session}) {
     {!presenter&&<Section title="Current legacy process" count="Notes" open={false}><NoteInput label="How the customer works today" value={val(selected.id,'legacy_today','main').text} onChange={v=>writeNote(selected.id,'legacy_today','main',v)}/></Section>}
     <Section id="dw-fields" title="Key fields" count={selected.fields.length} summary={`${selected.fields.filter(f=>!!val(selected.id,'field',f.id).mark).length} marked`}>
      <div className="dw-field-toolbar"><div className="dw-field-legend" aria-label="Field status colours">
-      {[['needed','✓','Needed'],['not_needed','×','Not needed'],['clarify','?','Clarify'],['none','·','Unmarked']].map(([mark,symbol,title])=><span className="dw-field-legend-item" key={mark}><span className={`dw-status-light dw-status-light-${mark}`} aria-hidden="true">{symbol}</span>{title}</span>)}
+      {[['needed','Needed'],['not_needed','Not needed'],['clarify','Clarify'],['none','Unmarked']].map(([mark,title])=><span className="dw-field-legend-item" key={mark}><span className={`dw-status-light dw-status-light-${mark}`} aria-hidden="true"><StatusGlyph mark={mark}/></span>{title}</span>)}
      </div><small className="dw-field-help">Click a light to change status · pencil to add a note</small></div>
      <div className="dw-compact-list">{displaySelected.fields.filter(f=>showOptional||f.tier==='core').map(f=><Fragment key={selected.id+':'+f.id}><CompactField field={f} presenter={presenter} value={val(selected.id,'field',f.id)} onChange={v=>writeEntry(selected.id,'field',f.id,v)}/>{txHint(f.id)}</Fragment>)}
      {Object.values(entries).filter(x=>x.object_id===selected.id&&x.item_type==='custom_field').map(x=><CompactField key={selected.id+':custom:'+x.item_id} field={{label:x.value?.label||'Custom field',tier:'optional'}} presenter={presenter} value={x.value||{}} onChange={v=>writeEntry(selected.id,'custom_field',x.item_id,v)}/>)}</div>
