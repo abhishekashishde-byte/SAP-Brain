@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabaseClient.js'
 import { WaniLogo, WaniWordmark } from '../../pages/Login.jsx'
 import PastedFile, { pastedFileName } from '../../components/PastedFile.jsx'
@@ -156,12 +156,26 @@ const SUMMARY_FIELDS = [
   ['when_not_to_use', 'Not when'], ['standard_alternative', 'Standard alternative'], ['standard_coverage', 'Standard coverage'], ['s4_notes', 'S/4HANA notes'],
 ]
 
-function SaveDialog({ draft, setDraft, keepCode, setKeepCode, onSave, onCancel, saving }) {
+function SaveDialog({ draft, setDraft, keepCode, setKeepCode, onSave, onCancel, saving, error }) {
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+  const ref = useRef(null)
+  useEffect(() => { ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [])
+  const actions = (
+    <div className="cs-row cs-save-actions">
+      <button className="cs-btn cs-primary" disabled={saving || !draft.title?.trim()} onClick={onSave}>{saving ? 'Saving…' : 'Save to library'}</button>
+      <button className="cs-btn" onClick={onCancel}>Cancel</button>
+    </div>
+  )
   return (
-    <section className="cs-card cs-save">
-      <h3>Save to library</h3>
-      <p className="cs-hint">Wani wrote a reusable summary without client names. Edit anything before saving.</p>
+    <section className="cs-card cs-save" ref={ref}>
+      <div className="cs-card-head">
+        <div>
+          <h3>Save to library</h3>
+          <p className="cs-hint">Wani wrote a reusable summary without client names. Edit anything, then save.</p>
+        </div>
+        {actions}
+      </div>
+      {error && <div className="cs-error" role="alert">Not saved: {error}</div>}
       <label>Title<input value={draft.title || ''} onChange={e => set('title', e.target.value)} /></label>
       {SUMMARY_FIELDS.map(([k, label]) => (
         <label key={k}>{label}<textarea rows={k === 'approach' ? 3 : 2} value={draft[k] || ''} onChange={e => set(k, e.target.value)} /></label>
@@ -170,15 +184,13 @@ function SaveDialog({ draft, setDraft, keepCode, setKeepCode, onSave, onCancel, 
       <label>Tags<input value={(draft.tags || []).join(', ')} onChange={e => set('tags', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} /></label>
       <label className="cs-check"><input type="checkbox" checked={keepCode} onChange={e => setKeepCode(e.target.checked)} />
         <span>Also keep the full code<small>Only if you are allowed to keep it. Client code is usually the client's property.</small></span></label>
-      <div className="cs-row">
-        <button className="cs-btn cs-primary" disabled={saving || !draft.title?.trim()} onClick={onSave}>{saving ? 'Saving…' : 'Save'}</button>
-        <button className="cs-btn" onClick={onCancel}>Cancel</button>
-      </div>
+      {error && <div className="cs-error" role="alert">Not saved: {error}</div>}
+      {actions}
     </section>
   )
 }
 
-function Analyse({ session, onSaved, initial }) {
+function Analyse({ session, onSaved, onOpenLibrary, initial }) {
   const [code, setCode] = useState(initial?.code || '')
   const [fileName, setFileName] = useState(initial?.code ? pastedFileName(initial.code) : '')
   const tooLong = text => {
@@ -246,7 +258,10 @@ function Analyse({ session, onSaved, initial }) {
       documentation: doc || null, test_cases: tests || null, code: keepCode ? code : null,
     }
     const { data, error: e } = await supabase.from('code_library').insert(row).select('id').single()
-    if (e) throw Error(/does not exist|schema cache/i.test(e.message) ? 'The library table is not set up yet (migration 022).' : e.message)
+    if (e) {
+      console.error('[code library] save failed', e)
+      throw Error(/does not exist|schema cache/i.test(e.message) ? 'the library table is not available yet — run the setup SQL in Supabase, then reload this page.' : e.message)
+    }
     setSavedId(data.id); setDraft(null); onSaved?.()
   })
 
@@ -278,9 +293,11 @@ function Analyse({ session, onSaved, initial }) {
           <span className="cs-spacer" />
           <button className="cs-btn" disabled={!!busy} onClick={writeDoc}>Write documentation</button>
           <button className="cs-btn" disabled={!!busy} onClick={makeTests}>Create test cases</button>
-          <button className="cs-btn cs-primary" disabled={!!busy || !!savedId} onClick={prepareSave}>{savedId ? 'Saved ✓' : 'Save to library'}</button>
+          {savedId
+            ? <button className="cs-btn cs-primary" onClick={onOpenLibrary}>Saved ✓ — open Library</button>
+            : <button className="cs-btn cs-primary" disabled={!!busy} onClick={prepareSave}>Save to library</button>}
         </div>
-        {draft && <SaveDialog draft={draft} setDraft={setDraft} keepCode={keepCode} setKeepCode={setKeepCode} onSave={save} onCancel={() => setDraft(null)} saving={busy === 'Saving…'} />}
+        {draft && <SaveDialog draft={draft} setDraft={setDraft} keepCode={keepCode} setKeepCode={setKeepCode} onSave={save} onCancel={() => { setDraft(null); setError('') }} saving={busy === 'Saving…'} error={error} />}
         <Analysis a={analysis} />
 
         {doc && (
@@ -312,7 +329,7 @@ function Analyse({ session, onSaved, initial }) {
       </>}
 
       {busy && <div className="cs-busy" role="status"><span className="cs-spin" />{busy}</div>}
-      {error && <div className="cs-error" role="alert">{error}</div>}
+      {error && !draft && <div className="cs-error cs-toast" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}>✕</button></div>}
     </div>
   )
 }
@@ -399,7 +416,7 @@ export default function CodeStudio({ session }) {
         <button role="tab" aria-selected={tab === 'analyse'} onClick={() => setTab('analyse')}>Analyse</button>
         <button role="tab" aria-selected={tab === 'library'} onClick={() => setTab('library')}>Library{entries.length ? ` (${entries.length})` : ''}</button>
       </div>
-      <div hidden={tab !== 'analyse'}><Analyse key={reopen?.id || 'new'} initial={reopen} session={session} onSaved={load} /></div>
+      <div hidden={tab !== 'analyse'}><Analyse key={reopen?.id || 'new'} initial={reopen} session={session} onSaved={load} onOpenLibrary={() => setTab('library')} /></div>
       {tab === 'library' && <Library entries={entries} loading={loading} error={libError} onDelete={remove}
         onOpenCode={e => { setReopen(e); setTab('analyse') }} />}
     </div>

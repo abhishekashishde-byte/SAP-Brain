@@ -118,3 +118,7 @@
 .cs-upload input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .cs-upload:focus-within{outline:2px solid #71717a;outline-offset:3px;border-radius:4px}
 @media (max-width:640px){.cs-toolbar>div{flex:1 1 100%}}
+.cs-save{border-color:#52525b}
+.cs-save-actions{margin-top:0}
+.cs-toast{position:sticky;bottom:64px;display:flex;align-items:center;gap:12px;justify-content:space-between;max-width:640px;margin:12px auto 0;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+.cs-toast button{background:none;border:0;color:inherit;cursor:pointer;font-size:14px}
