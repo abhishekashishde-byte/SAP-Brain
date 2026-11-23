@@ -499,3 +499,4 @@
 .dw .dw-report-box{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--dw-line,#2a2a2f);border-radius:12px;padding:14px 16px;margin:14px 0}
 .dw .dw-report-box>div{flex:1 1 260px;display:flex;flex-direction:column;gap:4px}
 .dw .dw-report-box select{padding:8px 10px;border-radius:8px}
+.dw .dw-report-lang{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
