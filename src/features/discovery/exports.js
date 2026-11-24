@@ -1,4 +1,4 @@
-import { discoveryCatalog, scopeIncludes } from './catalog.js'
+import { discoveryCatalog, scopeIncludes, decisionsEnabled, withoutDecisions } from './catalog.js'
 import { entryKey } from './data.js'
 import { processCatalog } from './processCatalog.js'
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -11,7 +11,7 @@ function gather(workshop,entries,todos,audience='client',extras={}) {
  const rows={Overview:[['Property','Value']],Requirements:[['Area','SAP Object','T-codes','Field ID','Field','Tier','Status','Field note','Object status']],Questions:[['Area','SAP Object','Question ID','Question','Type','Answer','Other','Approximate','Note']],Decisions:[['Area','SAP Object','Decision ID','Decision','Selected option','Status','Rationale']],Actions:[['SAP Object','Action item','Owner','Due date','Status']],Notes:[['Level','Area','SAP Object','Note','Internal']],Custom:[['Area','SAP Object','Type','ID','Description','Value']],Coverage:[['Area','SAP Object','Item type','Total','Completed','Open']],SourceSystems:[['Name','Type','Version','Owner / contact','Notes']],ObjectSources:[['Area','SAP Object','Source systems','Not maintained','Notes']],ExtraFields:[['Area','SAP Object','Source system','Source field','Meaning / example','Used today','SAP handling','SAP target','SAP catalog field','Notes','Origin']],Processes:[['Category','Process ID','Process / job','Description','Status','Frequency','Run window','Volume','Responsible','How done today','SAP hint','Related objects','Note']],ProcessQuestions:[['Category','Process','Question ID','Question','Type','Answer']]}
  const add=(k,v)=>rows.Overview.push([k,clean(v)])
  ;[['Customer',workshop.client_name],['Meeting date',workshop.call_date],['Time',[(workshop.start_time||''),(workshop.end_time||'')].filter(Boolean).join(' – ')],['Workshop',workshop.title],['Project',workshop.project_name],['Consultant',workshop.consultant_name],['Participants',workshop.participants],['Legacy system',workshop.legacy_system],['SAP module','Plant Maintenance'],['Catalog version',workshop.catalog_version],['Status',workshop.status],['Audience',audience]].forEach(([k,v])=>add(k,v))
- const objects=discoveryCatalog.objects.filter(o=>scopeIncludes(workshop.scope_areas,o.area))
+ const objects=discoveryCatalog.objects.filter(o=>scopeIncludes(workshop.scope_areas,o.area)).map(o=>decisionsEnabled(entries)?o:withoutDecisions(o))
  const labels=Object.fromEntries(discoveryCatalog.areas.map(a=>[a.id,a.title]))
  const workshopNote=get('workshop','workshop_note','main')
  if(can(workshopNote)&&workshopNote?.value?.text)rows.Notes.push(['Workshop','','',workshopNote.value.text,!!workshopNote.is_internal])

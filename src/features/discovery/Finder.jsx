@@ -23,13 +23,13 @@ export const FINDER_SECTIONS = [
 
 const TYPE_LABEL = { section: 'Section', object: 'Object', field: 'Field', question: 'Question', decision: 'Decision', process: 'Process' }
 
-function buildIndex() {
+function buildIndex(decisionsOn) {
   const rows = FINDER_SECTIONS.map(([id, title, sub]) => ({ type: 'section', id, title, sub }))
   for (const o of discoveryCatalog.objects) {
     rows.push({ type: 'object', id: o.id, objectId: o.id, title: o.title, sub: o.tcodes.join(' · '), extra: o.plain })
     for (const f of o.fields) rows.push({ type: 'field', id: f.id, objectId: o.id, title: f.label, sub: o.title, optional: f.tier === 'optional' })
     for (const q of o.questions) rows.push({ type: 'question', id: q.id, objectId: o.id, title: q.text, sub: o.title })
-    for (const d of o.decisions) rows.push({ type: 'decision', id: d.id, objectId: o.id, title: d.text, sub: o.title })
+    if (decisionsOn) for (const d of o.decisions) rows.push({ type: 'decision', id: d.id, objectId: o.id, title: d.text, sub: o.title })
   }
   for (const p of processCatalog.processes) rows.push({ type: 'process', id: p.id, title: p.title, sub: 'Processes & jobs' })
   return rows
@@ -91,8 +91,8 @@ function ContentResults({ rows, query, onGo, onClose }) {
   </>
 }
 
-export default function Finder({ open, onClose, onGo, session, workshopId, currentObject, contentRows = [] }) {
-  const index = useMemo(buildIndex, [])
+export default function Finder({ open, onClose, onGo, session, workshopId, currentObject, contentRows = [], decisionsOn = false }) {
+  const index = useMemo(() => buildIndex(decisionsOn), [decisionsOn])
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const [ai, setAi] = useState({ state: 'idle', results: [], error: '' })

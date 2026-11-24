@@ -79,6 +79,10 @@ export default async function handler(req,res){
   if(!EXTENSIONS.has(ext))return fail(400,{error:'Unsupported format'})
   const {data:wsRow}=await db.from('discovery_workshops').select('catalog_id').eq('id',workshopId).single()
   const mod=moduleOf(wsRow)
+  // Decisions belong to a later project phase; only proposed when this workshop switched them on.
+  const {data:settingsRow}=await db.from('discovery_entries').select('value').eq('workshop_id',workshopId).eq('object_id','workshop').eq('item_type','note').eq('item_id','settings').maybeSingle()
+  const decisionsOn=settingsRow?.value?.decisions===true
+  const brief=decisionsOn?mod.brief:{...mod.brief,objects:mod.brief.objects.map(o=>({...o,decisions:[]}))}
   await db.from('discovery_transcripts').update({status:'transcribing'}).eq('id',transcriptId)
   step({type:'stage',stage:'reading',message:AUDIO.has(ext)?'Transcribing audio':'Reading transcript'})
   const {data:file,error:downloadError}=await db.storage.from('discovery-transcripts').download(path)
@@ -118,7 +122,7 @@ At most 20 suggestions per segment, most valuable first. Never invent quotations
   step({type:'plan',total:chunks.length,warnings})
   for(const chunk of chunks){
    step({type:'segment',state:'start',index:chunk.segment,total:chunks.length,found:proposals.length})
-   const data=await callClaude(system,{catalog:mod.brief,transcript:chunk,...(corrections.length?{consultant_corrections:corrections}:{})})
+   const data=await callClaude(decisionsOn?system:system+'\nThis project does not record decisions yet (they come in a later project phase): never propose kind "decision"; record what the customer said as field_mark, answer or a note instead.',{catalog:brief,transcript:chunk,...(corrections.length?{consultant_corrections:corrections}:{})})
    if(!Array.isArray(data?.suggestions))throw Error('Malformed transcript suggestions')
    const topics=(Array.isArray(data.topics)?data.topics:[]).filter(t=>mod.catalog.objects.some(o=>o.id===t))
    for(const raw of data.suggestions.slice(0,20)){
@@ -126,6 +130,7 @@ At most 20 suggestions per segment, most valuable first. Never invent quotations
     if(!['low','medium','high'].includes(raw.confidence)||typeof raw.quote!=='string'||raw.quote.trim().length<8)continue
     // Evidence verification is exact-string validation, NOT interpretation.
     if(!chunk.text.includes(raw.quote.trim()))continue
+    if(raw.kind==='decision'&&!decisionsOn)continue
     if(['field_mark','answer','decision','process'].includes(raw.kind)&&!mod.allowed.has(raw.target_ref))continue
     proposals.push({workshop_id:workshopId,transcript_id:transcriptId,kind:raw.kind,target_ref:raw.target_ref||null,payload:raw.payload,quote:raw.quote.trim().slice(0,600),ts:raw.ts&&chunk.text.includes(String(raw.ts))?String(raw.ts).slice(0,80):null,confidence:raw.confidence,status:'pending'})
    }

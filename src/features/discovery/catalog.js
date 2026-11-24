@@ -71,6 +71,10 @@ function initialModule() {
     return DISCOVERY_MODULES[key] ? key : 'pm'
   } catch { return 'pm' }
 }
+// Decisions belong to a later project phase (Explore/Realize), not to discovery. Each workshop
+// (project) switches them on itself; the setting lives in the entry workshop/note/settings.
+export const decisionsEnabled = entries => Object.values(entries || {}).some(e => e?.object_id === 'workshop' && e.item_type === 'note' && e.item_id === 'settings' && e.value?.decisions === true)
+export const withoutDecisions = o => (o.decisions?.length ? { ...o, decisions: [] } : o)
 export const activeModuleKey = initialModule()
 export const activeModule = DISCOVERY_MODULES[activeModuleKey]
 export const discoveryCatalog = activeModule.catalog
