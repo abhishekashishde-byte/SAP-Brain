@@ -30,6 +30,9 @@ function restoreNormalStartup() {
 function disableAttachmentControls() {
   document.querySelectorAll(FILE_INPUT_SELECTOR).forEach(input => {
     if (!(input instanceof HTMLInputElement)) return
+    // Only the chat composer's attachment control is switched off. Workshop uploads
+    // (transcripts, legacy manuals, corrected reports) and the Code section keep theirs.
+    if (input.closest('.dw, .cs')) return
 
     input.disabled = true
     input.hidden = true
