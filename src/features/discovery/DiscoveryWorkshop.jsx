@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import { discoveryCatalog, discoveryCounts } from './catalog.js'
-import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveEntry,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue,loadHints,reviewHint } from './data.js'
+import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveEntry,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue,loadHints,reviewHint,updateHint } from './data.js'
 import './DiscoveryWorkshop.css'
 import {SourceSystemList,ObjectSourcePicker} from './SourceSystems.jsx'
 import LegacyFieldsGrid from './LegacyFieldsGrid.jsx'
@@ -25,6 +25,7 @@ import Correction from './Correction.jsx'
 import {loadTranscripts,loadTranscriptSuggestions,updateTranscriptSuggestion,uploadTranscript} from './transcriptData.js'
 const REPORT_CORRECTION_TITLE='Corrections from status report'
 import Finder from './Finder.jsx'
+import {buildContentRows} from './contentSearch.js'
 import {WaniLogo} from '../../pages/Login.jsx'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
@@ -611,6 +612,27 @@ export default function DiscoveryWorkshop({session}) {
    if(e.key==='p'){e.preventDefault();setPresenter(v=>!v)}
   };window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)
  },[mode,presenter,showSummary,objects,selectedIndex])
+ // Search & fix across everything written in this workshop (Find box). Built only while the box is open.
+ async function patchWorkshop(changes){
+  setWorkshop(w=>({...w,...changes}));setSavingMeta(true)
+  try{setWorkshop(await updateWorkshop(workshop.id,changes))}catch(e){setError('Workshop details could not be saved: '+e.message)}finally{setSavingMeta(false)}
+ }
+ async function patchHint(h,changes){
+  setLegacyHints(rows=>rows.map(x=>x.id===h.id?{...x,...changes}:x))
+  try{await updateHint(h.id,changes)}catch(e){setError('Legacy hint could not be updated: '+e.message)}
+ }
+ const contentRows=finderOpen&&workshop?buildContentRows({workshop,entries,todos,firstCall,gaps,inventories,legacyFields,sourceSystems,processEntries,legacyHints,scoped,api:{
+  workshop:patchWorkshop,
+  entry:(e,c)=>writeEntry(e.object_id,e.item_type,e.item_id,{...(entries[eKey(e.object_id,e.item_type,e.item_id)]?.value||e.value),...c}),
+  todo:(t,c)=>editTodo(t.id,c),
+  first:(kind,r,c)=>editFirst(kind,r,c),
+  gap:(g,c)=>changeGap(g,c),
+  inventory:(kind,r,c)=>changeInventory(kind,r,c),
+  legacyField:(f,c)=>editExtraField(f.id,c),
+  source:(x,c)=>editSource(x.id,c),
+  process:(id,p,c)=>changeProcess(id,{...p,...c}),
+  hint:patchHint,
+ }}):[]
  function goTo(row){
   setMobileNav(false)
   if(row.type==='section'){
@@ -623,6 +645,7 @@ export default function DiscoveryWorkshop({session}) {
    if(id==='presenter')return setPresenter(true)
    return
   }
+  if(row.type==='anchor'){setScope('all');setSearch('');setOnlyCarried(false);selectObject(row.objectId);setJump({id:row.anchor,raw:true,at:Date.now()});return}
   if(row.type==='process'){setShowProcesses(true);setScopingTab(null);setFirstTab(null);setShowSummary(false);setJump({id:row.id,at:Date.now()});return}
   const objectId=row.objectId||row.id
   setScope('all');setSearch('');setOnlyCarried(false)
@@ -633,7 +656,7 @@ export default function DiscoveryWorkshop({session}) {
  useEffect(()=>{
   if(!jump)return
   const t=setTimeout(()=>{
-   const el=document.getElementById('dw-i-'+jump.id)
+   const el=document.getElementById(jump.raw?jump.id:'dw-i-'+jump.id)
    if(!el)return
    for(let p=el;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true
    el.scrollIntoView({behavior:'smooth',block:'center'})
@@ -687,7 +710,7 @@ export default function DiscoveryWorkshop({session}) {
    </div>
    {mode==='workshop'&&workshop&&<div className="dw-header-actions">
     <span className={`dw-save ${syncing?'dw-save-busy':''}`} aria-live="polite">{syncing?syncing+' syncing…':savingMeta?'Saving…':'Saved'}</span>
-    <button type="button" className="dw-findbtn" onClick={()=>setFinderOpen(true)} title="Find anything or ask Wani (Ctrl+K)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Find or ask…</span><kbd>Ctrl K</kbd></button>
+    <button type="button" className="dw-findbtn" onClick={()=>setFinderOpen(true)} title="Find anything or ask Wani (Ctrl+K)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search & fix…</span><kbd>Ctrl K</kbd></button>
     {!presenter&&<button type="button" className="dw-button" onClick={()=>setParkOpen(x=>!x)} title="Add a topic to the parking lot (Shift+P)">Parking<span className="dw-hide-sm"> lot</span>{firstCall.parking.filter(x=>x.status==='parked').length?<span className="dw-badge">{firstCall.parking.filter(x=>x.status==='parked').length}</span>:null}</button>}
     <button type="button" className={`dw-button ${showSummary?'':'dw-primary'}`} onClick={()=>{setShowSummary(v=>!v);setCarryoverOpen(false);setShowProcesses(false);setFirstTab(null);setScopingTab(null)}}>{showSummary?<>Back<span className="dw-hide-sm"> to workshop</span></>:<>Summary<span className="dw-hide-sm"> & export</span></>}</button>
     {presenter?<button type="button" className="dw-button" onClick={()=>setPresenter(false)}>Exit presenter</button>:<MoreMenu items={[
@@ -696,7 +719,7 @@ export default function DiscoveryWorkshop({session}) {
     ]}/>}
    </div>}
   </header>
-  {mode==='workshop'&&workshop&&<Finder open={finderOpen} onClose={()=>setFinderOpen(false)} onGo={goTo} session={session} workshopId={workshop.id} currentObject={selected?.title}/>}
+  {mode==='workshop'&&workshop&&<Finder open={finderOpen} onClose={()=>setFinderOpen(false)} onGo={goTo} session={session} workshopId={workshop.id} currentObject={selected?.title} contentRows={contentRows}/>}
   <div className="dw-container">
   {error&&<div role="alert" className="dw-alert">{error}<button className="dw-close" onClick={()=>setError('')}>×</button></div>}
   {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">Discover · SAP Plant Maintenance</div><h1>Customer workshops</h1><p>Confidential to your account. Open a workshop to continue, or start a new one.</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>setMode('templates')}>My templates ({templates.length})</button><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div></div>
@@ -825,7 +848,7 @@ export default function DiscoveryWorkshop({session}) {
         {id:'dw-actions',title:'Notes & actions',progress:String(todos.filter(t=>t.object_id===selected.id&&!t.done).length)+' open'}
       ].map(x=><button key={x.id} type="button" onClick={()=>{const el=document.getElementById(x.id);if(el){el.open=true;el.scrollIntoView({behavior:'smooth',block:'start'})}}}>{x.title}<strong>{x.progress}</strong></button>)}
     </nav>
-    {!presenter&&<Section title="Current legacy process" count="Notes" open={false}><NoteInput label="How the customer works today" value={val(selected.id,'legacy_today','main').text} onChange={v=>writeNote(selected.id,'legacy_today','main',v)}/></Section>}
+    {!presenter&&<Section id="dw-legacy-today" title="Current legacy process" count="Notes" open={false}><NoteInput label="How the customer works today" value={val(selected.id,'legacy_today','main').text} onChange={v=>writeNote(selected.id,'legacy_today','main',v)}/></Section>}
     <Section id="dw-fields" title="Key fields" count={selected.fields.length} summary={`${selected.fields.filter(f=>!!val(selected.id,'field',f.id).mark).length} marked`}>
      <div className="dw-field-toolbar"><div className="dw-field-legend" aria-label="Field status colours">
       {[['needed','Needed'],['not_needed','Not needed'],['clarify','Clarify'],['none','Unmarked']].map(([mark,title])=><span className="dw-field-legend-item" key={mark}><span className={`dw-status-light dw-status-light-${mark}`} aria-hidden="true"><StatusGlyph mark={mark}/></span>{title}</span>)}
@@ -842,7 +865,7 @@ export default function DiscoveryWorkshop({session}) {
  <div className="dw-inline"><input className="dw-input" placeholder="Add custom question" aria-label="New custom question" value={customQuestion} onChange={e=>setCustomQuestion(e.target.value)}/><button className="dw-button" onClick={()=>addCustom('custom_question',customQuestion)}>+ Question</button></div></Section>
     <Section id="dw-decisions" title="Decisions" count={selected.decisions.length} open={false} summary={`${selected.decisions.filter(d=>val(selected.id,'decision',d.id).status==='decided').length} decided`}>{selected.decisions.map((d,i)=><Fragment key={d.id}><DecisionEditor item={d} display={displaySelected.decisions[i]} stakeholders={firstCall.stakeholders} value={val(selected.id,'decision',d.id)} onChange={v=>writeEntry(selected.id,'decision',d.id,v)}/>{txHint(d.id)}</Fragment>)}</Section>
     {!presenter&&<Section title="Ask Wani & follow-ups" count="AI" open={false}><div className="dw-ai-box"><p className="dw-caption">Suggestions only. Nothing is added to your notes unless you select Save.</p><div className="dw-inline"><button className="dw-button" disabled={!!aiBusy||!!pending||!!processPending} onClick={()=>askAI('followups')}>{aiBusy==='followups'?'Thinking…':'Suggest follow-ups'}</button></div>{followups.map((q,i)=><div className="dw-item" key={i}><strong>{q.question}</strong><p className="dw-caption">{q.why}</p><button className="dw-inline-button" onClick={()=>addCustom('custom_question',q.question)}>Add as custom question</button></div>)}<textarea rows="2" placeholder="Ask about the current SAP PM object…" value={aiQuestion} onChange={e=>setAiQuestion(e.target.value)}/><button className="dw-button" disabled={!!aiBusy||!aiQuestion.trim()} onClick={()=>askAI('ask')}>{aiBusy==='ask'?'Asking…':'Ask Wani'}</button>{aiAnswer&&<div className="dw-ai-answer"><p>{aiAnswer}</p><button className="dw-inline-button" onClick={()=>{writeNote(selected.id,'note','main',(val(selected.id,'note','main').text||'')+'\\n'+aiAnswer,true)}}>Save to internal notes</button></div>}</div></Section>}
-    {!presenter&&area&&<Section title={'Area notes · '+getAreaTitle(area,'en')} count={val(area.id,'area_note','main').text?.trim()?'Saved':'Empty'} open={false}><NoteInput label={'Notes for all '+getAreaTitle(area,'en')+' objects'} value={val(area.id,'area_note','main').text} onChange={v=>writeNote(area.id,'area_note','main',v)} internal={entry(area.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(area.id,'area_note','main',val(area.id,'area_note','main').text||'',v)}/></Section>}
+    {!presenter&&area&&<Section id="dw-area-notes" title={'Area notes · '+getAreaTitle(area,'en')} count={val(area.id,'area_note','main').text?.trim()?'Saved':'Empty'} open={false}><NoteInput label={'Notes for all '+getAreaTitle(area,'en')+' objects'} value={val(area.id,'area_note','main').text} onChange={v=>writeNote(area.id,'area_note','main',v)} internal={entry(area.id,'area_note','main')?.is_internal} onInternal={v=>writeNote(area.id,'area_note','main',val(area.id,'area_note','main').text||'',v)}/></Section>}
     <Section id="dw-actions" title="Notes & action items" count={todos.filter(t=>t.object_id===selected.id).length} open={false}><NoteInput label="Object notes" value={val(selected.id,'note','main').text} onChange={v=>writeNote(selected.id,'note','main',v)} internal={entry(selected.id,'note','main')?.is_internal} onInternal={v=>writeNote(selected.id,'note','main',val(selected.id,'note','main').text||'',v)}/>
     {!presenter&&<><div className="dw-inline"><input className="dw-input" aria-label="New action item" value={newTodo} onChange={e=>setNewTodo(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addTodo()}}} placeholder="Add follow-up / action item…"/><button className="dw-button" onClick={addTodo}>Add</button></div>{todos.filter(t=>t.object_id===selected.id).map(t=><div key={t.id} className="dw-task"><label><input type="checkbox" checked={t.done} onChange={e=>editTodo(t.id,{done:e.target.checked})}/>{t.text}</label><input aria-label="Owner" placeholder="Owner" defaultValue={t.owner||''} onBlur={e=>editTodo(t.id,{owner:e.target.value})}/><input aria-label="Due date" type="date" defaultValue={t.due_date||''} onChange={e=>editTodo(t.id,{due_date:e.target.value||null})}/><button className="dw-button" onClick={()=>deleteTodo(t.id)}>Remove</button></div>)}</>}</Section>
     </>}

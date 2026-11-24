@@ -19,6 +19,7 @@ export const saveMinutes = values => supabase.from('discovery_minutes').insert(v
 export const loadHints = id => supabase.from('discovery_legacy_hints').select('*').eq('workshop_id',id).then(requireData)
 export const saveHints = values => supabase.from('discovery_legacy_hints').insert(values).select('*').then(requireData)
 export const reviewHint = (id,accepted) => supabase.from('discovery_legacy_hints').update({accepted}).eq('id',id).then(requireData)
+export const updateHint = (id,values) => supabase.from('discovery_legacy_hints').update(values).eq('id',id).then(requireData)
 
 export const entryKey = (object_id,item_type,item_id) => [object_id,item_type,item_id].join('::')
 export const cachedEntryKey = (workshopId,userId) => 'wani-discovery-pending:'+userId+':'+workshopId
