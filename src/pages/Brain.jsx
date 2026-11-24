@@ -383,7 +383,10 @@ function SourceInfoPanel({ info, t, dark }) {
   // now-always-zero openAISources field.
   const webSearchCount = (info.tavilyFiltered || 0) + (info.tavilyNotes || 0) + (info.relatedLinks?.length || 0)
 
+  const trace = Array.isArray(info.quoteTrace) ? info.quoteTrace : []
+  const untraced = trace.filter(q => q.status === 'no_source').length
   const pills = [
+    trace.length > 0         && { icon:'❝', label:`${trace.length} quote${trace.length>1?'s':''} / citation${trace.length>1?'s':''} traced${untraced ? ` · ${untraced} without source` : ''}`, color: untraced ? '#D97706' : '#7c8aa0' },
     info.bookChunks > 0     && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
     webSearchCount > 0       && { icon:'🌐', label:`Web search: ${webSearchCount}`, color:'#2563EB' },
     !info.needsSearch        && { icon:'⚡', label:'No search', color:'#6B7280' },
@@ -432,6 +435,36 @@ function SourceInfoPanel({ info, t, dark }) {
             <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Models: </span><span style={{ color: dark?'#e2e8f0':'#1C1C1E' }}>{modelLabel}</span></div>
             {info.totalMs && <div><span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Time: </span><span style={{ color: dark?'#fbbf24':'#D97706', fontWeight:600 }}>{(info.totalMs/1000).toFixed(1)}s</span></div>}
           </div>
+          {trace.length > 0 && (
+            <div style={{ marginTop:8 }}>
+              <div style={{ color: dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.45)', fontWeight:600, marginBottom:4 }}>Where the quotes and citations come from</div>
+              {trace.map((q, i) => {
+                const badge = q.status === 'exact' ? ['Exact wording in source', '#059669']
+                  : q.status === 'paraphrase' ? ['Paraphrased — wording not literally in source', '#D97706']
+                  : q.status === 'cited' ? ['Cited', '#7c8aa0']
+                  : ['No source found among what Wani read', '#DC2626']
+                const src = q.source
+                return (
+                  <div key={i} style={{ padding:'7px 9px', margin:'5px 0', borderRadius:8, border:`1px solid ${dark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)'}`, background: dark?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.015)' }}>
+                    <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', marginBottom:3 }}>
+                      <span style={{ fontWeight:700, color: dark?'rgba(255,255,255,0.5)':'rgba(0,0,0,0.5)' }}>{q.kind === 'quote' ? 'Quote' : 'Citation'} {i+1}</span>
+                      <span style={{ padding:'0 6px', borderRadius:8, fontSize:10, fontWeight:600, color:badge[1], border:`1px solid ${badge[1]}55`, background:`${badge[1]}14` }}>{badge[0]}</span>
+                    </div>
+                    <div style={{ color: dark?'#d4d6da':'#1C1C1E', fontStyle:'italic', lineHeight:1.5 }}>“{q.text}”</div>
+                    <div style={{ marginTop:3, color: dark?'rgba(255,255,255,0.55)':'rgba(0,0,0,0.55)' }}>
+                      → {src
+                        ? (src.url && /^https?:\/\//.test(src.url)
+                            ? <a href={src.url} target="_blank" rel="noopener noreferrer" style={{ color:'#90949b' }}>{src.label}</a>
+                            : <span style={{ color: src.type === 'book' ? '#059669' : 'inherit', fontWeight:600 }}>{src.type === 'book' ? '📚 ' : src.type === 'knowledge' ? '📌 ' : ''}{src.label}</span>)
+                        : 'none of the book passages or pages Wani read'}
+                      {src?.topic ? <span> — {src.topic}</span> : null}
+                    </div>
+                    {q.sourceSentence && <div style={{ marginTop:4, paddingLeft:8, borderLeft:`2px solid ${dark?'rgba(255,255,255,0.15)':'rgba(0,0,0,0.12)'}`, color: dark?'rgba(255,255,255,0.6)':'rgba(0,0,0,0.6)', lineHeight:1.5 }}>Source text: {q.sourceSentence}</div>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
           {info.bookSources?.length > 0 && (
             <div style={{ marginTop:6 }}>
               <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Book sources: </span>

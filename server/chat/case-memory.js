@@ -38,7 +38,7 @@ export function buildHistory(allMessages, budget = HISTORY_BUDGET_CHARS) {
   return { recentMsgs: out, dropped: allMessages.length - out.length, usedChars: used }
 }
 
-async function callSmall(system, user, maxTokens, model = SMALL_MODEL) {
+export async function callSmall(system, user, maxTokens, model = SMALL_MODEL) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
@@ -56,7 +56,7 @@ async function callSmall(system, user, maxTokens, model = SMALL_MODEL) {
   return { text: (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim(), usage: u, model }
 }
 
-function parseJson(text) {
+export function parseJson(text) {
   const t = String(text || '').replace(/```(?:json)?/gi, '')
   const a = t.indexOf('{'), b = t.lastIndexOf('}')
   if (a < 0 || b <= a) throw Error('no JSON')

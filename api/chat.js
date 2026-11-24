@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 import { buildHistory, planTurn, updateCaseFile, caseFileText, modePrompt } from '../server/chat/case-memory.js'
 import { findLargePrograms, renderMap, applyProgramMaps } from '../server/chat/program-map.js'
 import { isAdminEmail } from '../server/shared/admin.js'
+import { traceQuotes } from '../server/chat/quote-trace.js'
 
 // ── ANSWER MODEL ──────────────────────────────────────────────────────────────
 // One place for the Claude model that writes Wani's answers (Q&A, code, deliverables).
@@ -3341,6 +3342,20 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     }
     debugLog.finalAnswer = chatAnswer
 
+    // ── STEP 10b: Quote trace ─────────────────────────────────────────────
+    // Every quotation / citation in the answer → the book page, web page or confirmed
+    // knowledge it came from, and whether the quoted wording is literally in that source.
+    // Shown under the answer (Sources) and written to the logs so it can be checked later.
+    debugLog.quoteTrace = []
+    if (!fsComplete && !pptComplete && (bookChunks.length || answerSearchResults.length || knowledgeForPrompt.length)) {
+      activity('trace', 'Checking where quotes come from')
+      debugLog.quoteTrace = await traceQuotes({ answer: chatAnswer, books: bookChunks, web: answerSearchResults, knowledge: knowledgeForPrompt }).catch(() => [])
+      activity('trace', debugLog.quoteTrace.length ? `Traced ${debugLog.quoteTrace.length} quote${debugLog.quoteTrace.length === 1 ? '' : 's'} / citation${debugLog.quoteTrace.length === 1 ? '' : 's'} to their source` : 'No quotes or citations to trace', 'done')
+      if (debugLog.quoteTrace.length) {
+        console.log('[QUOTE TRACE]', JSON.stringify({ question: String(lastMsg || '').slice(0, 160), items: debugLog.quoteTrace.map(q => ({ kind: q.kind, status: q.status, text: q.text, source: q.source ? `${q.source.id} ${q.source.label}${q.source.url ? ' ' + q.source.url : ''}` : null })) }))
+      }
+    }
+
     // ── STEP 11: Send search links ────────────────────────────────────────
     // Link delivery must NOT depend on container-mode. CUSTOMIZING and other
     // substantive SAP answer types can use the classic answer path, and previously
@@ -3608,6 +3623,12 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
       usedContainerFormat ? `hidden_json_chars: ${containerResult.hiddenJsonChars || 0} (~${Math.round((containerResult.hiddenJsonChars || 0) / 4)} est. tokens)` : null,
     ].filter(Boolean).concat([
       '',
+      '6d. QUOTE TRACE (where each quote / citation in the answer comes from)',
+      '─────────────────────────────────────────────────────────',
+      ...((debugLog.quoteTrace || []).length
+        ? debugLog.quoteTrace.map((q, i) => `[Q${i + 1}] ${q.kind.toUpperCase()} · ${q.status === 'exact' ? 'EXACT WORDING FOUND' : q.status === 'paraphrase' ? 'PARAPHRASED (wording not literally in source)' : q.status === 'cited' ? 'CITED' : 'NO SOURCE FOUND'}\n    Answer: ${q.text}\n    Source: ${q.source ? `${q.source.id} ${q.source.label}${q.source.topic ? ' — ' + q.source.topic : ''}${q.source.url ? ' — ' + q.source.url : ''}` : '(none of the retrieved sources)'}${q.sourceSentence ? `\n    Source text: ${q.sourceSentence}` : ''}`)
+        : ['(no quotes or citations in this answer, or no retrieved sources)']),
+      '',
       '7. FINAL OUTPUT TO USER',
       '─────────────────────────────────────────────────────────',
       chatAnswer || fullAnswer || '',
@@ -3660,6 +3681,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
         routing:        debugLog.routing      || modelUsed,
         bookChunks:     debugLog.bookChunks   || 0,
         bookSources:    (bookChunks || []).map(c => `${c.source_book}, p.${c.page_number}`),
+        quoteTrace:     debugLog.quoteTrace || [],
         tavilyRaw:      debugLog.tavilyRaw    || 0,
         tavilyFiltered: debugLog.tavilyFiltered || 0,
         tavilyNotes:    debugLog.tavilyNotes  || 0,
