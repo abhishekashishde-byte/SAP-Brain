@@ -13,16 +13,9 @@ import {
   shouldConsumeCredit,
 } from '../server/shared/_quota.js'
 import { notifyQuotaReached } from '../lib/emailNotifications.js'
+// Same admin check as chat and the dashboard — admins never use up free credits.
+import { isAdminEmail } from '../server/shared/admin.js'
 
-function getAdminEmails() {
-  return [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2]
-    .filter(Boolean)
-    .map(email => email.trim().toLowerCase())
-}
-
-function isAdminEmail(email) {
-  return getAdminEmails().includes(String(email || '').trim().toLowerCase())
-}
 
 function isQuotaAnswerText(value) {
   const text = String(value || '').replace(/\s+/g, ' ').trim()

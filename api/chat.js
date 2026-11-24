@@ -22,6 +22,7 @@ import { assessEvidenceRouting, attachSelectedTavilyResults } from '../lib/evide
 import { createClient } from '@supabase/supabase-js'
 import { buildHistory, planTurn, updateCaseFile, caseFileText, modePrompt } from '../server/chat/case-memory.js'
 import { findLargePrograms, renderMap, applyProgramMaps } from '../server/chat/program-map.js'
+import { isAdminEmail } from '../server/shared/admin.js'
 
 // ── ANSWER MODEL ──────────────────────────────────────────────────────────────
 // One place for the Claude model that writes Wani's answers (Q&A, code, deliverables).
@@ -2335,8 +2336,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
 
   try {
     // ── DAILY LIMIT CHECK ──────────────────────────────────────────────────
-    const UNLIMITED_EMAILS_CHECK = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2].filter(Boolean)
-    if (userId && !UNLIMITED_EMAILS_CHECK.includes(userEmail || '')) {
+    if (userId && !isAdminEmail(userEmail)) {
       try {
         const supaUrl = process.env.SUPABASE_URL
         const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
@@ -3364,11 +3364,10 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     }
 
     // ── STEP 12: Daily message count ──────────────────────────────────────
-    const UNLIMITED_EMAILS = [process.env.ADMIN_EMAIL_1, process.env.ADMIN_EMAIL_2].filter(Boolean)
     const DAILY_LIMIT = 50
     let messageCount = 0
 
-    if (userId && !UNLIMITED_EMAILS.includes(userEmail || '')) {
+    if (userId && !isAdminEmail(userEmail)) {
       try {
         const supaUrl = process.env.SUPABASE_URL
         const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY

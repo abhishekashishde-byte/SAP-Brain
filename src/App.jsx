@@ -40,15 +40,17 @@ function jwtSessionId(token) {
   } catch { return null }
 }
 
-function PendingApproval({ dark, email, onSignOut }) {
+function PendingApproval({ dark, email, onSignOut, locked = false }) {
   return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: dark ? '#0e0e0e' : '#FAFAF8', padding: 24 }}>
       <div style={{ maxWidth: 420, width: '100%', textAlign: 'center', background: dark ? '#161616' : '#fff', border: `1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: 20, padding: '40px 32px' }}>
         <WaniLogo size={48} dark={dark}/>
         <div style={{ fontSize: 32, margin: '20px 0 8px' }}>⏳</div>
-        <h2 style={{ margin: '0 0 12px', color: dark ? '#fff' : '#111', fontSize: 20, fontWeight: 700 }}>Application Pending</h2>
+        <h2 style={{ margin: '0 0 12px', color: dark ? '#fff' : '#111', fontSize: 20, fontWeight: 700 }}>{locked ? 'Wani is not available right now' : 'Application Pending'}</h2>
         <p style={{ color: dark ? '#94A3B8' : '#666', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>
-          Thanks for applying. We're reviewing your application personally and will send access to <strong>{email}</strong> shortly.
+          {locked
+            ? <>Wani is currently available to the administrator only. Access for <strong>{email}</strong> will return when it reopens.</>
+            : <>Thanks for applying. We're reviewing your application personally and will send access to <strong>{email}</strong> shortly.</>}
         </p>
         <button onClick={onSignOut} style={{ padding: '10px 24px', borderRadius: 8, border: `1px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}`, background: 'transparent', color: dark ? '#94A3B8' : '#666', cursor: 'pointer', fontSize: 13, fontFamily: "'Inter',sans-serif" }}>
           Log out
@@ -62,6 +64,7 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [approved, setApproved] = useState(null)
+  const [lockedOut, setLockedOut] = useState(false)
   const [adminAvailable, setAdminAvailable] = useState(false)
   const [adminView, setAdminView] = useState(false)
   const dark = true
@@ -134,12 +137,12 @@ export default function App() {
   // Pending users re-check approval while the page is open, so they do not need
   // to keep signing out/in after the administrator approves them.
   useEffect(() => {
-    if (!sessionEmail || approved !== false) return
+    if (!sessionEmail || approved !== false || lockedOut) return
     const check = () => supabase.from('approved_emails').select('email').eq('email', sessionEmail).maybeSingle()
       .then(({ data }) => { if (data) setApproved(true) }).catch(() => {})
     const id = setInterval(check, 15000)
     return () => clearInterval(id)
-  }, [sessionEmail, approved])
+  }, [sessionEmail, approved, lockedOut])
 
   // Ask the server whether this verified user is an administrator. Do NOT load
   // the full admin dashboard just to answer this boolean; that made the Admin control
@@ -159,7 +162,13 @@ export default function App() {
       },
       body: JSON.stringify({ action: 'admin_status' }),
     })
-      .then(res => res.ok ? res.json() : Promise.reject(new Error('admin status failed')))
+      .then(async res => {
+        if (res.ok) return res.json()
+        // The server refuses non-admin accounts while Wani is locked to the administrator.
+        const body = await res.json().catch(() => ({}))
+        if (res.status === 403 && body?.code === 'locked' && !cancelled) { setLockedOut(true); setApproved(false) }
+        throw new Error('admin status failed')
+      })
       .then(data => {
         if (!cancelled) setAdminAvailable(data?.isAdmin === true)
       })
@@ -226,7 +235,7 @@ export default function App() {
                   </button>
                 )}
               </>
-          : <PendingApproval dark={dark} email={session.user.email} onSignOut={handleSignOut}/>
+          : <PendingApproval dark={dark} email={session.user.email} onSignOut={handleSignOut} locked={lockedOut}/>
       }
     </ThemeContext.Provider>
   )

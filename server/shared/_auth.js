@@ -1,3 +1,4 @@
+import { isAdminEmail } from './admin.js'
 import { createClient } from '@supabase/supabase-js'
 
 function getConfig() {
@@ -142,6 +143,14 @@ export async function requireApprovedUser(req) {
       return { ok: false, status: 401, error: 'Invalid or expired session' }
     }
 
+    // Admin-only lock: while on, every non-admin account is refused here, whatever its
+    // approval status — approving someone in the dashboard cannot bypass it. On by
+    // default; set the Cloudflare variable WANI_OPEN_TO_USERS=true to let approved users in.
+    if (process.env.WANI_OPEN_TO_USERS !== 'true' && !isAdminEmail(user.email)) {
+      console.warn(JSON.stringify({ security: 'locked_to_admin', email: user.email }))
+      return { ok: false, status: 403, code: 'locked', error: 'Wani is currently available to the administrator only.' }
+    }
+
     const sessionId = getJwtSessionId(token)
     if (!sessionId) {
       return { ok: false, status: 401, error: 'Session identifier is missing' }
@@ -184,7 +193,7 @@ export async function requireApprovedUser(req) {
 export function sendAuthError(res, auth) {
   // Structured security log line — filter Cloudflare logs for "security" to spot abuse.
   console.warn(JSON.stringify({ security: 'auth_denied', status: auth.status || 401, reason: auth.error || 'Unauthorized' }))
-  return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' })
+  return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized', ...(auth.code ? { code: auth.code } : {}) })
 }
 
 export function requireJsonBody(req, res, maxBytes = 100_000) {
