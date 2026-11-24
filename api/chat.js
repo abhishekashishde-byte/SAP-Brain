@@ -13,7 +13,7 @@
 
 import {
   BASE_SYSTEM_PROMPT, TONE_ADDITIONS, callOpenAISearch, callClaude,
-  ANSWER_CONTAINER_PROMPT, parseAnswerContainer, extractQuickAnswer,
+  ANSWER_CONTAINER_PROMPT, parseAnswerContainer, extractQuickAnswer, stripStrayContainerMarkers,
   QUICK_MARKER_START, QUICK_MARKER_END, META_MARKER_START,
   ON_DEMAND_VISUAL_PROMPT, validateVisualData,
 } from '../server/shared/_shared.js'
@@ -2765,7 +2765,11 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
 - Never explain what a T-code is. Never add generic SAP background.
 - The non-obvious insight is worth 10x more than the obvious step
 - If you are uncertain about a T-code or technical term — say "verify in your system" rather than guessing`
-    if (VISUAL_ELIGIBLE_INTENTS.has(intent))  systemPrompt += ANSWER_CONTAINER_PROMPT
+    // Must match `useContainer` in the Sonnet branch below: the marker instructions are
+    // only sent when the server will also strip the markers. Previously they were sent in
+    // every plan mode but only stripped in 'quick', so raw WANI_QUICK/WANI_META blocks
+    // reached the user in investigation-style conversations.
+    if (VISUAL_ELIGIBLE_INTENTS.has(intent) && planMode === 'quick')  systemPrompt += ANSWER_CONTAINER_PROMPT
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nOUTPUT LENGTH: This is a deliverable. Be thorough and complete all sections.`
     if (LONG_INTENTS.has(intent))   systemPrompt += `\n\nNever invent SAP T-codes, table names, BAdI names, or Fiori app IDs. Write "verify in your system" when uncertain.`
 
@@ -3304,7 +3308,8 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     // non-container answers are just the raw text as-is. Visuals are no
     // longer part of this extraction at all — see generateVisualOnDemand /
     // the 'generate_visual' action for the on-demand path.
-    const cleanText = usedContainerFormat ? containerResult.cleanText : fullAnswer
+    // Safety net: even outside container mode, never let marker text reach the user.
+    const cleanText = usedContainerFormat ? containerResult.cleanText : stripStrayContainerMarkers(fullAnswer)
 
     let chatAnswer
     if (fsComplete) {
