@@ -1,3 +1,4 @@
+import { activeModuleKey } from './catalog.js'
 import { useMemo, useState } from 'react'
 import { discoveryCatalog } from './catalog.js'
 import { updateTranscriptSuggestion } from './transcriptData.js'
@@ -30,7 +31,7 @@ export default function Correction({ s, session, onSaved, onCancel }) {
       const r = await fetch('/api/discovery-correct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
-        body: JSON.stringify({ suggestion: { kind: s.kind, target_ref: s.target_ref, payload: s.payload, quote: s.quote }, correction: text }),
+        body: JSON.stringify({ suggestion: { kind: s.kind, target_ref: s.target_ref, payload: s.payload, quote: s.quote }, correction: text, module: activeModuleKey }),
       })
       const data = await r.json().catch(() => ({}))
       if (!r.ok) throw Error(data.error || 'Correction failed')

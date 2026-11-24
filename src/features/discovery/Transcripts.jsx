@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { uploadTranscript, deleteTranscript, updateTranscriptSuggestion } from './transcriptData.js'
-import { discoveryCatalog } from './catalog.js'
+import { discoveryCatalog, activeModule } from './catalog.js'
 import { processCatalog } from './processCatalog.js'
 import { SIZING_METRICS } from './firstCallData.js'
 import { MARK, KIND, human, useCatalogLookup, describeTarget, describeValue } from './txDescribe.js'
@@ -307,7 +307,7 @@ export default function Transcripts({ workshop, session, transcripts, suggestion
       {coverage.length > 0 && (
         <section className="dw-ts-block" aria-labelledby="ts-cover">
           <h3 id="ts-cover">What the transcripts covered</h3>
-          <p className="dw-caption">{coverage.length} of {discoveryCatalog.objects.length} SAP PM objects discussed. Open one to see the findings right at its fields.</p>
+          <p className="dw-caption">{coverage.length} of {discoveryCatalog.objects.length} {activeModule.label} objects discussed. Open one to see the findings right at its fields.</p>
           <div className="dw-ts-cover">
             {coverage.map(c => (
               <button type="button" key={c.o.id} className={`dw-ts-cover-row ${c.waiting ? 'is-wait' : 'is-ok'}`} onClick={() => onOpenObject?.(c.o.id)}>

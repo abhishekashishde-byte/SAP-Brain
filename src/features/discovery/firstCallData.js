@@ -1,4 +1,5 @@
 import { supabase } from '../../supabaseClient'
+import { activeModuleKey } from './catalog.js'
 const TABLES={stakeholders:'discovery_stakeholders',drivers:'discovery_drivers',sizing:'discovery_sizing',requests:'discovery_requests',parking:'discovery_parking'}
 function required(result){if(result.error)throw result.error;return result.data}
 export const FIRST_CALL_TABLES=TABLES
@@ -25,7 +26,7 @@ export const REQUEST_TEMPLATES={
  order:['Sample work order prints'],
  kpi:['Management reports / Excel KPIs']
 }
-export const SIZING_METRICS=[
+const PM_SIZING=[
  ['sites','Sites / plants in scope','count'],['locations','Locations','count'],
  ['assets','Assets / equipment','count'],['pm_schedules','PM schedules','count'],
  ['checklists','PM checklists / task lists','count'],['meters','Meters / measuring points','count'],
@@ -35,8 +36,23 @@ export const SIZING_METRICS=[
  ['planners','Planners / supervisors','count'],['requesters','Requesters (people reporting work)','count'],
  ['history_years','Years of history available','years']
 ]
+const PP_SIZING=[
+ ['sites','Plants producing','count'],['products','Finished / semi-finished products','count'],
+ ['boms','BOMs','count'],['routings','Routings / recipes','count'],['work_centres','Work centres / lines','count'],
+ ['prod_orders_month','Production orders per month','count'],['components','Purchased components','count'],
+ ['planners','MRP controllers / planners','count'],['schedulers','Production schedulers / supervisors','count'],
+ ['operators','Shop floor users','count'],['history_years','Years of history available','years']
+]
+const MM_SIZING=[
+ ['sites','Plants in scope','count'],['stores','Storage locations','count'],['materials','Active materials','count'],
+ ['suppliers','Active suppliers','count'],['prs_month','Purchase requisitions per month','count'],['pos_month','Purchase orders per month','count'],
+ ['grs_month','Goods receipts per month','count'],['invoices_month','Supplier invoices per month','count'],
+ ['contracts','Contracts / scheduling agreements','count'],['buyers','Buyers / purchasing groups','count'],
+ ['requesters','Requesters','count'],['history_years','Years of history available','years']
+]
+export const SIZING_METRICS={pm:PM_SIZING,pp:PP_SIZING,mm:MM_SIZING}[activeModuleKey]||PM_SIZING
 // Linked question mappings are reviewed by id, never inferred by text. Add when verified.
-export const SIZING_LINKS={
+const PM_SIZING_LINKS={
  'org.q1':'sites',
  'org.q4':'technicians',
  'fl.q3':'locations',
@@ -47,6 +63,7 @@ export const SIZING_LINKS={
  'mplan.q1':'pm_schedules',
  'mat.q1':'spare_parts'
 }
+export const SIZING_LINKS=activeModuleKey==='pm'?PM_SIZING_LINKS:{}
 
 // Queue individual updates by row rather than issuing a network call at each keystroke.
 export function createFirstCallQueue(workshopId,userId,onChange){

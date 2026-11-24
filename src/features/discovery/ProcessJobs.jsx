@@ -1,3 +1,4 @@
+import { activeModule } from './catalog.js'
 import { useMemo, useState } from 'react'
 import { processCatalog } from './processCatalog.js'
 import {localizeProcess,getProcessCategoryTitle} from './i18n.js'
@@ -28,7 +29,7 @@ export default function ProcessJobs({workshopId,entries,onChange,presenter,onJum
  const set=(p,changes)=>onChange(p.id,{...(entries[p.id]||{}),...changes,workshop_id:workshopId,process_id:p.id})
  const addCustom=cat=>{if(!newTitle.trim())return;const id='custom:'+crypto.randomUUID();onChange(id,{workshop_id:workshopId,process_id:id,status:null,frequency:null,answers:{},custom:{title:newTitle.trim(),plain:newPlain.trim(),category:cat,kind:processCatalog.categories.find(c=>c.id===cat).kind}});setNewTitle('');setNewPlain('');setNewCategory(null)}
  const stats=processCatalog.processes.reduce((a,p)=>{const s=entries[p.id]?.status;a[s||'unanswered']=(a[s||'unanswered']||0)+1;return a},{})
- return <div className="dw-card dw-process-page"><div className="dw-kicker">SAP PM · Processes</div><h2>Processes & background jobs</h2><p className="dw-caption">Review all 55 process variants and jobs. Click a status again to clear it. Optional details are shown for Valid or Clarify.</p>
+ return <div className="dw-card dw-process-page"><div className="dw-kicker">{activeModule.label} · Processes</div><h2>Processes & background jobs</h2><p className="dw-caption">Review all 55 process variants and jobs. Click a status again to clear it. Optional details are shown for Valid or Clarify.</p>
  <div className="dw-stats">{Object.entries({...stats,unanswered:stats.unanswered||0}).map(([key,n])=><span key={key}>{plain(key)}: {n}</span>)}</div>
  <div className="dw-process-filters"><input aria-label="Search process or job" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search processes or jobs…"/><select value={filter} onChange={e=>setFilter(e.target.value)} aria-label="Filter processes"><option value="all">All</option><option value="valid">Valid</option><option value="clarify">Clarify</option><option value="unanswered">Unanswered</option></select></div>
  {processCatalog.categories.map(cat=>{

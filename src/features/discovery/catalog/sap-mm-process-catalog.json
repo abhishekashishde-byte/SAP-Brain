@@ -1,0 +1,230 @@
+{
+ "catalogId": "sap-mm-process-catalog",
+ "version": "0.1.0",
+ "language": "en",
+ "statuses": [
+  "valid",
+  "not_valid",
+  "later",
+  "clarify"
+ ],
+ "frequencies": [
+  "daily",
+  "weekly",
+  "fortnightly",
+  "monthly",
+  "period_end",
+  "yearly",
+  "on_demand",
+  "event_driven"
+ ],
+ "categories": [
+  {
+   "id": "jobs",
+   "title": "Background jobs & periodic runs",
+   "kind": "job"
+  },
+  {
+   "id": "flow",
+   "title": "Procurement & inventory variants",
+   "kind": "process"
+  }
+ ],
+ "processes": [
+  {
+   "id": "mmj.1",
+   "category": "jobs",
+   "title": "Automatic PO creation",
+   "plain": "Converting assigned requisitions into POs.",
+   "sapHint": "ME59N",
+   "relatedObjects": "mmpo",
+   "questions": [
+    {
+     "id": "mmj.1.q1",
+     "text": "Which requisitions are automatic?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmj.2",
+   "category": "jobs",
+   "title": "PO output / EDI sending",
+   "plain": "Sending POs to suppliers.",
+   "sapHint": "Output management job",
+   "relatedObjects": "mmout",
+   "questions": [
+    {
+     "id": "mmj.2.q1",
+     "text": "E-mail, EDI or Ariba?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmj.3",
+   "category": "jobs",
+   "title": "Evaluated receipt settlement",
+   "plain": "Self-billing from goods receipts.",
+   "sapHint": "MRRL",
+   "relatedObjects": "mmivr",
+   "questions": [
+    {
+     "id": "mmj.3.q1",
+     "text": "Which suppliers?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmj.4",
+   "category": "jobs",
+   "title": "Release blocked invoices",
+   "plain": "Automatic release when the block reason is gone.",
+   "sapHint": "MRBR",
+   "relatedObjects": "mmivr",
+   "questions": [
+    {
+     "id": "mmj.4.q1",
+     "text": "Frequency?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmj.5",
+   "category": "jobs",
+   "title": "GR/IR clearing & reconciliation",
+   "plain": "Month-end GR/IR analysis.",
+   "sapHint": "F.13 / Reconcile GR/IR Accounts (F3302)",
+   "relatedObjects": "mmval",
+   "questions": [
+    {
+     "id": "mmj.5.q1",
+     "text": "Who owns it?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmj.6",
+   "category": "jobs",
+   "title": "Consumption-based planning run",
+   "plain": "Reorder-point / forecast planning.",
+   "sapHint": "MD01N",
+   "relatedObjects": "mmplan",
+   "questions": [
+    {
+     "id": "mmj.6.q1",
+     "text": "Which materials?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmj.7",
+   "category": "jobs",
+   "title": "Period closing (MMPV)",
+   "plain": "Opening the next posting period for materials.",
+   "sapHint": "MMPV",
+   "relatedObjects": "mmval",
+   "questions": [
+    {
+     "id": "mmj.7.q1",
+     "text": "Who runs it and when?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmf.1",
+   "category": "flow",
+   "title": "Stock material procurement",
+   "plain": "Requisition → PO → GR → invoice for stock items.",
+   "sapHint": "ME51N → ME21N → MIGO → MIRO",
+   "relatedObjects": "mmpo",
+   "questions": [
+    {
+     "id": "mmf.1.q1",
+     "text": "Volume per month?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmf.2",
+   "category": "flow",
+   "title": "Non-stock / indirect procurement",
+   "plain": "Buying to cost centre, order or asset.",
+   "sapHint": "Account-assigned PO",
+   "relatedObjects": "mmpr",
+   "questions": [
+    {
+     "id": "mmf.2.q1",
+     "text": "Which account assignments?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmf.3",
+   "category": "flow",
+   "title": "Subcontracting",
+   "plain": "Sending components to a supplier for processing.",
+   "sapHint": "Item category L",
+   "relatedObjects": "mmspc",
+   "questions": [
+    {
+     "id": "mmf.3.q1",
+     "text": "Which materials / suppliers?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmf.4",
+   "category": "flow",
+   "title": "Consignment",
+   "plain": "Supplier-owned stock at your site.",
+   "sapHint": "Item category K, MRKO settlement",
+   "relatedObjects": "mmspc",
+   "questions": [
+    {
+     "id": "mmf.4.q1",
+     "text": "Settlement frequency?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmf.5",
+   "category": "flow",
+   "title": "Stock transfer between plants",
+   "plain": "Moving stock with stock transport orders.",
+   "sapHint": "UB order, VL10B, MIGO",
+   "relatedObjects": "mmspc",
+   "questions": [
+    {
+     "id": "mmf.5.q1",
+     "text": "One-step or two-step?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "mmf.6",
+   "category": "flow",
+   "title": "Returns to supplier",
+   "plain": "Sending goods back.",
+   "sapHint": "Returns PO / movement type 122 / 161",
+   "relatedObjects": "mmgr",
+   "questions": [
+    {
+     "id": "mmf.6.q1",
+     "text": "How are credits handled?",
+     "type": "text"
+    }
+   ]
+  }
+ ]
+}

@@ -1,9 +1,9 @@
 import pmDe from './catalog/sap-pm-discovery-catalog.de.json'
 import processDe from './catalog/sap-pm-process-catalog.de.json'
-import { discoveryCatalog } from './catalog.js'
+import { discoveryCatalog, activeModuleKey } from './catalog.js'
 import { processCatalog } from './processCatalog.js'
-const readyPm=pmDe.reviewed===true&&pmDe.version===discoveryCatalog.version
-const readyProcess=processDe.reviewed===true&&processDe.version===processCatalog.version
+const readyPm=activeModuleKey==='pm'&&pmDe.reviewed===true&&pmDe.version===discoveryCatalog.version
+const readyProcess=activeModuleKey==='pm'&&processDe.reviewed===true&&processDe.version===processCatalog.version
 export const germanCatalogStatus={objects:readyPm,processes:readyProcess}
 export const getAreaTitle=(area,language='en')=>language==='de'&&readyPm?pmDe.areas[area.id]?.title||area.title:area.title
 export const getProcessCategoryTitle=(category,language='en')=>language==='de'&&readyProcess?processDe.categories[category.id]?.title||category.title:category.title

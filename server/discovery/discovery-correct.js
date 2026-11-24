@@ -2,8 +2,8 @@
 // really is ("not equipment object type — this is the asset master inventory number").
 // The model decides the new target using SAP judgement over the catalog; no keyword rules.
 import { requireApprovedUser, requireJsonBody, sendAuthError } from '../shared/_auth.js'
-import { discoveryCatalog } from '../../src/features/discovery/catalog.js'
-import { catalogBrief, callClaude, KINDS, allowed } from './discovery-transcript.js'
+import { callClaude, KINDS } from './discovery-transcript.js'
+import { MODULES } from './modules.js'
 
 const CATALOG_KINDS = new Set(['field_mark', 'answer', 'decision', 'process'])
 
@@ -21,7 +21,8 @@ export default async function handler(req, res) {
   if (!requireJsonBody(req, res, 8000)) return
   const auth = await requireApprovedUser(req)
   if (!auth.ok) return sendAuthError(res, auth)
-  const { suggestion, correction } = req.body || {}
+  const { suggestion, correction, module } = req.body || {}
+  const mod = MODULES[module] || MODULES.pm
   const text = String(correction || '').trim().slice(0, 1200)
   if (!suggestion || typeof suggestion !== 'object' || text.length < 3) return res.status(400).json({ error: 'Describe what should change' })
   if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI correction is not configured' })
@@ -32,16 +33,16 @@ export default async function handler(req, res) {
     quote: String(suggestion.quote || '').slice(0, 600),
   }
   try {
-    const out = await callClaude(SYSTEM, { catalog: catalogBrief, finding, consultant_correction: text })
+    const out = await callClaude(SYSTEM.replace('a senior SAP consultant', 'a senior ' + mod.label + ' (' + mod.name + ') consultant'), { catalog: mod.brief, finding, consultant_correction: text })
     const kind = String(out?.kind || '')
     const target_ref = String(out?.target_ref || '')
     const payload = out?.payload && typeof out.payload === 'object' && !Array.isArray(out.payload) ? out.payload : null
     if (!payload) throw Error('The AI did not return a usable correction')
     if (kind === 'custom_field') {
-      if (!discoveryCatalog.objects.some(o => o.id === payload.object_id) || !String(payload.label || '').trim()) throw Error('The AI proposed a new field without a valid object')
+      if (!mod.catalog.objects.some(o => o.id === payload.object_id) || !String(payload.label || '').trim()) throw Error('The AI proposed a new field without a valid object')
       if (!['needed', 'not_needed', 'clarify'].includes(payload.mark)) payload.mark = 'needed'
     } else if (!KINDS.has(kind)) throw Error('The AI proposed an unknown finding type')
-    else if (CATALOG_KINDS.has(kind) && !allowed.has(target_ref)) throw Error('The AI proposed a place that is not in the catalog')
+    else if (CATALOG_KINDS.has(kind) && !mod.allowed.has(target_ref)) throw Error('The AI proposed a place that is not in the catalog')
     return res.status(200).json({ kind, target_ref: CATALOG_KINDS.has(kind) ? target_ref : null, payload, explanation: String(out.explanation || '').slice(0, 300) })
   } catch (e) {
     console.error('[discovery-correct]', e.message)

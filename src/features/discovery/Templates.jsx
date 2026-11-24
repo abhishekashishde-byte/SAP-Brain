@@ -1,9 +1,10 @@
+import { activeModule } from './catalog.js'
 import { useMemo,useState } from 'react'
 import { pickTemplateContent,templateItems } from './templateData.js'
 const defaultInclude={custom:true,answers:false,processes:true,requests:true,gaps:true,raid:true}
 const choices=[['custom','Custom fields & questions'],['answers','Typical answers (suggestions only)'],['processes','Process selections'],['requests','Sample request lists'],['gaps','Gap catalogue'],['raid','Risks / assumptions / dependencies']]
 export function SaveTemplate({workshop,session,source,onSave,onClose}){
- const [name,setName]=useState(workshop.project_name?workshop.project_name+' template':'My SAP PM template')
+ const [name,setName]=useState(workshop.project_name?workshop.project_name+' template':'My '+activeModule.label+' template')
  const [tags,setTags]=useState('')
  const [include,setInclude]=useState(defaultInclude)
  const [draft,setDraft]=useState(null)

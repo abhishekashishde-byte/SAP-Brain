@@ -1,0 +1,220 @@
+{
+ "catalogId": "sap-pp-process-catalog",
+ "version": "0.1.0",
+ "language": "en",
+ "statuses": [
+  "valid",
+  "not_valid",
+  "later",
+  "clarify"
+ ],
+ "frequencies": [
+  "daily",
+  "weekly",
+  "fortnightly",
+  "monthly",
+  "period_end",
+  "yearly",
+  "on_demand",
+  "event_driven"
+ ],
+ "categories": [
+  {
+   "id": "jobs",
+   "title": "Background jobs & periodic runs",
+   "kind": "job"
+  },
+  {
+   "id": "flow",
+   "title": "Production process variants",
+   "kind": "process"
+  }
+ ],
+ "processes": [
+  {
+   "id": "ppj.1",
+   "category": "jobs",
+   "title": "MRP Live run",
+   "plain": "Nightly / regular planning run.",
+   "sapHint": "MD01N via Schedule MRP Runs (F1339)",
+   "relatedObjects": "ppmrp",
+   "questions": [
+    {
+     "id": "ppj.1.q1",
+     "text": "Scope and timing of the run?",
+     "type": "text"
+    },
+    {
+     "id": "ppj.1.q2",
+     "text": "Who reviews exceptions afterwards?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppj.2",
+   "category": "jobs",
+   "title": "Planned order conversion",
+   "plain": "Converting planned orders into production orders in batch.",
+   "sapHint": "CO41 / Schedule Order Conversion Runs (F1718)",
+   "relatedObjects": "ppplo",
+   "questions": [
+    {
+     "id": "ppj.2.q1",
+     "text": "Opening period / horizon?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppj.3",
+   "category": "jobs",
+   "title": "Collective release of orders",
+   "plain": "Releasing orders due in the release horizon.",
+   "sapHint": "COHV mass processing",
+   "relatedObjects": "ppord",
+   "questions": [
+    {
+     "id": "ppj.3.q1",
+     "text": "Release horizon in days?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppj.4",
+   "category": "jobs",
+   "title": "Reprocess failed goods movements",
+   "plain": "Clearing COGI errors from backflush.",
+   "sapHint": "COGI / CO1P",
+   "relatedObjects": "ppconf",
+   "questions": [
+    {
+     "id": "ppj.4.q1",
+     "text": "Who owns the error list?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppj.5",
+   "category": "jobs",
+   "title": "Capacity requirements update",
+   "plain": "Re-scheduling orders and updating capacity load.",
+   "sapHint": "CM25 / CM40 levelling or Capacity Scheduling Table",
+   "relatedObjects": "ppcp",
+   "questions": [
+    {
+     "id": "ppj.5.q1",
+     "text": "Is levelling run automatically?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppj.6",
+   "category": "jobs",
+   "title": "Period-end WIP, variances & settlement",
+   "plain": "Month-end order controlling steps.",
+   "sapHint": "KKAO / KKS2 / CO88",
+   "relatedObjects": "ppcost",
+   "questions": [
+    {
+     "id": "ppj.6.q1",
+     "text": "Which steps are run and by whom?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppj.7",
+   "category": "jobs",
+   "title": "Technical completion / closing of orders",
+   "plain": "Mass closing of finished orders.",
+   "sapHint": "COHV",
+   "relatedObjects": "ppgr",
+   "questions": [
+    {
+     "id": "ppj.7.q1",
+     "text": "Criteria for closing?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppf.1",
+   "category": "flow",
+   "title": "Make-to-stock with forecast",
+   "plain": "Producing against forecast / PIRs.",
+   "sapHint": "Strategy 10/40",
+   "relatedObjects": "ppstr",
+   "questions": [
+    {
+     "id": "ppf.1.q1",
+     "text": "Which product families?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppf.2",
+   "category": "flow",
+   "title": "Make-to-order",
+   "plain": "Producing for a specific sales order.",
+   "sapHint": "Strategy 20",
+   "relatedObjects": "ppstr",
+   "questions": [
+    {
+     "id": "ppf.2.q1",
+     "text": "Is the sales order a costing object?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppf.3",
+   "category": "flow",
+   "title": "Rework",
+   "plain": "Reworking defective parts.",
+   "sapHint": "Rework order / rework operation",
+   "relatedObjects": "ppord",
+   "questions": [
+    {
+     "id": "ppf.3.q1",
+     "text": "How is rework recorded and costed?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppf.4",
+   "category": "flow",
+   "title": "External processing (subcontracted operation)",
+   "plain": "Single operations done by a supplier.",
+   "sapHint": "Control key PP02 + purchase requisition",
+   "relatedObjects": "pprout",
+   "questions": [
+    {
+     "id": "ppf.4.q1",
+     "text": "Which operations go outside?",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "id": "ppf.5",
+   "category": "flow",
+   "title": "Co-products / by-products",
+   "plain": "Several outputs from one order.",
+   "sapHint": "Co-product BOM items",
+   "relatedObjects": "ppbom",
+   "questions": [
+    {
+     "id": "ppf.5.q1",
+     "text": "Which products and how are costs split?",
+     "type": "text"
+    }
+   ]
+  }
+ ]
+}

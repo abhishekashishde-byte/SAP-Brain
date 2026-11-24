@@ -1,6 +1,6 @@
 {
  "catalogId": "sap-pm-discovery",
- "version": "1.0.0",
+ "version": "1.1.0",
  "domain": "SAP PM",
  "language": "en",
  "markStates": [
@@ -24,6 +24,11 @@
   {
    "id": "preventive",
    "title": "Preventive maintenance"
+  },
+  {
+   "id": "planning",
+   "title": "Planning, scheduling & capacity",
+   "impliedBy": "corrective"
   },
   {
    "id": "logistics",
@@ -306,6 +311,13 @@
       "Any level"
      ]
     }
+   ],
+   "apps": [
+    {
+     "id": "F2072",
+     "name": "Find Technical Object",
+     "note": "Find, display, mass edit; install/dismantle"
+    }
    ]
   },
   {
@@ -493,6 +505,13 @@
       "Standard warranty",
       "Not needed"
      ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F2072",
+     "name": "Find Technical Object",
+     "note": "Find, display, mass edit; install/dismantle"
     }
    ]
   },
@@ -692,6 +711,13 @@
       "Mobile app",
       "Interface"
      ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F5104A",
+     "name": "Perform Maintenance Jobs",
+     "note": "Technicians record measurement readings"
     }
    ]
   },
@@ -1074,6 +1100,32 @@
       "Workflow"
      ]
     }
+   ],
+   "apps": [
+    {
+     "id": "F1511A",
+     "name": "Create Maintenance Request"
+    },
+    {
+     "id": "F4513",
+     "name": "My Maintenance Requests"
+    },
+    {
+     "id": "F4072",
+     "name": "Screen Maintenance Requests"
+    },
+    {
+     "id": "F5777",
+     "name": "Manage Maintenance Notifications"
+    },
+    {
+     "id": "F2071",
+     "name": "Find Maintenance Notification"
+    },
+    {
+     "id": "F4604",
+     "name": "Manage Maintenance Notifications and Orders"
+    }
    ]
   },
   {
@@ -1252,6 +1304,30 @@
       "Framework order"
      ]
     }
+   ],
+   "apps": [
+    {
+     "id": "F4604",
+     "name": "Manage Maintenance Notifications and Orders",
+     "note": "Create orders from notifications, mass edit, release"
+    },
+    {
+     "id": "F2175",
+     "name": "Find Maintenance Order"
+    },
+    {
+     "id": "F2173",
+     "name": "Find Maintenance Order and Operation"
+    },
+    {
+     "id": "F6178",
+     "name": "Manage Components and Services",
+     "note": "Externally procured materials & lean services for orders"
+    },
+    {
+     "id": "F4603",
+     "name": "Maintenance Order Costs"
+    }
    ]
   },
   {
@@ -1391,6 +1467,13 @@
       "Findings mandatory",
       "Optional"
      ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F5104A",
+     "name": "Perform Maintenance Jobs",
+     "note": "Time, components, measurements, findings; successor of My Maintenance Jobs (F5104)"
     }
    ]
   },
@@ -1666,6 +1749,199 @@
       "Daily job",
       "Weekly job"
      ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F5325",
+     "name": "Manage Maintenance Plans"
+    },
+    {
+     "id": "F5356",
+     "name": "Manage Maintenance Items"
+    },
+    {
+     "id": "F4577",
+     "name": "Manage Maintenance Schedule for Assets"
+    }
+   ]
+  },
+  {
+   "id": "sched",
+   "title": "Scheduling & capacity planning (resources)",
+   "area": "planning",
+   "tcodes": [
+    "IW37N",
+    "CM01",
+    "CM25",
+    "IW38",
+    "IP19"
+   ],
+   "plain": "Matching maintenance work to available people and work centres: backlog, planning buckets, weekly schedule, dispatching and utilisation.",
+   "fields": [
+    {
+     "id": "sched.f1",
+     "label": "Work centre capacity (people, shifts, hours)",
+     "tier": "core"
+    },
+    {
+     "id": "sched.f2",
+     "label": "Operation work & duration / number of people",
+     "tier": "core"
+    },
+    {
+     "id": "sched.f3",
+     "label": "Scheduling type & dates (earliest / latest)",
+     "tier": "core"
+    },
+    {
+     "id": "sched.f4",
+     "label": "Planning buckets / weekly schedule (freeze window)",
+     "tier": "core"
+    },
+    {
+     "id": "sched.f5",
+     "label": "Dispatching to people (individual capacities)",
+     "tier": "core"
+    },
+    {
+     "id": "sched.f6",
+     "label": "Utilisation monitoring (load vs available)",
+     "tier": "core"
+    },
+    {
+     "id": "sched.f7",
+     "label": "Maintenance events / revisions (shutdowns)",
+     "tier": "optional"
+    },
+    {
+     "id": "sched.f8",
+     "label": "Qualifications / skills per person",
+     "tier": "optional"
+    },
+    {
+     "id": "sched.f9",
+     "label": "Capacity levelling (CM25)",
+     "tier": "optional"
+    },
+    {
+     "id": "sched.f10",
+     "label": "Order priority / criticality-based sequencing",
+     "tier": "optional"
+    },
+    {
+     "id": "sched.f11",
+     "label": "External scheduling tool (e.g. SAP FSM, Prometheus, scheduling add-ons)",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "sched.q1",
+     "text": "How is maintenance work scheduled today?",
+     "type": "single",
+     "options": [
+      "Not scheduled — done as it comes",
+      "Weekly schedule in Excel / board",
+      "Scheduled in the legacy system",
+      "Dedicated scheduling tool"
+     ]
+    },
+    {
+     "id": "sched.q2",
+     "text": "Is capacity (available hours per craft / work centre) checked before committing work?",
+     "type": "yesno"
+    },
+    {
+     "id": "sched.q3",
+     "text": "Is work assigned to named technicians or only to the team?",
+     "type": "single",
+     "options": [
+      "Team / work centre only",
+      "Named person",
+      "Both"
+     ]
+    },
+    {
+     "id": "sched.q4",
+     "text": "Is there a fixed weekly planning cycle (planning meeting, freeze window)?",
+     "type": "yesno"
+    },
+    {
+     "id": "sched.q5",
+     "text": "How are shutdowns / turnarounds planned?",
+     "type": "text"
+    },
+    {
+     "id": "sched.q6",
+     "text": "Is there a backlog measurement (weeks of work)?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "sched.d1",
+     "text": "Scheduling approach in SAP",
+     "options": [
+      "Resource Scheduling apps (Maintenance Scheduling Board etc.)",
+      "Planning buckets & backlog (Manage Maintenance Planning Buckets)",
+      "Classic capacity planning (CM01/CM25)",
+      "External scheduling tool"
+     ]
+    },
+    {
+     "id": "sched.d2",
+     "text": "Dispatching level",
+     "options": [
+      "Work centre",
+      "Person",
+      "Both"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F2603",
+     "name": "Maintenance Scheduling Board",
+     "note": "Gantt of orders, operations, sub-operations per work centre incl. utilisation"
+    },
+    {
+     "id": "F2227",
+     "name": "Resource Scheduling for Maintenance Planners",
+     "note": "Work-centre utilisation KPIs and planner entry point"
+    },
+    {
+     "id": "F3326",
+     "name": "Manage Schedules",
+     "note": "Weekly / recurring maintenance schedules"
+    },
+    {
+     "id": "F3423",
+     "name": "Assign Maintenance Order Operations",
+     "note": "Dispatch operations to persons"
+    },
+    {
+     "id": "F4577",
+     "name": "Manage Maintenance Schedule for Assets"
+    },
+    {
+     "id": "F3888A",
+     "name": "Manage Maintenance Planning Buckets",
+     "note": "Operational & event-based buckets (new version; F3888 is the old one)"
+    },
+    {
+     "id": "F4073",
+     "name": "Manage Maintenance Backlog",
+     "note": "Opened from planning buckets / backlog overview"
+    },
+    {
+     "id": "F5105",
+     "name": "Maintenance Backlog Overview"
+    },
+    {
+     "id": null,
+     "name": "Manage Work Center Utilization",
+     "note": "Load vs target utilisation per work centre"
     }
    ]
   },
@@ -2166,6 +2442,12 @@
       "Active availability control"
      ]
     }
+   ],
+   "apps": [
+    {
+     "id": "F4603",
+     "name": "Maintenance Order Costs"
+    }
    ]
   },
   {
@@ -2481,6 +2763,20 @@
       "Fiori analytics",
       "External BI"
      ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F2812",
+     "name": "Technical Object Breakdowns"
+    },
+    {
+     "id": "F3075",
+     "name": "Technical Object Damages"
+    },
+    {
+     "id": "F5105",
+     "name": "Maintenance Backlog Overview"
     }
    ]
   },

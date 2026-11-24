@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../supabaseClient'
-import { discoveryCatalog, discoveryCounts } from './catalog.js'
+import { discoveryCatalog, discoveryCounts, activeModule, activeModuleKey, moduleKeyFor, MODULE_STORAGE_KEY, DISCOVERY_MODULES, scopeIncludes } from './catalog.js'
 import { loadWorkshops,createWorkshop,updateWorkshop,removeWorkshop,loadEntries,loadTodos,createTodo,updateTodo,removeTodo,entryKey,createEntryQueue,saveEntry,saveMinutes,loadMinutes,loadSourceSystems,addSourceSystem,changeSourceSystem,deleteSourceSystem,loadObjectSources,saveObjectSources,loadLegacyFields,createLegacyField,updateLegacyField,deleteLegacyField,loadProcessEntries,createProcessQueue,loadHints,reviewHint,updateHint } from './data.js'
 import './DiscoveryWorkshop.css'
 import {SourceSystemList,ObjectSourcePicker} from './SourceSystems.jsx'
@@ -29,7 +29,7 @@ import {buildContentRows} from './contentSearch.js'
 import {WaniLogo} from '../../pages/Login.jsx'
 
 const today=()=>new Date().toLocaleDateString('en-CA')
-const emptyForm=()=>({client_name:'',title:'SAP PM Discovery Workshop',project_name:'',consultant_name:'',call_date:today(),start_time:'',end_time:'',participants:'',legacy_system:'',scope_areas:discoveryCatalog.areas.map(a=>a.id)})
+const emptyForm=()=>({client_name:'',title:activeModule.label+' Discovery Workshop',project_name:'',consultant_name:'',call_date:today(),start_time:'',end_time:'',participants:'',legacy_system:'',scope_areas:discoveryCatalog.areas.map(a=>a.id)})
 const inputTypes={yesno:['Yes','No','Unsure']}
 const markCycle=['','needed','not_needed','clarify']
 const statuses=['not_started','in_progress','done','out_of_scope']
@@ -179,7 +179,8 @@ export default function DiscoveryWorkshop({session}) {
  const processQueue=useRef(null)
  const firstQueue=useRef(null)
  const userId=session?.user?.id
- const scoped=useMemo(()=>discoveryCatalog.objects.filter(o=>workshop?.scope_areas?.length?workshop.scope_areas.includes(o.area):true),[workshop])
+ const moduleWorkshops=useMemo(()=>workshops.filter(w=>moduleKeyFor(w.catalog_id)===activeModuleKey),[workshops])
+ const scoped=useMemo(()=>discoveryCatalog.objects.filter(o=>scopeIncludes(workshop?.scope_areas,o.area)),[workshop])
  const objects=useMemo(()=>scoped.filter(o=>(!onlyCarried||Object.values(entries).some(r=>r.object_id===o.id&&r.carried_from))&&(scope==='all'||o.area===scope)&&(o.title.toLowerCase().includes(search.toLowerCase())||o.plain.toLowerCase().includes(search.toLowerCase())||o.tcodes.some(t=>t.toLowerCase().includes(search.toLowerCase())))),[scoped,scope,search,onlyCarried,entries])
  const selected=objects.find(o=>o.id===selectedId)||objects[0]
  const selectedIndex=objects.findIndex(o=>o.id===selected?.id)
@@ -199,18 +200,21 @@ export default function DiscoveryWorkshop({session}) {
  const refresh=useCallback(async()=>{if(!userId)return [];setLoading(true);try{const rows=await loadWorkshops(userId);setWorkshops(rows);setError('');return rows}catch(e){setError(e.message);return []}finally{setLoading(false)}},[userId])
  // Deep links from the Implementation page: ?workshop=<id> opens it, ?new=1 starts the create form.
  const deepLinked=useRef(false)
+ useEffect(()=>{try{sessionStorage.setItem(MODULE_STORAGE_KEY,activeModuleKey)}catch{}},[])
  useEffect(()=>{refresh().then(rows=>{
   if(deepLinked.current)return;deepLinked.current=true
   const params=new URLSearchParams(window.location.search)
   const id=params.get('workshop')
   if(id){const w=rows.find(x=>x.id===id);if(w)openWorkshop(w)}
   else if(params.get('new')==='1'){setForm(emptyForm());setMode('create')}
-  if(id||params.get('new'))window.history.replaceState(null,'',window.location.pathname)
+  if(id||params.get('new')||params.get('module'))window.history.replaceState(null,'',window.location.pathname)
  })},[refresh])
  const refreshTemplateLibrary=useCallback(async()=>{if(!userId)return;try{setTemplates(await loadTemplates(userId))}catch(e){setError('Template library unavailable: '+e.message)}},[userId])
  useEffect(()=>{refreshTemplateLibrary()},[refreshTemplateLibrary])
  useEffect(()=>()=>{queue.current?.close();processQueue.current?.close();firstQueue.current?.close()},[])
  async function openWorkshop(w) {
+  const wKey=moduleKeyFor(w.catalog_id)
+  if(wKey!==activeModuleKey){try{sessionStorage.setItem(MODULE_STORAGE_KEY,wKey)}catch{};window.location.assign('/discovery?module='+wKey+'&workshop='+encodeURIComponent(w.id));return}
   queue.current?.close();queue.current=null;processQueue.current?.close();processQueue.current=null;firstQueue.current?.close();firstQueue.current=null;setLoading(true);setError('')
   try {
    const [rows,taskRows,sources,objectRows,extraRows,procRows,hintRows,firstRows,scopeRows,inventoryRows,seriesRows,prevRows,transcriptRows,suggestionRows]=await Promise.all([loadEntries(w.id),loadTodos(w.id),loadSourceSystems(w.id),loadObjectSources(w.id),loadLegacyFields(w.id),loadProcessEntries(w.id),loadHints(w.id),loadFirstCall(w.id),loadScopingP1(w.id),loadScopingInventories(w.id),loadEngagementSessions(w.engagement_id),loadPreviousEntries(w.previous_workshop_id),loadTranscripts(w.id),loadTranscriptSuggestions(w.id)])
@@ -705,7 +709,7 @@ export default function DiscoveryWorkshop({session}) {
     <a className="dw-logo-link" href="/" title="Wani chat" aria-label="Wani chat"><WaniLogo size={22} dark/></a>
     <nav className="dw-crumbs" aria-label="Breadcrumb">
      <a href="/implementation">Implementation</a><span aria-hidden="true">›</span>
-     {mode==='workshop'&&workshop?<><button type="button" onClick={goBack}>Discovery · PM</button><span aria-hidden="true">›</span><span className="dw-crumb-current" aria-current="page">{workshop.client_name}</span></>:<span className="dw-crumb-current" aria-current="page">Discovery · SAP PM</span>}
+     {mode==='workshop'&&workshop?<><button type="button" onClick={goBack}>Discovery · {activeModule.label.replace('SAP ','')}</button><span aria-hidden="true">›</span><span className="dw-crumb-current" aria-current="page">{workshop.client_name}</span></>:<span className="dw-crumb-current" aria-current="page">Discovery · {activeModule.label}</span>}
     </nav>
    </div>
    {mode==='workshop'&&workshop&&<div className="dw-header-actions">
@@ -722,11 +726,11 @@ export default function DiscoveryWorkshop({session}) {
   {mode==='workshop'&&workshop&&<Finder open={finderOpen} onClose={()=>setFinderOpen(false)} onGo={goTo} session={session} workshopId={workshop.id} currentObject={selected?.title} contentRows={contentRows}/>}
   <div className="dw-container">
   {error&&<div role="alert" className="dw-alert">{error}<button className="dw-close" onClick={()=>setError('')}>×</button></div>}
-  {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">Discover · SAP Plant Maintenance</div><h1>Customer workshops</h1><p>Confidential to your account. Open a workshop to continue, or start a new one.</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>setMode('templates')}>My templates ({templates.length})</button><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div></div>
-   {loading&&<p>Loading workshops…</p>}{!loading&&!workshops.length&&<div className="dw-card"><h2>No workshops yet</h2><p>Create a workshop to begin capturing SAP PM requirements.</p></div>}
-   <div className="dw-workshop-list">{workshops.map(w=><article className="dw-list-card" key={w.id}><div><div className="dw-kicker">{w.call_date} · {w.status}</div><h2>{w.client_name}</h2><p>{w.title} · {w.project_name||'SAP PM'}</p></div><div className="dw-actions"><button className="dw-button dw-primary" onClick={()=>openWorkshop(w)}>Open</button><button className="dw-button" onClick={()=>deleteWorkshop(w)}>Delete</button></div></article>)}</div></>}
+  {mode==='list'&&<><div className="dw-list-heading"><div><div className="dw-kicker">Discover · {activeModule.label} — {activeModule.name}{discoveryCatalog.draft&&<span className="dw-draft-pill" title="First version of this catalog — review objects, questions and apps with your project">Draft catalog</span>}</div><div className="dw-module-tabs" role="tablist" aria-label="SAP module">{Object.values(DISCOVERY_MODULES).map(m=><a key={m.key} role="tab" aria-selected={m.key===activeModuleKey} className={m.key===activeModuleKey?'is-active':''} href={'/discovery?module='+m.key}>{m.label.replace('SAP ','')}{m.catalog.draft?<small> draft</small>:null}</a>)}</div><h1>Customer workshops</h1><p>Confidential to your account. Open a workshop to continue, or start a new one.</p></div><div className="dw-actions"><button className="dw-button" onClick={()=>setMode('templates')}>My templates ({templates.length})</button><button className="dw-button dw-primary" onClick={()=>{setForm(emptyForm());setMode('create')}}>+ New workshop</button></div></div>
+   {loading&&<p>Loading workshops…</p>}{!loading&&!moduleWorkshops.length&&<div className="dw-card"><h2>No workshops yet</h2><p>Create a workshop to begin capturing SAP PM requirements.</p></div>}
+   <div className="dw-workshop-list">{moduleWorkshops.map(w=><article className="dw-list-card" key={w.id}><div><div className="dw-kicker">{w.call_date} · {w.status}</div><h2>{w.client_name}</h2><p>{w.title} · {w.project_name||'SAP PM'}</p></div><div className="dw-actions"><button className="dw-button dw-primary" onClick={()=>openWorkshop(w)}>Open</button><button className="dw-button" onClick={()=>deleteWorkshop(w)}>Delete</button></div></article>)}</div></>}
   {mode==='templates'&&<><button className="dw-inline-button" onClick={()=>setMode('list')}>← All workshops</button><TemplateLibrary templates={templates} onRename={renamePersonalTemplate} onDelete={removePersonalTemplate} onUse={template=>{setSelectedTemplate(template);setForm(emptyForm());setMode('create')}}/></>}
-  {mode==='create'&&<div className="dw-card dw-form-card"><button className="dw-inline-button" onClick={()=>setMode('list')}>← All workshops</button><h1>New discovery workshop</h1>{selectedTemplate&&<p className="dw-caption">Starting from template: {selectedTemplate.name}. All content remains suggestions until accepted.</p>}<form onSubmit={create}><div className="dw-form-grid">
+  {mode==='create'&&<div className="dw-card dw-form-card"><button className="dw-inline-button" onClick={()=>setMode('list')}>← All workshops</button><h1>New {activeModule.label} discovery workshop</h1>{selectedTemplate&&<p className="dw-caption">Starting from template: {selectedTemplate.name}. All content remains suggestions until accepted.</p>}<form onSubmit={create}><div className="dw-form-grid">
    {[['client_name','Customer / company *','text'],['call_date','Meeting date *','date'],['title','Workshop title','text'],['project_name','Project','text'],['consultant_name','Consultant','text'],['participants','Participants','text'],['legacy_system','Legacy system','text'],['start_time','Start time','time'],['end_time','End time','time']].map(([key,label,type])=><label key={key}>{label}<input required={key==='client_name'||key==='call_date'} type={type} value={form[key]} onChange={e=>setForm(x=>({...x,[key]:e.target.value}))}/></label>)}
    </div><fieldset className="dw-scope-fields"><legend>SAP process areas in scope</legend>{discoveryCatalog.areas.map(a=><label key={a.id}><input type="checkbox" checked={form.scope_areas.includes(a.id)} onChange={e=>setForm(x=>({...x,scope_areas:e.target.checked?[...x.scope_areas,a.id]:x.scope_areas.filter(k=>k!==a.id)}))}/>{a.title}</label>)}</fieldset>
    <p className="dw-caption">Customer information and workshop notes are confidential and are not included in Wani's shared knowledge base.</p><button type="submit" disabled={loading||!form.scope_areas.length} className="dw-button dw-primary">Create workshop</button></form></div>}
@@ -789,7 +793,7 @@ export default function DiscoveryWorkshop({session}) {
      {FIRST_CALL_SECTIONS.map(([id,title])=><button key={id} className={`dw-nav-item ${firstTab===id?'dw-active':''}`} onClick={()=>openFirst(id)}><span className="dw-nav-label">{title}</span><span className="dw-nav-count">{(firstCall[id]||[]).length||''}</span></button>)}
     </div>
     <div className="dw-nav-group dw-nav-catalog">
-     <div className="dw-nav-heading dw-nav-heading-row"><span>SAP PM objects</span><span>{scoped.filter(o=>val(o.id,'object_status','main').status==='done').length}/{scoped.length} done</span></div>
+     <div className="dw-nav-heading dw-nav-heading-row"><span>{activeModule.label} objects</span><span>{scoped.filter(o=>val(o.id,'object_status','main').status==='done').length}/{scoped.length} done</span></div>
      <input className="dw-search" placeholder="Filter objects or T-codes" aria-label="Filter objects" value={search} onChange={e=>setSearch(e.target.value)}/>
      {workshop.previous_workshop_id&&<label className="dw-mini-checkbox"><input type="checkbox" checked={onlyCarried} onChange={e=>setOnlyCarried(e.target.checked)}/>Only carried-over items</label>}
      {discoveryCatalog.areas.map(a=>{const children=objects.filter(o=>o.area===a.id);if(!children.length)return null;const done=children.filter(o=>val(o.id,'object_status','main').status==='done').length;return <details key={a.id} className="dw-area" open={children.some(o=>o.id===selected?.id)||!!search||children.length<=4}>
@@ -810,7 +814,7 @@ export default function DiscoveryWorkshop({session}) {
     <div className="dw-mobile-pickers">
      <label><span>Section</span><select value={scopingTab?'s:'+scopingTab:firstTab?'f:'+firstTab:showProcesses?'processes':showSummary?'summary':'objects'} onChange={e=>{const v=e.target.value;if(v==='objects'){selectObject(selected?.id||objects[0]?.id);return}if(v==='processes'||v==='summary')return goTo({type:'section',id:v});goTo({type:'section',id:v.slice(2)})}}>
       <option value="s:transcripts">Transcript analysis{transcriptSuggestions.some(x=>x.status==='pending'||x.status==='edited')?` (${transcriptSuggestions.filter(x=>x.status==='pending'||x.status==='edited').length} to review)`:''}</option>
-      <option value="objects">SAP PM objects</option>
+      <option value="objects">{activeModule.label} objects</option>
       <optgroup label="Customer context">{FIRST_CALL_SECTIONS.map(([id,title])=><option key={id} value={'f:'+id}>{title}</option>)}</optgroup>
       <option value="processes">Processes & jobs</option>
       <optgroup label="Scope & gaps"><option value="s:gaps">Fit-gap</option><option value="s:interfaces">Interfaces</option><option value="s:forms_reports">Forms & reports</option><option value="s:raid">Risks & assumptions</option></optgroup>
@@ -821,6 +825,7 @@ export default function DiscoveryWorkshop({session}) {
      </select></label>}
     </div>{scopingTab==='transcripts'?<Transcripts autoAnalyseId={autoAnalyseId} onAutoAnalysed={()=>setAutoAnalyseId(null)} onOpenObject={id=>{selectObject(id)}} workshop={workshop} session={session} transcripts={transcripts} suggestions={transcriptSuggestions} onRefresh={refreshTranscriptData} onAccept={acceptTranscriptSuggestion} onExisting={existingTranscriptValue} presenter={presenter}/>:['interfaces','forms_reports','raid'].includes(scopingTab)?<ScopingInventory key={scopingTab} kind={scopingTab} rows={inventories[scopingTab]} stakeholders={firstCall.stakeholders} requests={firstCall.requests} onAdd={newInventory} onEdit={changeInventory} onDelete={removeInventory} onGap={inventoryToGap} presenter={presenter}/>:scopingTab==='gaps'?<FitGap entries={entries} legacyFields={legacyFields} processEntries={processEntries} legacyHints={legacyHints} gaps={gaps} ignored={ignoredGaps} stakeholders={firstCall.stakeholders} onAdd={createGap} onEdit={changeGap} onDelete={removeGap} onIgnore={ignoreGapCandidate} onUnignore={unignoreGapCandidate} presenter={presenter} session={session} workshopId={workshop.id} onMerge={mergeGapGroup}/>:firstTab?<FirstCall key={firstTab} section={firstTab} rows={firstCall} workshopId={workshop.id} add={addFirst} edit={editFirst} remove={deleteFirst} onTodo={moveParkToTodo} objectId={selected?.id} presenter={presenter}/>:showProcesses?<ProcessJobs workshopId={workshop.id} entries={processEntries} onChange={changeProcess} presenter={presenter} language={workshop.client_language||'en'} onJump={selectObject} onTask={createProcessTask} categoryNotes={Object.fromEntries(processCatalog.categories.map(cat=>[cat.id,{text:val('process:'+cat.id,'area_note','main').text||'',internal:!!entry('process:'+cat.id,'area_note','main')?.is_internal}]))} onCategoryNote={(id,text,internal)=>writeNote('process:'+id,'area_note','main',text,internal)}/>:selected&&<div className="dw-card"><div className="dw-object-heading"><div><div className="dw-kicker">{area?.title} · {selectedIndex+1} / {objects.length}</div><h2 title={germanHoverText(selected.id,'object')}>{displaySelected.title}</h2></div><select aria-label="Object status" value={val(selected.id,'object_status','main').status||'not_started'} onChange={e=>writeEntry(selected.id,'object_status','main',{status:e.target.value})}>{statuses.map(x=><option key={x} value={x}>{labels[x]}</option>)}</select></div>
     <div className="dw-tcodes">{selected.tcodes.map(c=><code key={c}>{c}</code>)}</div>
+    {selected.apps?.length>0&&<div className="dw-apps" aria-label="SAP Fiori apps for this object"><span className="dw-apps-label">Fiori apps</span>{selected.apps.map(a=>a.id?<a key={a.id+a.name} className="dw-app" href={'https://fioriappslibrary.hana.ondemand.com/sap/fix/externalViewer/#/detail/Apps(\''+a.id+'\')'} target="_blank" rel="noopener noreferrer" title={(a.note?a.note+' — ':'')+'Open in the SAP Fiori apps library'}><code>{a.id}</code>{a.name}</a>:<span key={a.name} className="dw-app dw-app-noid" title={a.note||'App ID not confirmed — check the Fiori apps library'}>{a.name}</span>)}</div>}
     <div className="dw-context-chips" aria-label="Linked information">
      {[
       ['Owners',firstCall.stakeholders.filter(x=>(x.responsible_for||[]).includes(selected.id)).map(x=>x.name).join(', ')||'—',()=>openFirst('stakeholders')],

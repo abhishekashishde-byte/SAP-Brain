@@ -1,6 +1,8 @@
-import catalog from './catalog/sap-pm-process-catalog.json' with { type: 'json' }
-import { discoveryCatalog } from './catalog.js'
-export function validateProcessCatalog(d){
+import pmProcess from './catalog/sap-pm-process-catalog.json' with { type: 'json' }
+import ppProcess from './catalog/sap-pp-process-catalog.json' with { type: 'json' }
+import mmProcess from './catalog/sap-mm-process-catalog.json' with { type: 'json' }
+import { DISCOVERY_MODULES, activeModuleKey } from './catalog.js'
+export function validateProcessCatalog(d,discoveryCatalog=DISCOVERY_MODULES.pm.catalog){
  if(!d||typeof d.catalogId!=='string'||typeof d.version!=='string'||!Array.isArray(d.categories)||!Array.isArray(d.processes))throw new Error('Invalid process catalog')
  const ids=new Set(),cats=new Set()
  for(const c of d.categories){if(!c.id||cats.has(c.id)||!['job','process'].includes(c.kind)||!c.title)throw new Error('Invalid process category '+c.id);cats.add(c.id)}
@@ -14,4 +16,5 @@ export function validateProcessCatalog(d){
  if(new Set(d.statuses).size!==d.statuses.length||new Set(d.frequencies).size!==d.frequencies.length)throw new Error('Duplicate process choice')
  return d
 }
-export const processCatalog=validateProcessCatalog(catalog)
+export const PROCESS_CATALOGS={pm:validateProcessCatalog(pmProcess,DISCOVERY_MODULES.pm.catalog),pp:validateProcessCatalog(ppProcess,DISCOVERY_MODULES.pp.catalog),mm:validateProcessCatalog(mmProcess,DISCOVERY_MODULES.mm.catalog)}
+export const processCatalog=PROCESS_CATALOGS[activeModuleKey]

@@ -1,0 +1,2180 @@
+{
+ "catalogId": "sap-pp-discovery",
+ "version": "0.1.0",
+ "draft": true,
+ "domain": "SAP PP",
+ "language": "en",
+ "markStates": [
+  "needed",
+  "not_needed",
+  "clarify"
+ ],
+ "areas": [
+  {
+   "id": "pporg",
+   "title": "Organisation & setup"
+  },
+  {
+   "id": "ppmaster",
+   "title": "Production master data"
+  },
+  {
+   "id": "ppdemand",
+   "title": "Demand & planning"
+  },
+  {
+   "id": "ppcap",
+   "title": "Capacity planning & scheduling"
+  },
+  {
+   "id": "ppexec",
+   "title": "Shop floor execution"
+  },
+  {
+   "id": "ppfin",
+   "title": "Costs & controlling"
+  },
+  {
+   "id": "ppcross",
+   "title": "Cross topics"
+  }
+ ],
+ "objects": [
+  {
+   "id": "ppo",
+   "title": "Plant & planning organisation",
+   "area": "pporg",
+   "tcodes": [
+    "OX10",
+    "OPPQ",
+    "OPU3",
+    "OPJH"
+   ],
+   "plain": "Plants, MRP controllers, production schedulers and supervisors — who plans and who runs production.",
+   "fields": [
+    {
+     "id": "ppo.f1",
+     "label": "Plants / manufacturing sites",
+     "tier": "core"
+    },
+    {
+     "id": "ppo.f2",
+     "label": "MRP controllers",
+     "tier": "core"
+    },
+    {
+     "id": "ppo.f3",
+     "label": "Production schedulers",
+     "tier": "core"
+    },
+    {
+     "id": "ppo.f4",
+     "label": "Production supervisors",
+     "tier": "core"
+    },
+    {
+     "id": "ppo.f5",
+     "label": "Storage locations for production (supply areas)",
+     "tier": "core"
+    },
+    {
+     "id": "ppo.f6",
+     "label": "MRP areas",
+     "tier": "optional"
+    },
+    {
+     "id": "ppo.f7",
+     "label": "Scheduling margin keys",
+     "tier": "optional"
+    },
+    {
+     "id": "ppo.f8",
+     "label": "Area of responsibility for Fiori apps",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppo.q1",
+     "text": "How many plants produce, and do they plan independently?",
+     "type": "text"
+    },
+    {
+     "id": "ppo.q2",
+     "text": "Who plans materials, and who schedules the shop floor?",
+     "type": "text"
+    },
+    {
+     "id": "ppo.q3",
+     "text": "Which manufacturing types are used?",
+     "type": "multi",
+     "options": [
+      "Discrete (production orders)",
+      "Repetitive / flow",
+      "Process (batches, recipes)",
+      "Engineer-to-order / projects",
+      "Kanban"
+     ]
+    },
+    {
+     "id": "ppo.q4",
+     "text": "Is planning done centrally for several plants?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppo.d1",
+     "text": "Production model per plant",
+     "options": [
+      "Discrete",
+      "Repetitive",
+      "Process",
+      "Mixed by product family"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppmat",
+   "title": "Material master — MRP & work scheduling views",
+   "area": "ppmaster",
+   "tcodes": [
+    "MM01",
+    "MM02",
+    "MM17",
+    "MD07"
+   ],
+   "plain": "How each product is planned: MRP type, lot size, lead times, safety stock, procurement type.",
+   "fields": [
+    {
+     "id": "ppmat.f1",
+     "label": "MRP type",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f2",
+     "label": "MRP controller",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f3",
+     "label": "Lot-sizing procedure",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f4",
+     "label": "Procurement type (in-house / external)",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f5",
+     "label": "Special procurement key",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f6",
+     "label": "In-house production time / planned delivery time",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f7",
+     "label": "Safety stock / safety time",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f8",
+     "label": "Strategy group",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f9",
+     "label": "Production scheduling profile",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f10",
+     "label": "Backflush indicator",
+     "tier": "core"
+    },
+    {
+     "id": "ppmat.f11",
+     "label": "Batch management",
+     "tier": "optional"
+    },
+    {
+     "id": "ppmat.f12",
+     "label": "Minimum / maximum / rounding lot size",
+     "tier": "optional"
+    },
+    {
+     "id": "ppmat.f13",
+     "label": "Production storage location",
+     "tier": "optional"
+    },
+    {
+     "id": "ppmat.f14",
+     "label": "Coverage profile (range of coverage)",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppmat.q1",
+     "text": "How many materials are produced in-house vs. bought?",
+     "type": "text"
+    },
+    {
+     "id": "ppmat.q2",
+     "text": "How are lot sizes decided today (fixed, per order, weekly)?",
+     "type": "text"
+    },
+    {
+     "id": "ppmat.q3",
+     "text": "Are lead times kept up to date and who owns them?",
+     "type": "text"
+    },
+    {
+     "id": "ppmat.q4",
+     "text": "Are there materials planned manually / outside the system?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppmat.d1",
+     "text": "Lot-sizing standard",
+     "options": [
+      "Exact lot size",
+      "Fixed lot size",
+      "Period lot size (weekly/monthly)",
+      "Optimising procedures"
+     ]
+    },
+    {
+     "id": "ppmat.d2",
+     "text": "Safety buffer approach",
+     "options": [
+      "Safety stock",
+      "Safety time",
+      "Dynamic safety stock (coverage profile)",
+      "None"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1602",
+     "name": "Manage Product Master Data",
+     "note": "Fiori maintenance of the material (product) master incl. MRP and work scheduling data"
+    }
+   ]
+  },
+  {
+   "id": "ppbom",
+   "title": "Bill of material",
+   "area": "ppmaster",
+   "tcodes": [
+    "CS01",
+    "CS02",
+    "CS03",
+    "CS11",
+    "CS12",
+    "CS20"
+   ],
+   "plain": "What goes into each product: components, quantities, scrap, alternatives and validity.",
+   "fields": [
+    {
+     "id": "ppbom.f1",
+     "label": "BOM usage (production / engineering / costing)",
+     "tier": "core"
+    },
+    {
+     "id": "ppbom.f2",
+     "label": "Base quantity",
+     "tier": "core"
+    },
+    {
+     "id": "ppbom.f3",
+     "label": "Components & quantities",
+     "tier": "core"
+    },
+    {
+     "id": "ppbom.f4",
+     "label": "Item category (stock / non-stock / text)",
+     "tier": "core"
+    },
+    {
+     "id": "ppbom.f5",
+     "label": "Component scrap / operation scrap",
+     "tier": "core"
+    },
+    {
+     "id": "ppbom.f6",
+     "label": "Alternative BOMs",
+     "tier": "core"
+    },
+    {
+     "id": "ppbom.f7",
+     "label": "Phantom assemblies",
+     "tier": "optional"
+    },
+    {
+     "id": "ppbom.f8",
+     "label": "Co-products / by-products",
+     "tier": "optional"
+    },
+    {
+     "id": "ppbom.f9",
+     "label": "Change numbers (engineering change management)",
+     "tier": "optional"
+    },
+    {
+     "id": "ppbom.f10",
+     "label": "Variant BOM / classification",
+     "tier": "optional"
+    },
+    {
+     "id": "ppbom.f11",
+     "label": "Issue storage location per component",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppbom.q1",
+     "text": "How many BOM levels does a typical product have?",
+     "type": "number"
+    },
+    {
+     "id": "ppbom.q2",
+     "text": "Are engineering BOMs and production BOMs different today?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppbom.q3",
+     "text": "How are BOM changes controlled (change numbers, approvals)?",
+     "type": "text"
+    },
+    {
+     "id": "ppbom.q4",
+     "text": "Are there configurable / variant products?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppbom.d1",
+     "text": "BOM change control",
+     "options": [
+      "Change numbers (ECM)",
+      "Direct change with history",
+      "Change records / workflow"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1813",
+     "name": "Maintain Bill of Material",
+     "note": "Create, change and display material BOMs in Fiori"
+    }
+   ]
+  },
+  {
+   "id": "ppwc",
+   "title": "Work centre / resource",
+   "area": "ppmaster",
+   "tcodes": [
+    "CR01",
+    "CR02",
+    "CR03",
+    "CRC1",
+    "CR05"
+   ],
+   "plain": "Where the work is done: machines, lines, crews — with capacity, shifts and costing link.",
+   "fields": [
+    {
+     "id": "ppwc.f1",
+     "label": "Work centre category",
+     "tier": "core"
+    },
+    {
+     "id": "ppwc.f2",
+     "label": "Standard value key (setup / machine / labour)",
+     "tier": "core"
+    },
+    {
+     "id": "ppwc.f3",
+     "label": "Formulas for duration and capacity",
+     "tier": "core"
+    },
+    {
+     "id": "ppwc.f4",
+     "label": "Capacity category & available capacity (shifts)",
+     "tier": "core"
+    },
+    {
+     "id": "ppwc.f5",
+     "label": "Factory calendar",
+     "tier": "core"
+    },
+    {
+     "id": "ppwc.f6",
+     "label": "Cost centre & activity types",
+     "tier": "core"
+    },
+    {
+     "id": "ppwc.f7",
+     "label": "Backflush indicator at work centre",
+     "tier": "optional"
+    },
+    {
+     "id": "ppwc.f8",
+     "label": "Pooled capacities",
+     "tier": "optional"
+    },
+    {
+     "id": "ppwc.f9",
+     "label": "Hierarchy of work centres",
+     "tier": "optional"
+    },
+    {
+     "id": "ppwc.f10",
+     "label": "Queue and move times",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppwc.q1",
+     "text": "How many machines / lines / work centres are there?",
+     "type": "number"
+    },
+    {
+     "id": "ppwc.q2",
+     "text": "Which standard values are tracked (setup, machine, labour)?",
+     "type": "multi",
+     "options": [
+      "Setup time",
+      "Machine time",
+      "Labour time",
+      "Teardown",
+      "Other"
+     ]
+    },
+    {
+     "id": "ppwc.q3",
+     "text": "How are shift patterns modelled today?",
+     "type": "text"
+    },
+    {
+     "id": "ppwc.q4",
+     "text": "Is capacity measured in hours, units or both?",
+     "type": "single",
+     "options": [
+      "Hours",
+      "Units",
+      "Both"
+     ]
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppwc.d1",
+     "text": "Granularity of work centres",
+     "options": [
+      "One per machine",
+      "One per line / group",
+      "Mixed"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F3289",
+     "name": "Manage Work Center Capacity",
+     "note": "Capacity situation and load per work centre"
+    }
+   ]
+  },
+  {
+   "id": "pprout",
+   "title": "Routing / master recipe",
+   "area": "ppmaster",
+   "tcodes": [
+    "CA01",
+    "CA02",
+    "CA03",
+    "C201",
+    "CA85"
+   ],
+   "plain": "The steps to make a product: operations, work centres, times, control keys and inspection points.",
+   "fields": [
+    {
+     "id": "pprout.f1",
+     "label": "Routing type (routing / rate routing / reference operation set)",
+     "tier": "core"
+    },
+    {
+     "id": "pprout.f2",
+     "label": "Operations & sequence",
+     "tier": "core"
+    },
+    {
+     "id": "pprout.f3",
+     "label": "Work centre per operation",
+     "tier": "core"
+    },
+    {
+     "id": "pprout.f4",
+     "label": "Control key (confirmation, costing, scheduling)",
+     "tier": "core"
+    },
+    {
+     "id": "pprout.f5",
+     "label": "Standard values per operation",
+     "tier": "core"
+    },
+    {
+     "id": "pprout.f6",
+     "label": "Component allocation to operations",
+     "tier": "core"
+    },
+    {
+     "id": "pprout.f7",
+     "label": "Parallel / alternative sequences",
+     "tier": "optional"
+    },
+    {
+     "id": "pprout.f8",
+     "label": "Inspection characteristics (QM)",
+     "tier": "optional"
+    },
+    {
+     "id": "pprout.f9",
+     "label": "Production resources / tools",
+     "tier": "optional"
+    },
+    {
+     "id": "pprout.f10",
+     "label": "Milestone confirmation",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "pprout.q1",
+     "text": "How detailed are routings today (per step / per line)?",
+     "type": "single",
+     "options": [
+      "One step per product",
+      "Several steps",
+      "Detailed with times"
+     ]
+    },
+    {
+     "id": "pprout.q2",
+     "text": "Are the times in routings realistic and maintained?",
+     "type": "yesno"
+    },
+    {
+     "id": "pprout.q3",
+     "text": "Are external (subcontracted) operations used?",
+     "type": "yesno"
+    },
+    {
+     "id": "pprout.q4",
+     "text": "Do you use master recipes for process industry?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "pprout.d1",
+     "text": "Routing detail level for the template",
+     "options": [
+      "Lean (few operations)",
+      "Standard",
+      "Detailed incl. sub-steps"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F5425",
+     "name": "Manage Routings",
+     "note": "Fiori list and maintenance of routings"
+    }
+   ]
+  },
+  {
+   "id": "ppver",
+   "title": "Production version",
+   "area": "ppmaster",
+   "tcodes": [
+    "C223",
+    "MM02"
+   ],
+   "plain": "Combines one BOM alternative and one routing for a lot-size range and validity — mandatory in S/4HANA.",
+   "fields": [
+    {
+     "id": "ppver.f1",
+     "label": "BOM alternative per version",
+     "tier": "core"
+    },
+    {
+     "id": "ppver.f2",
+     "label": "Routing / recipe per version",
+     "tier": "core"
+    },
+    {
+     "id": "ppver.f3",
+     "label": "Lot-size range",
+     "tier": "core"
+    },
+    {
+     "id": "ppver.f4",
+     "label": "Validity dates",
+     "tier": "core"
+    },
+    {
+     "id": "ppver.f5",
+     "label": "Production line (repetitive)",
+     "tier": "optional"
+    },
+    {
+     "id": "ppver.f6",
+     "label": "Lock indicator",
+     "tier": "optional"
+    },
+    {
+     "id": "ppver.f7",
+     "label": "Distribution key",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppver.q1",
+     "text": "Can a product be made in several ways (lines, plants, alternatives)?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppver.q2",
+     "text": "Who will own production version maintenance?",
+     "type": "text"
+    },
+    {
+     "id": "ppver.q3",
+     "text": "Is mass creation from legacy data needed?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppver.d1",
+     "text": "Version selection",
+     "options": [
+      "Manual / per order",
+      "Automatic by lot size",
+      "Quota arrangement"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F2568",
+     "name": "Manage Production Versions",
+     "note": "Mass processing of production versions"
+    }
+   ]
+  },
+  {
+   "id": "ppdem",
+   "title": "Demand management (PIRs & forecasts)",
+   "area": "ppdemand",
+   "tcodes": [
+    "MD61",
+    "MD62",
+    "MD63",
+    "MD04"
+   ],
+   "plain": "Planned independent requirements, forecasts and how sales demand enters planning.",
+   "fields": [
+    {
+     "id": "ppdem.f1",
+     "label": "Requirement type",
+     "tier": "core"
+    },
+    {
+     "id": "ppdem.f2",
+     "label": "Planning strategy",
+     "tier": "core"
+    },
+    {
+     "id": "ppdem.f3",
+     "label": "Version of PIRs (active / inactive)",
+     "tier": "core"
+    },
+    {
+     "id": "ppdem.f4",
+     "label": "Planning horizon & buckets (days / weeks / months)",
+     "tier": "core"
+    },
+    {
+     "id": "ppdem.f5",
+     "label": "Consumption mode & periods",
+     "tier": "core"
+    },
+    {
+     "id": "ppdem.f6",
+     "label": "Forecast model",
+     "tier": "optional"
+    },
+    {
+     "id": "ppdem.f7",
+     "label": "Upload of demand from Excel / external planning",
+     "tier": "optional"
+    },
+    {
+     "id": "ppdem.f8",
+     "label": "Customer independent requirements",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppdem.q1",
+     "text": "Where does the demand plan come from today (Excel, sales, IBP/APO)?",
+     "type": "text"
+    },
+    {
+     "id": "ppdem.q2",
+     "text": "In which buckets is demand planned?",
+     "type": "single",
+     "options": [
+      "Days",
+      "Weeks",
+      "Months"
+     ]
+    },
+    {
+     "id": "ppdem.q3",
+     "text": "How do sales orders consume the forecast?",
+     "type": "text"
+    },
+    {
+     "id": "ppdem.q4",
+     "text": "How often is the demand plan updated?",
+     "type": "single",
+     "options": [
+      "Weekly",
+      "Monthly",
+      "Quarterly",
+      "Ad hoc"
+     ]
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppdem.d1",
+     "text": "Source of demand plan",
+     "options": [
+      "Manual in SAP",
+      "Upload from Excel",
+      "SAP IBP / external tool",
+      "S&OP in SAP"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F3445",
+     "name": "Maintain PIRs",
+     "note": "Create, change, mass maintain and upload PIRs"
+    }
+   ]
+  },
+  {
+   "id": "ppstr",
+   "title": "Planning strategies (MTS / MTO / ATO)",
+   "area": "ppdemand",
+   "tcodes": [
+    "MD61",
+    "OPPS",
+    "VOV6"
+   ],
+   "plain": "How products are triggered: make-to-stock, make-to-order, assemble-to-order, planning without final assembly.",
+   "fields": [
+    {
+     "id": "ppstr.f1",
+     "label": "Strategy group per material",
+     "tier": "core"
+    },
+    {
+     "id": "ppstr.f2",
+     "label": "Make-to-stock (10 / 40)",
+     "tier": "core"
+    },
+    {
+     "id": "ppstr.f3",
+     "label": "Make-to-order (20)",
+     "tier": "core"
+    },
+    {
+     "id": "ppstr.f4",
+     "label": "Planning without final assembly (50 / 52)",
+     "tier": "core"
+    },
+    {
+     "id": "ppstr.f5",
+     "label": "Assemble-to-order (82)",
+     "tier": "core"
+    },
+    {
+     "id": "ppstr.f6",
+     "label": "Individual / collective requirements",
+     "tier": "optional"
+    },
+    {
+     "id": "ppstr.f7",
+     "label": "Requirements class & cost assignment",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppstr.q1",
+     "text": "Which products are made to stock and which to order?",
+     "type": "text"
+    },
+    {
+     "id": "ppstr.q2",
+     "text": "Are sub-assemblies pre-produced before the customer order arrives?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppstr.q3",
+     "text": "Is the customer order a separate costing object today?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppstr.d1",
+     "text": "Main strategy",
+     "options": [
+      "10/40 Make-to-stock",
+      "20 Make-to-order",
+      "50/52 Planning without final assembly",
+      "82 Assemble-to-order",
+      "Mixed"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppmrp",
+   "title": "MRP run & material coverage",
+   "area": "ppdemand",
+   "tcodes": [
+    "MD01N",
+    "MD02",
+    "MD04",
+    "MD06",
+    "MD07",
+    "MD05"
+   ],
+   "plain": "Material requirements planning with MRP Live: what to make or buy, when, and in what quantity.",
+   "fields": [
+    {
+     "id": "ppmrp.f1",
+     "label": "Planning scope (plant / MRP area / product group)",
+     "tier": "core"
+    },
+    {
+     "id": "ppmrp.f2",
+     "label": "Planning horizon",
+     "tier": "core"
+    },
+    {
+     "id": "ppmrp.f3",
+     "label": "Scheduling (basic dates vs lead-time scheduling)",
+     "tier": "core"
+    },
+    {
+     "id": "ppmrp.f4",
+     "label": "Planning file / net change",
+     "tier": "core"
+    },
+    {
+     "id": "ppmrp.f5",
+     "label": "Exception messages & MRP elements",
+     "tier": "core"
+    },
+    {
+     "id": "ppmrp.f6",
+     "label": "MRP controller worklist",
+     "tier": "core"
+    },
+    {
+     "id": "ppmrp.f7",
+     "label": "MRP areas (storage-location planning)",
+     "tier": "optional"
+    },
+    {
+     "id": "ppmrp.f8",
+     "label": "Reorder-point / consumption-based planning",
+     "tier": "optional"
+    },
+    {
+     "id": "ppmrp.f9",
+     "label": "Rescheduling horizon",
+     "tier": "optional"
+    },
+    {
+     "id": "ppmrp.f10",
+     "label": "Multi-plant planning (stock transfer)",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppmrp.q1",
+     "text": "How often is MRP run?",
+     "type": "single",
+     "options": [
+      "Daily",
+      "Several times a day",
+      "Weekly",
+      "On demand"
+     ]
+    },
+    {
+     "id": "ppmrp.q2",
+     "text": "How do planners work through shortages and exceptions today?",
+     "type": "text"
+    },
+    {
+     "id": "ppmrp.q3",
+     "text": "Is any planning done in Excel outside the ERP?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppmrp.q4",
+     "text": "Are external planning tools (APO, PP/DS, IBP) in use or planned?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppmrp.d1",
+     "text": "MRP run frequency & scope",
+     "options": [
+      "Nightly full MRP Live",
+      "Net change several times a day",
+      "Per MRP controller on demand"
+     ]
+    },
+    {
+     "id": "ppmrp.d2",
+     "text": "Use of MRP areas",
+     "options": [
+      "Yes",
+      "No",
+      "Later phase"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1339",
+     "name": "Schedule MRP Runs",
+     "note": "Background MRP Live jobs (replaces MD01 job set-up)"
+    },
+    {
+     "id": "F0247A",
+     "name": "Monitor Material Coverage",
+     "note": "Planner worklist of materials with shortages"
+    },
+    {
+     "id": "F0251",
+     "name": "Manage Material Coverage",
+     "note": "Solve shortages; system proposes solutions"
+    },
+    {
+     "id": "F3853",
+     "name": "Detect MRP Situations",
+     "note": "Finds MRP situations that need attention"
+    },
+    {
+     "id": "F0270",
+     "name": "Manage Internal Requirements",
+     "note": "Shortages of components for production orders"
+    }
+   ]
+  },
+  {
+   "id": "ppplo",
+   "title": "Planned orders & conversion",
+   "area": "ppdemand",
+   "tcodes": [
+    "MD11",
+    "MD12",
+    "MD13",
+    "CO40",
+    "CO41",
+    "MD16"
+   ],
+   "plain": "Planned orders created by MRP and how they become production / process orders.",
+   "fields": [
+    {
+     "id": "ppplo.f1",
+     "label": "Planned order types",
+     "tier": "core"
+    },
+    {
+     "id": "ppplo.f2",
+     "label": "Firming of planned orders",
+     "tier": "core"
+    },
+    {
+     "id": "ppplo.f3",
+     "label": "Conversion to production order (single / collective)",
+     "tier": "core"
+    },
+    {
+     "id": "ppplo.f4",
+     "label": "Conversion horizon / opening period",
+     "tier": "core"
+    },
+    {
+     "id": "ppplo.f5",
+     "label": "Planned order capacity check",
+     "tier": "optional"
+    },
+    {
+     "id": "ppplo.f6",
+     "label": "Partial conversion",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppplo.q1",
+     "text": "Who converts planned orders and how often?",
+     "type": "text"
+    },
+    {
+     "id": "ppplo.q2",
+     "text": "Are planned orders firmed manually?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppplo.q3",
+     "text": "Is conversion automated in batch?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppplo.d1",
+     "text": "Order conversion",
+     "options": [
+      "Manual by planner",
+      "Collective conversion daily",
+      "Automatic job (opening period)"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F4170",
+     "name": "Manage Planned Orders",
+     "note": "Planned orders list incl. conversion"
+    },
+    {
+     "id": "F1718",
+     "name": "Schedule Order Conversion Runs",
+     "note": "Background conversion of planned orders"
+    }
+   ]
+  },
+  {
+   "id": "ppcp",
+   "title": "Capacity planning & scheduling",
+   "area": "ppcap",
+   "tcodes": [
+    "CM01",
+    "CM07",
+    "CM21",
+    "CM25",
+    "CM50",
+    "OPU5"
+   ],
+   "plain": "Load vs. capacity on work centres, lead-time scheduling, finite scheduling and capacity levelling.",
+   "fields": [
+    {
+     "id": "ppcp.f1",
+     "label": "Lead-time scheduling (forward / backward)",
+     "tier": "core"
+    },
+    {
+     "id": "ppcp.f2",
+     "label": "Scheduling parameters per order type",
+     "tier": "core"
+    },
+    {
+     "id": "ppcp.f3",
+     "label": "Capacity evaluation (load vs available)",
+     "tier": "core"
+    },
+    {
+     "id": "ppcp.f4",
+     "label": "Capacity levelling (planning table)",
+     "tier": "core"
+    },
+    {
+     "id": "ppcp.f5",
+     "label": "Finite / infinite scheduling",
+     "tier": "core"
+    },
+    {
+     "id": "ppcp.f6",
+     "label": "Shift / factory calendars",
+     "tier": "core"
+    },
+    {
+     "id": "ppcp.f7",
+     "label": "Overall profiles for levelling",
+     "tier": "optional"
+    },
+    {
+     "id": "ppcp.f8",
+     "label": "Bottleneck (pacemaker) work centres",
+     "tier": "optional"
+    },
+    {
+     "id": "ppcp.f9",
+     "label": "Sequencing / setup optimisation",
+     "tier": "optional"
+    },
+    {
+     "id": "ppcp.f10",
+     "label": "PP/DS (advanced planning) in S/4HANA",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppcp.q1",
+     "text": "Is capacity checked before release today, or only time scheduled?",
+     "type": "single",
+     "options": [
+      "Not checked",
+      "Checked manually",
+      "Checked in a tool"
+     ]
+    },
+    {
+     "id": "ppcp.q2",
+     "text": "Which work centres are bottlenecks?",
+     "type": "text"
+    },
+    {
+     "id": "ppcp.q3",
+     "text": "Do planners re-sequence orders on a board / Excel?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppcp.q4",
+     "text": "Is finite scheduling expected (no overload allowed)?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppcp.q5",
+     "text": "Is PP/DS (advanced planning) in scope?",
+     "type": "single",
+     "options": [
+      "Yes",
+      "No",
+      "Unsure"
+     ]
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppcp.d1",
+     "text": "Capacity planning approach",
+     "options": [
+      "Infinite (evaluate only)",
+      "Finite levelling in planning table",
+      "Capacity Scheduling Table (Fiori)",
+      "PP/DS"
+     ]
+    },
+    {
+     "id": "ppcp.d2",
+     "text": "Scheduling direction",
+     "options": [
+      "Backward",
+      "Forward",
+      "Mixed by order type"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F3289",
+     "name": "Manage Work Center Capacity",
+     "note": "Load, overload and capacity per work centre & period"
+    },
+    {
+     "id": "F3770",
+     "name": "Capacity Scheduling Table",
+     "note": "Dispatch and re-sequence planned & production orders on work centres"
+    },
+    {
+     "id": "F5460",
+     "name": "Advanced Scheduling Board",
+     "note": "Gantt scheduling with finite capacities — requires PP/DS"
+    }
+   ]
+  },
+  {
+   "id": "ppord",
+   "title": "Production order",
+   "area": "ppexec",
+   "tcodes": [
+    "CO01",
+    "CO02",
+    "CO03",
+    "COOIS",
+    "CO05N",
+    "CO04N"
+   ],
+   "plain": "The order to make a product: header, operations, components, release, status and papers.",
+   "fields": [
+    {
+     "id": "ppord.f1",
+     "label": "Order type",
+     "tier": "core"
+    },
+    {
+     "id": "ppord.f2",
+     "label": "Order header (quantity, dates, version)",
+     "tier": "core"
+    },
+    {
+     "id": "ppord.f3",
+     "label": "Release (single / collective / automatic)",
+     "tier": "core"
+    },
+    {
+     "id": "ppord.f4",
+     "label": "Material availability check at creation / release",
+     "tier": "core"
+    },
+    {
+     "id": "ppord.f5",
+     "label": "Capacity check at release",
+     "tier": "core"
+    },
+    {
+     "id": "ppord.f6",
+     "label": "Shop floor papers / labels",
+     "tier": "core"
+    },
+    {
+     "id": "ppord.f7",
+     "label": "Status management (system & user status)",
+     "tier": "core"
+    },
+    {
+     "id": "ppord.f8",
+     "label": "Order change management",
+     "tier": "optional"
+    },
+    {
+     "id": "ppord.f9",
+     "label": "Trigger points / workflow",
+     "tier": "optional"
+    },
+    {
+     "id": "ppord.f10",
+     "label": "Serial numbers on order",
+     "tier": "optional"
+    },
+    {
+     "id": "ppord.f11",
+     "label": "Hold / priority handling",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppord.q1",
+     "text": "How many production orders per week?",
+     "type": "number"
+    },
+    {
+     "id": "ppord.q2",
+     "text": "Who releases orders and when?",
+     "type": "text"
+    },
+    {
+     "id": "ppord.q3",
+     "text": "Which papers go to the shop floor (job card, pick list, labels)?",
+     "type": "text"
+    },
+    {
+     "id": "ppord.q4",
+     "text": "Are orders changed after release often?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppord.d1",
+     "text": "Order release",
+     "options": [
+      "Manual",
+      "Collective release daily",
+      "Automatic at creation"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F2336",
+     "name": "Manage Production Orders",
+     "note": "Supervisor worklist: release, hold, issues"
+    },
+    {
+     "id": "F2335",
+     "name": "Manage Production Operations",
+     "note": "Monitor and dispatch operations"
+    }
+   ]
+  },
+  {
+   "id": "ppav",
+   "title": "Material staging & availability",
+   "area": "ppexec",
+   "tcodes": [
+    "CO24",
+    "LP10",
+    "PK13N",
+    "MB1A",
+    "MIGO"
+   ],
+   "plain": "Getting components to the line: availability check, missing parts, staging, goods issue.",
+   "fields": [
+    {
+     "id": "ppav.f1",
+     "label": "ATP checking rule / scope of check",
+     "tier": "core"
+    },
+    {
+     "id": "ppav.f2",
+     "label": "Missing parts handling",
+     "tier": "core"
+    },
+    {
+     "id": "ppav.f3",
+     "label": "Staging method (pick list, kanban, EWM staging)",
+     "tier": "core"
+    },
+    {
+     "id": "ppav.f4",
+     "label": "Goods issue (manual / backflush)",
+     "tier": "core"
+    },
+    {
+     "id": "ppav.f5",
+     "label": "Production supply areas",
+     "tier": "core"
+    },
+    {
+     "id": "ppav.f6",
+     "label": "Kanban control cycles",
+     "tier": "optional"
+    },
+    {
+     "id": "ppav.f7",
+     "label": "Reservation handling",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppav.q1",
+     "text": "How are components brought to the line today?",
+     "type": "text"
+    },
+    {
+     "id": "ppav.q2",
+     "text": "How are missing parts tracked?",
+     "type": "text"
+    },
+    {
+     "id": "ppav.q3",
+     "text": "Is a warehouse (EWM / WM) involved in staging?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppav.q4",
+     "text": "Is kanban used?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppav.d1",
+     "text": "Goods issue method",
+     "options": [
+      "Manual goods issue",
+      "Backflush",
+      "Mixed by component"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppconf",
+   "title": "Confirmation & backflush",
+   "area": "ppexec",
+   "tcodes": [
+    "CO11N",
+    "CO15",
+    "COGI",
+    "CO13",
+    "COHV"
+   ],
+   "plain": "Reporting work done: quantities, scrap, times, activities — and automatic goods movements.",
+   "fields": [
+    {
+     "id": "ppconf.f1",
+     "label": "Confirmation level (operation / milestone / order)",
+     "tier": "core"
+    },
+    {
+     "id": "ppconf.f2",
+     "label": "Yield, scrap, rework",
+     "tier": "core"
+    },
+    {
+     "id": "ppconf.f3",
+     "label": "Activities / times confirmed",
+     "tier": "core"
+    },
+    {
+     "id": "ppconf.f4",
+     "label": "Automatic goods movements (backflush, auto GR)",
+     "tier": "core"
+    },
+    {
+     "id": "ppconf.f5",
+     "label": "Error handling for failed movements (COGI)",
+     "tier": "core"
+    },
+    {
+     "id": "ppconf.f6",
+     "label": "Time tickets / HR integration",
+     "tier": "optional"
+    },
+    {
+     "id": "ppconf.f7",
+     "label": "Confirmation via terminals / MES",
+     "tier": "optional"
+    },
+    {
+     "id": "ppconf.f8",
+     "label": "Variance reasons",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppconf.q1",
+     "text": "Who confirms, and on which device (PC, terminal, paper)?",
+     "type": "text"
+    },
+    {
+     "id": "ppconf.q2",
+     "text": "Are actual times recorded or only quantities?",
+     "type": "single",
+     "options": [
+      "Only quantities",
+      "Quantities and times",
+      "Times per person"
+     ]
+    },
+    {
+     "id": "ppconf.q3",
+     "text": "How is scrap recorded and reasoned?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppconf.d1",
+     "text": "Confirmation level",
+     "options": [
+      "Each operation",
+      "Milestones",
+      "Final only"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F3069",
+     "name": "Confirm Production Operation",
+     "note": "Operator confirmation of operations (no trigger points)"
+    },
+    {
+     "id": "F2265",
+     "name": "Production Order Confirmation",
+     "note": "Object page, opened from Manage Production Orders / Operations"
+    }
+   ]
+  },
+  {
+   "id": "ppgr",
+   "title": "Goods receipt & order completion",
+   "area": "ppexec",
+   "tcodes": [
+    "MIGO",
+    "MB31",
+    "CO02",
+    "KKS2",
+    "CO88"
+   ],
+   "plain": "Receiving finished goods, technical completion, deletion flags and archiving.",
+   "fields": [
+    {
+     "id": "ppgr.f1",
+     "label": "Goods receipt for order (manual / automatic)",
+     "tier": "core"
+    },
+    {
+     "id": "ppgr.f2",
+     "label": "Under / over delivery tolerance",
+     "tier": "core"
+    },
+    {
+     "id": "ppgr.f3",
+     "label": "Technical completion & closure",
+     "tier": "core"
+    },
+    {
+     "id": "ppgr.f4",
+     "label": "Batch creation at GR",
+     "tier": "optional"
+    },
+    {
+     "id": "ppgr.f5",
+     "label": "Labels / handling units at GR",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppgr.q1",
+     "text": "Is the finished-goods receipt posted manually or automatically?",
+     "type": "single",
+     "options": [
+      "Manually",
+      "Automatically with final confirmation"
+     ]
+    },
+    {
+     "id": "ppgr.q2",
+     "text": "Who closes orders and when?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppgr.d1",
+     "text": "Order closing",
+     "options": [
+      "Manual",
+      "Periodic mass closing"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F3110",
+     "name": "Post Goods Receipt for Production Order",
+     "note": "Fiori goods receipt for production orders"
+    }
+   ]
+  },
+  {
+   "id": "pprem",
+   "title": "Repetitive manufacturing",
+   "area": "ppexec",
+   "tcodes": [
+    "MFBF",
+    "MF50",
+    "MF60",
+    "MFHU",
+    "MF47"
+   ],
+   "plain": "Period-based flow production on lines without single orders: run schedules, backflush, cost collector.",
+   "fields": [
+    {
+     "id": "pprem.f1",
+     "label": "REM profile",
+     "tier": "core"
+    },
+    {
+     "id": "pprem.f2",
+     "label": "Production line / version",
+     "tier": "core"
+    },
+    {
+     "id": "pprem.f3",
+     "label": "Run schedule quantities",
+     "tier": "core"
+    },
+    {
+     "id": "pprem.f4",
+     "label": "Backflush & reporting points",
+     "tier": "core"
+    },
+    {
+     "id": "pprem.f5",
+     "label": "Product cost collector",
+     "tier": "core"
+    },
+    {
+     "id": "pprem.f6",
+     "label": "Line loading / sequencing (MF50)",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "pprem.q1",
+     "text": "Are there lines producing the same product continuously?",
+     "type": "yesno"
+    },
+    {
+     "id": "pprem.q2",
+     "text": "Is per-order tracking really needed for those products?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "pprem.d1",
+     "text": "Use repetitive manufacturing",
+     "options": [
+      "Yes",
+      "No",
+      "Pilot line only"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pppi",
+   "title": "Process orders (PP-PI)",
+   "area": "ppexec",
+   "tcodes": [
+    "COR1",
+    "COR2",
+    "COR6N",
+    "C201",
+    "CO53"
+   ],
+   "plain": "Process industry: master recipes, phases, resources, batches and process instructions.",
+   "fields": [
+    {
+     "id": "pppi.f1",
+     "label": "Master recipe & phases",
+     "tier": "core"
+    },
+    {
+     "id": "pppi.f2",
+     "label": "Resources",
+     "tier": "core"
+    },
+    {
+     "id": "pppi.f3",
+     "label": "Process instructions / control recipes",
+     "tier": "core"
+    },
+    {
+     "id": "pppi.f4",
+     "label": "Batch determination",
+     "tier": "core"
+    },
+    {
+     "id": "pppi.f5",
+     "label": "Material quantity calculation",
+     "tier": "optional"
+    },
+    {
+     "id": "pppi.f6",
+     "label": "Electronic batch record",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "pppi.q1",
+     "text": "Is process (recipe-based) manufacturing in scope?",
+     "type": "yesno"
+    },
+    {
+     "id": "pppi.q2",
+     "text": "Are batches and shelf-life critical?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "pppi.d1",
+     "text": "Order type for process industry",
+     "options": [
+      "Process order (PP-PI)",
+      "Production order",
+      "Not in scope"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppcost",
+   "title": "Product costing & order settlement",
+   "area": "ppfin",
+   "tcodes": [
+    "CK11N",
+    "CK40N",
+    "KKF6N",
+    "KKS2",
+    "KO88",
+    "CO88"
+   ],
+   "plain": "Standard cost, cost of order, WIP, variances and settlement to stock / profitability.",
+   "fields": [
+    {
+     "id": "ppcost.f1",
+     "label": "Costing variant & valuation",
+     "tier": "core"
+    },
+    {
+     "id": "ppcost.f2",
+     "label": "Overhead (costing sheet)",
+     "tier": "core"
+    },
+    {
+     "id": "ppcost.f3",
+     "label": "Activity prices for work centres",
+     "tier": "core"
+    },
+    {
+     "id": "ppcost.f4",
+     "label": "WIP calculation",
+     "tier": "core"
+    },
+    {
+     "id": "ppcost.f5",
+     "label": "Variance calculation",
+     "tier": "core"
+    },
+    {
+     "id": "ppcost.f6",
+     "label": "Settlement profile",
+     "tier": "core"
+    },
+    {
+     "id": "ppcost.f7",
+     "label": "Product cost by period vs by order",
+     "tier": "optional"
+    },
+    {
+     "id": "ppcost.f8",
+     "label": "Material ledger / actual costing",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppcost.q1",
+     "text": "Is a standard cost calculated per product today?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppcost.q2",
+     "text": "How often are standards updated?",
+     "type": "single",
+     "options": [
+      "Yearly",
+      "Quarterly",
+      "Monthly"
+     ]
+    },
+    {
+     "id": "ppcost.q3",
+     "text": "Is WIP valued at period end?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppcost.d1",
+     "text": "Controlling level",
+     "options": [
+      "Product cost by order",
+      "Product cost by period",
+      "Mixed"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppbat",
+   "title": "Batch & serial number management",
+   "area": "ppcross",
+   "tcodes": [
+    "MSC1N",
+    "MSC2N",
+    "IQ01",
+    "MB56",
+    "CL20N"
+   ],
+   "plain": "Traceability: batches, characteristics, shelf life and serial numbers through production.",
+   "fields": [
+    {
+     "id": "ppbat.f1",
+     "label": "Batch level (plant / material / client)",
+     "tier": "core"
+    },
+    {
+     "id": "ppbat.f2",
+     "label": "Batch characteristics & classification",
+     "tier": "core"
+    },
+    {
+     "id": "ppbat.f3",
+     "label": "Shelf-life expiry",
+     "tier": "core"
+    },
+    {
+     "id": "ppbat.f4",
+     "label": "Batch determination",
+     "tier": "core"
+    },
+    {
+     "id": "ppbat.f5",
+     "label": "Serial number profile",
+     "tier": "optional"
+    },
+    {
+     "id": "ppbat.f6",
+     "label": "Where-used / batch traceability",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppbat.q1",
+     "text": "Which products need batch or serial traceability?",
+     "type": "text"
+    },
+    {
+     "id": "ppbat.q2",
+     "text": "Are there customer / regulatory traceability requirements?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppbat.d1",
+     "text": "Batch level",
+     "options": [
+      "Plant",
+      "Material",
+      "Client"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppmes",
+   "title": "Shop floor integration (MES / DMC)",
+   "area": "ppcross",
+   "tcodes": [
+    "POIT",
+    "CO11N",
+    "BD87"
+   ],
+   "plain": "Connection to MES, SAP Digital Manufacturing, machines and terminals.",
+   "fields": [
+    {
+     "id": "ppmes.f1",
+     "label": "MES / DMC in use",
+     "tier": "core"
+    },
+    {
+     "id": "ppmes.f2",
+     "label": "Interfaces (orders out, confirmations in)",
+     "tier": "core"
+    },
+    {
+     "id": "ppmes.f3",
+     "label": "Machine data collection",
+     "tier": "core"
+    },
+    {
+     "id": "ppmes.f4",
+     "label": "Label printing / scanners",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppmes.q1",
+     "text": "Is there an MES or machine data collection system?",
+     "type": "yesno"
+    },
+    {
+     "id": "ppmes.q2",
+     "text": "Which data must flow back from the shop floor?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppmes.d1",
+     "text": "Shop floor system",
+     "options": [
+      "SAP Digital Manufacturing",
+      "Third-party MES",
+      "SAP only (Fiori / terminals)"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppkpi",
+   "title": "Reports & KPIs",
+   "area": "ppcross",
+   "tcodes": [
+    "COOIS",
+    "MD07",
+    "CM01",
+    "MCP7"
+   ],
+   "plain": "How production is measured: OEE, schedule adherence, scrap, lead time, inventory.",
+   "fields": [
+    {
+     "id": "ppkpi.f1",
+     "label": "Schedule adherence",
+     "tier": "core"
+    },
+    {
+     "id": "ppkpi.f2",
+     "label": "Scrap rate",
+     "tier": "core"
+    },
+    {
+     "id": "ppkpi.f3",
+     "label": "Order lead time",
+     "tier": "core"
+    },
+    {
+     "id": "ppkpi.f4",
+     "label": "Capacity utilisation",
+     "tier": "core"
+    },
+    {
+     "id": "ppkpi.f5",
+     "label": "OEE",
+     "tier": "optional"
+    },
+    {
+     "id": "ppkpi.f6",
+     "label": "Planned vs actual cost",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppkpi.q1",
+     "text": "Which production KPIs are reported today, and from where?",
+     "type": "text"
+    },
+    {
+     "id": "ppkpi.q2",
+     "text": "Who needs which report and how often?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppkpi.d1",
+     "text": "Reporting tool",
+     "options": [
+      "Embedded analytics / Fiori",
+      "BW / Datasphere",
+      "Excel"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ppusr",
+   "title": "Users, roles & training",
+   "area": "ppcross",
+   "tcodes": [
+    "PFCG",
+    "SU01"
+   ],
+   "plain": "Who uses which part of PP and how many users per role.",
+   "fields": [
+    {
+     "id": "ppusr.f1",
+     "label": "Planner users",
+     "tier": "core"
+    },
+    {
+     "id": "ppusr.f2",
+     "label": "Supervisor users",
+     "tier": "core"
+    },
+    {
+     "id": "ppusr.f3",
+     "label": "Operator / confirmation users",
+     "tier": "core"
+    },
+    {
+     "id": "ppusr.f4",
+     "label": "Shared terminals",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "ppusr.q1",
+     "text": "How many users per role (planner, supervisor, operator)?",
+     "type": "text"
+    },
+    {
+     "id": "ppusr.q2",
+     "text": "Will operators use Fiori, terminals or paper?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "ppusr.d1",
+     "text": "Operator interface",
+     "options": [
+      "Fiori apps",
+      "Terminals / kiosks",
+      "MES",
+      "Paper + back-office entry"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pplgc",
+   "title": "Legacy data & migration",
+   "area": "ppcross",
+   "tcodes": [
+    "LTMC",
+    "LTMOM"
+   ],
+   "plain": "Which production data comes over from the legacy system and in what quality.",
+   "fields": [
+    {
+     "id": "pplgc.f1",
+     "label": "Materials (MRP views)",
+     "tier": "core"
+    },
+    {
+     "id": "pplgc.f2",
+     "label": "BOMs",
+     "tier": "core"
+    },
+    {
+     "id": "pplgc.f3",
+     "label": "Routings / recipes",
+     "tier": "core"
+    },
+    {
+     "id": "pplgc.f4",
+     "label": "Work centres",
+     "tier": "core"
+    },
+    {
+     "id": "pplgc.f5",
+     "label": "Production versions",
+     "tier": "core"
+    },
+    {
+     "id": "pplgc.f6",
+     "label": "Open production orders",
+     "tier": "core"
+    },
+    {
+     "id": "pplgc.f7",
+     "label": "Demand / PIRs",
+     "tier": "optional"
+    },
+    {
+     "id": "pplgc.f8",
+     "label": "Historical consumption for forecast",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "pplgc.q1",
+     "text": "Which legacy system holds production data?",
+     "type": "text"
+    },
+    {
+     "id": "pplgc.q2",
+     "text": "Are open orders migrated or finished in legacy?",
+     "type": "single",
+     "options": [
+      "Migrate open orders",
+      "Finish in legacy",
+      "Mixed"
+     ]
+    },
+    {
+     "id": "pplgc.q3",
+     "text": "How clean are BOMs and routings?",
+     "type": "single",
+     "options": [
+      "Good",
+      "Partly",
+      "Poor"
+     ]
+    }
+   ],
+   "decisions": [
+    {
+     "id": "pplgc.d1",
+     "text": "Open orders at go-live",
+     "options": [
+      "Migrate",
+      "Run down in legacy",
+      "Recreate manually"
+     ]
+    }
+   ]
+  }
+ ]
+}

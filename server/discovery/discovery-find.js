@@ -2,8 +2,7 @@
 // ("where do I capture who approves orders?") to places in the workshop, using a
 // small, cheap LLM's judgement over the catalog index. No keyword rules.
 import { requireApprovedUser, requireJsonBody, sendAuthError } from '../shared/_auth.js'
-import { discoveryCatalog } from '../../src/features/discovery/catalog.js'
-import { processCatalog } from '../../src/features/discovery/processCatalog.js'
+import { MODULES } from './modules.js'
 
 const MODEL = process.env.DISCOVERY_FIND_MODEL || 'openai/gpt-oss-20b'
 
@@ -25,9 +24,10 @@ export const FIND_SECTIONS = [
   ['presenter', 'Presenter mode: clean view to share the screen with the customer'],
 ]
 
-let cachedIndex = null
-function buildIndex() {
-  if (cachedIndex) return cachedIndex
+const cachedIndex = {}
+function buildIndex(mod = MODULES.pm) {
+  if (cachedIndex[mod.key]) return cachedIndex[mod.key]
+  const discoveryCatalog = mod.catalog, processCatalog = mod.processes
   const lines = []
   const ids = new Map()
   const add = (type, id, text, objectId = null) => { lines.push(`${type}|${id}|${text}`); ids.set(type + ':' + id, objectId) }
@@ -39,11 +39,11 @@ function buildIndex() {
     for (const d of o.decisions) add('decision', d.id, `${o.title} › decision: ${d.text}`, o.id)
   }
   for (const p of processCatalog.processes) add('process', p.id, `Process: ${p.title} — ${p.plain}`)
-  cachedIndex = { text: lines.join('\n'), ids }
-  return cachedIndex
+  cachedIndex[mod.key] = { text: lines.join('\n'), ids }
+  return cachedIndex[mod.key]
 }
 
-const SYSTEM = `You help an SAP Plant Maintenance consultant find the right place in a discovery-workshop app.
+const SYSTEM = `You help an SAP consultant find the right place in a discovery-workshop app.
 You get an index (one line per place: type|id|description) and the consultant's request, which may be in English, German or Hinglish and may be phrased as a question.
 Pick the places that best answer where to look or where to record it. Prefer the most specific place (a field, question or decision) when one clearly fits; otherwise the object or section.
 Return ONLY JSON: {"results":[{"type":"section|object|field|question|decision|process","id":"<exact id from the index>","reason":"<max 15 words, why this place fits>"}]}
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
   if (query.length < 2) return res.status(400).json({ error: 'Type what you are looking for' })
   if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'AI search is not configured' })
 
-  const index = buildIndex()
+  const index = buildIndex(MODULES[req.body?.module] || MODULES.pm)
   const context = typeof req.body?.currentObject === 'string' ? `\nThe consultant currently has object "${req.body.currentObject.slice(0, 80)}" open.` : ''
   try {
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {

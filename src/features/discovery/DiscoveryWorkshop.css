@@ -553,3 +553,16 @@
 .dw .dw-area:first-of-type>summary{border-top:0}
 .dw .dw-area>.dw-nav-object{position:relative;margin-left:16px;padding-left:20px}
 .dw .dw-area>.dw-nav-object::before{content:'';position:absolute;left:0;top:50%;width:12px;border-top:1px solid var(--border)}
+/* Module switcher, draft badge, Fiori apps */
+.dw-draft-pill{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;border:1px solid #6b5a2a;background:#2a2414;color:#f0d68a;font-size:10px;letter-spacing:.04em;text-transform:uppercase;vertical-align:middle}
+.dw-module-tabs{display:flex;gap:6px;margin:10px 0 4px}
+.dw .dw-module-tabs a{padding:5px 12px;border-radius:999px;border:1px solid var(--border);color:var(--muted);text-decoration:none;font-size:12.5px;font-weight:600}
+.dw .dw-module-tabs a:hover{color:var(--text);border-color:#4a4f58}
+.dw .dw-module-tabs a.is-active{background:#eceef1;color:#0b0c0e;border-color:#eceef1}
+.dw-module-tabs small{font-weight:500;opacity:.7}
+.dw-apps{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 2px}
+.dw-apps-label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-right:2px}
+.dw .dw-app{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:8px;border:1px solid #2f3a33;background:#141b16;color:#cfe9d6;font-size:12px;text-decoration:none}
+.dw .dw-app:hover{border-color:#4f6b58;color:#fff}
+.dw-app code{font-size:10.5px;color:#8fd3a3;background:none;padding:0}
+.dw-app-noid{border-style:dashed}

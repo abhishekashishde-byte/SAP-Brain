@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { discoveryCatalog } from './catalog.js'
+import { discoveryCatalog, activeModuleKey } from './catalog.js'
 import { processCatalog } from './processCatalog.js'
 import { matchRows, phraseRows, replaceInRows, applyRowChanges, snippet, escapeRe } from './contentSearch.js'
 
@@ -130,7 +130,7 @@ export default function Finder({ open, onClose, onGo, session, workshopId, curre
       const res = await fetch('/api/discovery-find', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session?.access_token },
-        body: JSON.stringify({ query: q, workshopId, currentObject }),
+        body: JSON.stringify({ query: q, workshopId, currentObject, module: activeModuleKey }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'AI search failed')

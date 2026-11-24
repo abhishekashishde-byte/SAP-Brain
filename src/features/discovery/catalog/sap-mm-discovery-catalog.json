@@ -1,0 +1,1684 @@
+{
+ "catalogId": "sap-mm-discovery",
+ "version": "0.1.0",
+ "draft": true,
+ "domain": "SAP MM",
+ "language": "en",
+ "markStates": [
+  "needed",
+  "not_needed",
+  "clarify"
+ ],
+ "areas": [
+  {
+   "id": "mmorg",
+   "title": "Organisation & setup"
+  },
+  {
+   "id": "mmmaster",
+   "title": "Purchasing master data"
+  },
+  {
+   "id": "mmproc",
+   "title": "Procurement processes"
+  },
+  {
+   "id": "mminv",
+   "title": "Inventory management"
+  },
+  {
+   "id": "mmiv",
+   "title": "Invoice verification & valuation"
+  },
+  {
+   "id": "mmcross",
+   "title": "Cross topics"
+  }
+ ],
+ "objects": [
+  {
+   "id": "mmo",
+   "title": "Purchasing & inventory organisation",
+   "area": "mmorg",
+   "tcodes": [
+    "OX08",
+    "OX17",
+    "OME4",
+    "OX09"
+   ],
+   "plain": "Purchasing organisations, purchasing groups, plants and storage locations.",
+   "fields": [
+    {
+     "id": "mmo.f1",
+     "label": "Purchasing organisation(s)",
+     "tier": "core"
+    },
+    {
+     "id": "mmo.f2",
+     "label": "Purchasing groups (buyers)",
+     "tier": "core"
+    },
+    {
+     "id": "mmo.f3",
+     "label": "Plants",
+     "tier": "core"
+    },
+    {
+     "id": "mmo.f4",
+     "label": "Storage locations",
+     "tier": "core"
+    },
+    {
+     "id": "mmo.f5",
+     "label": "Company code assignment",
+     "tier": "core"
+    },
+    {
+     "id": "mmo.f6",
+     "label": "Reference purchasing organisation",
+     "tier": "optional"
+    },
+    {
+     "id": "mmo.f7",
+     "label": "Central purchasing / central contracts",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmo.q1",
+     "text": "Is purchasing central, per plant or per company?",
+     "type": "single",
+     "options": [
+      "Central",
+      "Per plant",
+      "Per company",
+      "Mixed"
+     ]
+    },
+    {
+     "id": "mmo.q2",
+     "text": "How many buyers / purchasing groups?",
+     "type": "number"
+    },
+    {
+     "id": "mmo.q3",
+     "text": "How many storage locations per plant?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmo.d1",
+     "text": "Purchasing organisation model",
+     "options": [
+      "One central",
+      "One per company code",
+      "One per plant"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "mmmat",
+   "title": "Material master — purchasing & inventory views",
+   "area": "mmmaster",
+   "tcodes": [
+    "MM01",
+    "MM02",
+    "MM60",
+    "MMPV"
+   ],
+   "plain": "Materials: types, units, purchasing data, valuation class and stock-keeping rules.",
+   "fields": [
+    {
+     "id": "mmmat.f1",
+     "label": "Material type",
+     "tier": "core"
+    },
+    {
+     "id": "mmmat.f2",
+     "label": "Base unit & order unit",
+     "tier": "core"
+    },
+    {
+     "id": "mmmat.f3",
+     "label": "Material group",
+     "tier": "core"
+    },
+    {
+     "id": "mmmat.f4",
+     "label": "Purchasing group",
+     "tier": "core"
+    },
+    {
+     "id": "mmmat.f5",
+     "label": "Valuation class & price control (S / V)",
+     "tier": "core"
+    },
+    {
+     "id": "mmmat.f6",
+     "label": "Batch / serial requirement",
+     "tier": "core"
+    },
+    {
+     "id": "mmmat.f7",
+     "label": "Manufacturer part number",
+     "tier": "optional"
+    },
+    {
+     "id": "mmmat.f8",
+     "label": "Goods receipt processing time",
+     "tier": "optional"
+    },
+    {
+     "id": "mmmat.f9",
+     "label": "Non-stock materials (text items)",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmmat.q1",
+     "text": "How many active materials, and how many are bought?",
+     "type": "text"
+    },
+    {
+     "id": "mmmat.q2",
+     "text": "Which material types are used today?",
+     "type": "text"
+    },
+    {
+     "id": "mmmat.q3",
+     "text": "Are duplicates / obsolete materials a problem?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmmat.d1",
+     "text": "Price control for purchased materials",
+     "options": [
+      "Moving average (V)",
+      "Standard (S)",
+      "Mixed by material type"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1602",
+     "name": "Manage Product Master Data"
+    }
+   ]
+  },
+  {
+   "id": "mmsup",
+   "title": "Supplier (business partner)",
+   "area": "mmmaster",
+   "tcodes": [
+    "BP",
+    "XK99",
+    "MK05"
+   ],
+   "plain": "Suppliers as business partners: roles, purchasing data, payment terms, partner functions.",
+   "fields": [
+    {
+     "id": "mmsup.f1",
+     "label": "BP roles (supplier, FI supplier)",
+     "tier": "core"
+    },
+    {
+     "id": "mmsup.f2",
+     "label": "Account groups / number ranges",
+     "tier": "core"
+    },
+    {
+     "id": "mmsup.f3",
+     "label": "Purchasing data (currency, incoterms, terms of payment)",
+     "tier": "core"
+    },
+    {
+     "id": "mmsup.f4",
+     "label": "Partner functions (ordering address, invoicing party)",
+     "tier": "core"
+    },
+    {
+     "id": "mmsup.f5",
+     "label": "Supplier evaluation",
+     "tier": "optional"
+    },
+    {
+     "id": "mmsup.f6",
+     "label": "One-time suppliers",
+     "tier": "optional"
+    },
+    {
+     "id": "mmsup.f7",
+     "label": "Customer–supplier integration",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmsup.q1",
+     "text": "How many active suppliers?",
+     "type": "number"
+    },
+    {
+     "id": "mmsup.q2",
+     "text": "Who creates suppliers and is there approval?",
+     "type": "text"
+    },
+    {
+     "id": "mmsup.q3",
+     "text": "Is supplier data cleansed before migration?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmsup.d1",
+     "text": "Supplier creation process",
+     "options": [
+      "Central master data team",
+      "Purchasing",
+      "Workflow with approval"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1053A",
+     "name": "Manage Supplier Master Data"
+    }
+   ]
+  },
+  {
+   "id": "mminf",
+   "title": "Info records, conditions & source list",
+   "area": "mmmaster",
+   "tcodes": [
+    "ME11",
+    "ME12",
+    "ME01",
+    "MEQ1",
+    "ME13"
+   ],
+   "plain": "Supplier-specific prices and lead times, allowed sources and quota arrangements.",
+   "fields": [
+    {
+     "id": "mminf.f1",
+     "label": "Purchasing info records (price, delivery time)",
+     "tier": "core"
+    },
+    {
+     "id": "mminf.f2",
+     "label": "Condition types (price, discount, freight)",
+     "tier": "core"
+    },
+    {
+     "id": "mminf.f3",
+     "label": "Source list (fixed / blocked sources)",
+     "tier": "core"
+    },
+    {
+     "id": "mminf.f4",
+     "label": "Quota arrangements",
+     "tier": "core"
+    },
+    {
+     "id": "mminf.f5",
+     "label": "Price scales",
+     "tier": "optional"
+    },
+    {
+     "id": "mminf.f6",
+     "label": "Automatic source determination",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mminf.q1",
+     "text": "Where are supplier prices kept today?",
+     "type": "text"
+    },
+    {
+     "id": "mminf.q2",
+     "text": "Must a material always come from a fixed supplier?",
+     "type": "yesno"
+    },
+    {
+     "id": "mminf.q3",
+     "text": "Are several suppliers split by quota?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mminf.d1",
+     "text": "Source determination",
+     "options": [
+      "Info record",
+      "Source list mandatory",
+      "Contracts first",
+      "Manual"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F0840A",
+     "name": "Manage Sources of Supply",
+     "note": "Info records, source list and contracts in one place"
+    }
+   ]
+  },
+  {
+   "id": "mmctr",
+   "title": "Contracts & scheduling agreements",
+   "area": "mmmaster",
+   "tcodes": [
+    "ME31K",
+    "ME32K",
+    "ME31L",
+    "ME38",
+    "ME84"
+   ],
+   "plain": "Long-term agreements: value / quantity contracts and scheduling agreements with delivery schedules.",
+   "fields": [
+    {
+     "id": "mmctr.f1",
+     "label": "Value / quantity contracts",
+     "tier": "core"
+    },
+    {
+     "id": "mmctr.f2",
+     "label": "Scheduling agreements (LP / LPA)",
+     "tier": "core"
+    },
+    {
+     "id": "mmctr.f3",
+     "label": "Delivery schedules & release documentation",
+     "tier": "core"
+    },
+    {
+     "id": "mmctr.f4",
+     "label": "Target value / quantity",
+     "tier": "core"
+    },
+    {
+     "id": "mmctr.f5",
+     "label": "Central contracts",
+     "tier": "optional"
+    },
+    {
+     "id": "mmctr.f6",
+     "label": "JIT / forecast schedules",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmctr.q1",
+     "text": "Are framework agreements used, and for what?",
+     "type": "text"
+    },
+    {
+     "id": "mmctr.q2",
+     "text": "Do suppliers deliver against schedules (e.g. automotive)?",
+     "type": "yesno"
+    },
+    {
+     "id": "mmctr.q3",
+     "text": "Is EDI used for delivery schedules?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmctr.d1",
+     "text": "Repetitive supply",
+     "options": [
+      "Scheduling agreements",
+      "Contracts with release orders",
+      "Standard POs"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1600A",
+     "name": "Manage Purchase Contracts"
+    },
+    {
+     "id": "F2179",
+     "name": "Manage Purchase Scheduling Agreements"
+    }
+   ]
+  },
+  {
+   "id": "mmpr",
+   "title": "Purchase requisition",
+   "area": "mmproc",
+   "tcodes": [
+    "ME51N",
+    "ME52N",
+    "ME53N",
+    "ME55",
+    "ME5A"
+   ],
+   "plain": "Internal request to buy: from MRP, from PM/PS orders or entered by employees.",
+   "fields": [
+    {
+     "id": "mmpr.f1",
+     "label": "Document types",
+     "tier": "core"
+    },
+    {
+     "id": "mmpr.f2",
+     "label": "Account assignment categories (cost centre, order, asset, WBS)",
+     "tier": "core"
+    },
+    {
+     "id": "mmpr.f3",
+     "label": "Source assignment",
+     "tier": "core"
+    },
+    {
+     "id": "mmpr.f4",
+     "label": "Release / approval",
+     "tier": "core"
+    },
+    {
+     "id": "mmpr.f5",
+     "label": "Self-service requisitioning (catalogues)",
+     "tier": "optional"
+    },
+    {
+     "id": "mmpr.f6",
+     "label": "Free-text items",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmpr.q1",
+     "text": "Who raises requisitions (MRP, maintenance, employees)?",
+     "type": "multi",
+     "options": [
+      "MRP",
+      "Maintenance / project orders",
+      "Employees (self-service)",
+      "Buyers"
+     ]
+    },
+    {
+     "id": "mmpr.q2",
+     "text": "Do requisitions need approval?",
+     "type": "yesno"
+    },
+    {
+     "id": "mmpr.q3",
+     "text": "Are catalogues / punch-out used?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmpr.d1",
+     "text": "Requisition approval",
+     "options": [
+      "Release strategy (classic)",
+      "Flexible workflow",
+      "No approval"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1639A",
+     "name": "My Purchase Requisitions – New",
+     "note": "Self-service; successor of Create Purchase Requisition (F1643)"
+    },
+    {
+     "id": "F1048",
+     "name": "Manage Purchase Requisitions"
+    },
+    {
+     "id": "F2229",
+     "name": "Manage Purchase Requisitions – Professional"
+    }
+   ]
+  },
+  {
+   "id": "mmrfq",
+   "title": "RFQ & quotations",
+   "area": "mmproc",
+   "tcodes": [
+    "ME41",
+    "ME47",
+    "ME49"
+   ],
+   "plain": "Asking suppliers for offers and comparing quotations.",
+   "fields": [
+    {
+     "id": "mmrfq.f1",
+     "label": "RFQ document types",
+     "tier": "core"
+    },
+    {
+     "id": "mmrfq.f2",
+     "label": "Quotation entry",
+     "tier": "core"
+    },
+    {
+     "id": "mmrfq.f3",
+     "label": "Price comparison",
+     "tier": "core"
+    },
+    {
+     "id": "mmrfq.f4",
+     "label": "Ariba / external sourcing",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmrfq.q1",
+     "text": "Are RFQs done in the system today?",
+     "type": "yesno"
+    },
+    {
+     "id": "mmrfq.q2",
+     "text": "Is an external sourcing tool used (Ariba, Coupa…)?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmrfq.d1",
+     "text": "Sourcing tool",
+     "options": [
+      "SAP S/4HANA RFQ",
+      "SAP Ariba",
+      "Other / none"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1991",
+     "name": "Manage Supplier Quotations"
+    }
+   ]
+  },
+  {
+   "id": "mmpo",
+   "title": "Purchase order",
+   "area": "mmproc",
+   "tcodes": [
+    "ME21N",
+    "ME22N",
+    "ME23N",
+    "ME2M",
+    "ME9F",
+    "ME59N"
+   ],
+   "plain": "The order to the supplier: items, prices, delivery dates, output and follow-up.",
+   "fields": [
+    {
+     "id": "mmpo.f1",
+     "label": "Document types",
+     "tier": "core"
+    },
+    {
+     "id": "mmpo.f2",
+     "label": "Item categories (standard, consignment, subcontracting, third party, service)",
+     "tier": "core"
+    },
+    {
+     "id": "mmpo.f3",
+     "label": "Account assignment",
+     "tier": "core"
+    },
+    {
+     "id": "mmpo.f4",
+     "label": "Delivery dates & confirmations",
+     "tier": "core"
+    },
+    {
+     "id": "mmpo.f5",
+     "label": "Output (print, e-mail, EDI)",
+     "tier": "core"
+    },
+    {
+     "id": "mmpo.f6",
+     "label": "Tolerances (price, quantity)",
+     "tier": "core"
+    },
+    {
+     "id": "mmpo.f7",
+     "label": "Automatic PO creation (ME59N)",
+     "tier": "optional"
+    },
+    {
+     "id": "mmpo.f8",
+     "label": "Down payments",
+     "tier": "optional"
+    },
+    {
+     "id": "mmpo.f9",
+     "label": "Incoterms & freight",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmpo.q1",
+     "text": "How many POs per month?",
+     "type": "number"
+    },
+    {
+     "id": "mmpo.q2",
+     "text": "How are POs sent to suppliers?",
+     "type": "multi",
+     "options": [
+      "Print",
+      "E-mail",
+      "EDI",
+      "Ariba Network"
+     ]
+    },
+    {
+     "id": "mmpo.q3",
+     "text": "Do suppliers confirm orders?",
+     "type": "yesno"
+    },
+    {
+     "id": "mmpo.q4",
+     "text": "Are POs created automatically from requisitions?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmpo.d1",
+     "text": "PO output channel",
+     "options": [
+      "E-mail PDF",
+      "EDI / Ariba",
+      "Mixed"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F0842A",
+     "name": "Manage Purchase Orders",
+     "note": "Fiori PO maintenance; unsupported features open in the Advanced app"
+    },
+    {
+     "id": "F2358",
+     "name": "Monitor Purchase Order Items",
+     "note": "Open, overdue and to-be-invoiced items"
+    }
+   ]
+  },
+  {
+   "id": "mmrel",
+   "title": "Release strategy / approval",
+   "area": "mmproc",
+   "tcodes": [
+    "CL20N",
+    "OMGS",
+    "ME28",
+    "ME29N"
+   ],
+   "plain": "Who approves requisitions and orders and on which value limits.",
+   "fields": [
+    {
+     "id": "mmrel.f1",
+     "label": "Approval levels & value limits",
+     "tier": "core"
+    },
+    {
+     "id": "mmrel.f2",
+     "label": "Classic release strategy vs flexible workflow",
+     "tier": "core"
+    },
+    {
+     "id": "mmrel.f3",
+     "label": "Approvers / substitutes",
+     "tier": "core"
+    },
+    {
+     "id": "mmrel.f4",
+     "label": "Approval by e-mail / mobile (My Inbox)",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmrel.q1",
+     "text": "What are the approval limits per level?",
+     "type": "text"
+    },
+    {
+     "id": "mmrel.q2",
+     "text": "Who approves when someone is absent?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmrel.d1",
+     "text": "Approval technology",
+     "options": [
+      "Flexible workflow",
+      "Classic release strategy"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "mmsvc",
+   "title": "Service procurement",
+   "area": "mmproc",
+   "tcodes": [
+    "ML81N",
+    "ME21N",
+    "MSE1"
+   ],
+   "plain": "Buying services: lean services, service entry sheets, limits and acceptance.",
+   "fields": [
+    {
+     "id": "mmsvc.f1",
+     "label": "Service items (lean services)",
+     "tier": "core"
+    },
+    {
+     "id": "mmsvc.f2",
+     "label": "Service entry sheet & acceptance",
+     "tier": "core"
+    },
+    {
+     "id": "mmsvc.f3",
+     "label": "Limits / unplanned services",
+     "tier": "core"
+    },
+    {
+     "id": "mmsvc.f4",
+     "label": "Service master",
+     "tier": "optional"
+    },
+    {
+     "id": "mmsvc.f5",
+     "label": "External service management (classic)",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmsvc.q1",
+     "text": "Which services are bought (maintenance, cleaning, consultants…)?",
+     "type": "text"
+    },
+    {
+     "id": "mmsvc.q2",
+     "text": "Who confirms the service was done?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmsvc.d1",
+     "text": "Service procurement model",
+     "options": [
+      "Lean services",
+      "Classic external services",
+      "Material-like items"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F2027",
+     "name": "Manage Service Entry Sheets – Lean Services"
+    }
+   ]
+  },
+  {
+   "id": "mmspc",
+   "title": "Subcontracting, consignment & stock transfers",
+   "area": "mmproc",
+   "tcodes": [
+    "ME2O",
+    "MB1B",
+    "ME27",
+    "VL10B",
+    "MIGO"
+   ],
+   "plain": "Special procurement: components to subcontractors, supplier-owned stock, plant-to-plant transfers.",
+   "fields": [
+    {
+     "id": "mmspc.f1",
+     "label": "Subcontracting (components provided)",
+     "tier": "core"
+    },
+    {
+     "id": "mmspc.f2",
+     "label": "Consignment stock & settlement",
+     "tier": "core"
+    },
+    {
+     "id": "mmspc.f3",
+     "label": "Stock transport orders (one / two step)",
+     "tier": "core"
+    },
+    {
+     "id": "mmspc.f4",
+     "label": "Third-party / drop shipment",
+     "tier": "optional"
+    },
+    {
+     "id": "mmspc.f5",
+     "label": "Pipeline material",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmspc.q1",
+     "text": "Is material sent to subcontractors for processing?",
+     "type": "yesno"
+    },
+    {
+     "id": "mmspc.q2",
+     "text": "Does any supplier keep consignment stock at your site?",
+     "type": "yesno"
+    },
+    {
+     "id": "mmspc.q3",
+     "text": "Are goods moved between plants regularly?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmspc.d1",
+     "text": "Inter-plant transfers",
+     "options": [
+      "Stock transport orders",
+      "Simple transfer postings",
+      "Not needed"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "mmgr",
+   "title": "Goods receipt",
+   "area": "mminv",
+   "tcodes": [
+    "MIGO",
+    "MB51",
+    "MB52",
+    "VL31N"
+   ],
+   "plain": "Receiving goods: against PO / inbound delivery, stock types, quality inspection, labels.",
+   "fields": [
+    {
+     "id": "mmgr.f1",
+     "label": "Goods receipt against PO",
+     "tier": "core"
+    },
+    {
+     "id": "mmgr.f2",
+     "label": "Inbound deliveries / ASN",
+     "tier": "core"
+    },
+    {
+     "id": "mmgr.f3",
+     "label": "Stock types (unrestricted, quality, blocked)",
+     "tier": "core"
+    },
+    {
+     "id": "mmgr.f4",
+     "label": "Over / under delivery tolerance",
+     "tier": "core"
+    },
+    {
+     "id": "mmgr.f5",
+     "label": "GR-based invoice verification",
+     "tier": "core"
+    },
+    {
+     "id": "mmgr.f6",
+     "label": "Quality inspection at GR (QM)",
+     "tier": "optional"
+    },
+    {
+     "id": "mmgr.f7",
+     "label": "Labels / handling units",
+     "tier": "optional"
+    },
+    {
+     "id": "mmgr.f8",
+     "label": "Returns to supplier",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmgr.q1",
+     "text": "How are deliveries received and checked today?",
+     "type": "text"
+    },
+    {
+     "id": "mmgr.q2",
+     "text": "Do suppliers send advance shipping notices?",
+     "type": "yesno"
+    },
+    {
+     "id": "mmgr.q3",
+     "text": "Is incoming inspection done?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmgr.d1",
+     "text": "Receiving process",
+     "options": [
+      "GR against PO",
+      "Inbound delivery first",
+      "EWM-managed"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F0843",
+     "name": "Post Goods Receipt for Purchasing Document"
+    }
+   ]
+  },
+  {
+   "id": "mmgm",
+   "title": "Goods issues & transfer postings",
+   "area": "mminv",
+   "tcodes": [
+    "MIGO",
+    "MB1A",
+    "MB1B",
+    "MMBE",
+    "MB52"
+   ],
+   "plain": "Stock movements: issues to cost centre / order, transfers, scrapping and stock overview.",
+   "fields": [
+    {
+     "id": "mmgm.f1",
+     "label": "Goods issue to cost centre / order",
+     "tier": "core"
+    },
+    {
+     "id": "mmgm.f2",
+     "label": "Transfer posting storage location → storage location",
+     "tier": "core"
+    },
+    {
+     "id": "mmgm.f3",
+     "label": "Stock type changes",
+     "tier": "core"
+    },
+    {
+     "id": "mmgm.f4",
+     "label": "Scrapping",
+     "tier": "core"
+    },
+    {
+     "id": "mmgm.f5",
+     "label": "Movement types & reasons",
+     "tier": "core"
+    },
+    {
+     "id": "mmgm.f6",
+     "label": "Reservations",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmgm.q1",
+     "text": "Which movements happen most (issue to order, transfer, scrapping)?",
+     "type": "text"
+    },
+    {
+     "id": "mmgm.q2",
+     "text": "Is a warehouse system (EWM / WM) in use?",
+     "type": "single",
+     "options": [
+      "EWM",
+      "WM (classic)",
+      "No warehouse system"
+     ]
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmgm.d1",
+     "text": "Warehouse management",
+     "options": [
+      "IM only (storage locations)",
+      "EWM embedded",
+      "EWM decentral"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F1061",
+     "name": "Transfer Stock – In-Plant"
+    },
+    {
+     "id": "F1062",
+     "name": "Manage Stock",
+     "note": "Initial entry and stock changes"
+    },
+    {
+     "id": "F1595",
+     "name": "Stock – Multiple Materials"
+    }
+   ]
+  },
+  {
+   "id": "mmpi",
+   "title": "Physical inventory",
+   "area": "mminv",
+   "tcodes": [
+    "MI01",
+    "MI04",
+    "MI07",
+    "MI31",
+    "MI20"
+   ],
+   "plain": "Counting stock: annual / cycle counting, differences and posting.",
+   "fields": [
+    {
+     "id": "mmpi.f1",
+     "label": "Inventory method (annual / cycle counting / continuous)",
+     "tier": "core"
+    },
+    {
+     "id": "mmpi.f2",
+     "label": "Count documents",
+     "tier": "core"
+    },
+    {
+     "id": "mmpi.f3",
+     "label": "Difference tolerances & approval",
+     "tier": "core"
+    },
+    {
+     "id": "mmpi.f4",
+     "label": "Sampling (inventory sampling)",
+     "tier": "optional"
+    },
+    {
+     "id": "mmpi.f5",
+     "label": "Counting with scanners",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmpi.q1",
+     "text": "How is stock counted today?",
+     "type": "single",
+     "options": [
+      "Annual count",
+      "Cycle counting",
+      "Both"
+     ]
+    },
+    {
+     "id": "mmpi.q2",
+     "text": "Who approves inventory differences?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmpi.d1",
+     "text": "Inventory method",
+     "options": [
+      "Annual",
+      "Cycle counting",
+      "Mixed"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F5430",
+     "name": "Manage Physical Inventory Count"
+    },
+    {
+     "id": "F2913",
+     "name": "Physical Inventory Analysis"
+    }
+   ]
+  },
+  {
+   "id": "mmplan",
+   "title": "Consumption-based planning",
+   "area": "mminv",
+   "tcodes": [
+    "MD01N",
+    "MD04",
+    "MD07"
+   ],
+   "plain": "Reorder-point and forecast-based planning for purchased and indirect materials.",
+   "fields": [
+    {
+     "id": "mmplan.f1",
+     "label": "MRP type (VB / VM / V1 / VV)",
+     "tier": "core"
+    },
+    {
+     "id": "mmplan.f2",
+     "label": "Reorder point & safety stock",
+     "tier": "core"
+    },
+    {
+     "id": "mmplan.f3",
+     "label": "Lot size",
+     "tier": "core"
+    },
+    {
+     "id": "mmplan.f4",
+     "label": "Planned delivery time",
+     "tier": "core"
+    },
+    {
+     "id": "mmplan.f5",
+     "label": "Forecast parameters",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmplan.q1",
+     "text": "How is replenishment of purchased materials triggered today?",
+     "type": "text"
+    },
+    {
+     "id": "mmplan.q2",
+     "text": "Are reorder points maintained in the system?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmplan.d1",
+     "text": "Replenishment method",
+     "options": [
+      "Reorder point",
+      "Forecast-based",
+      "MRP (demand-driven)",
+      "Manual"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F0247A",
+     "name": "Monitor Material Coverage"
+    },
+    {
+     "id": "F1339",
+     "name": "Schedule MRP Runs"
+    }
+   ]
+  },
+  {
+   "id": "mmivr",
+   "title": "Invoice verification",
+   "area": "mmiv",
+   "tcodes": [
+    "MIRO",
+    "MIR7",
+    "MRBR",
+    "MRRL",
+    "MIR4"
+   ],
+   "plain": "Checking supplier invoices against PO and GR: tolerances, blocks, ERS, scanning.",
+   "fields": [
+    {
+     "id": "mmivr.f1",
+     "label": "3-way match (PO / GR / invoice)",
+     "tier": "core"
+    },
+    {
+     "id": "mmivr.f2",
+     "label": "Tolerance keys",
+     "tier": "core"
+    },
+    {
+     "id": "mmivr.f3",
+     "label": "Payment blocks & release (MRBR)",
+     "tier": "core"
+    },
+    {
+     "id": "mmivr.f4",
+     "label": "Evaluated receipt settlement (ERS)",
+     "tier": "core"
+    },
+    {
+     "id": "mmivr.f5",
+     "label": "Invoice scanning / OCR",
+     "tier": "optional"
+    },
+    {
+     "id": "mmivr.f6",
+     "label": "Credit memos & subsequent debits",
+     "tier": "optional"
+    },
+    {
+     "id": "mmivr.f7",
+     "label": "Unplanned delivery costs",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmivr.q1",
+     "text": "How do invoices arrive (paper, PDF, EDI)?",
+     "type": "multi",
+     "options": [
+      "Paper",
+      "PDF e-mail",
+      "EDI / e-invoice",
+      "Supplier portal"
+     ]
+    },
+    {
+     "id": "mmivr.q2",
+     "text": "Who resolves blocked invoices?",
+     "type": "text"
+    },
+    {
+     "id": "mmivr.q3",
+     "text": "Is self-billing (ERS) used?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmivr.d1",
+     "text": "Invoice capture",
+     "options": [
+      "Manual MIRO",
+      "OCR / scanning solution",
+      "Fully electronic (e-invoicing)"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F0859",
+     "name": "Manage Supplier Invoices"
+    },
+    {
+     "id": "F2452",
+     "name": "Upload Supplier Invoices"
+    }
+   ]
+  },
+  {
+   "id": "mmval",
+   "title": "Valuation & account determination",
+   "area": "mmiv",
+   "tcodes": [
+    "OMWB",
+    "OBYC",
+    "MR21",
+    "CKMLCP"
+   ],
+   "plain": "How stock is valued and posted: valuation areas, price control, account determination, GR/IR.",
+   "fields": [
+    {
+     "id": "mmval.f1",
+     "label": "Valuation area (plant)",
+     "tier": "core"
+    },
+    {
+     "id": "mmval.f2",
+     "label": "Price control (S / V)",
+     "tier": "core"
+    },
+    {
+     "id": "mmval.f3",
+     "label": "Automatic account determination (OBYC)",
+     "tier": "core"
+    },
+    {
+     "id": "mmval.f4",
+     "label": "GR/IR clearing",
+     "tier": "core"
+    },
+    {
+     "id": "mmval.f5",
+     "label": "Material ledger / actual costing",
+     "tier": "optional"
+    },
+    {
+     "id": "mmval.f6",
+     "label": "Split valuation",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmval.q1",
+     "text": "Are materials valued at standard or moving average?",
+     "type": "single",
+     "options": [
+      "Standard",
+      "Moving average",
+      "Both"
+     ]
+    },
+    {
+     "id": "mmval.q2",
+     "text": "Is GR/IR clearing reviewed every month?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmval.d1",
+     "text": "Split valuation needed",
+     "options": [
+      "Yes",
+      "No"
+     ]
+    }
+   ],
+   "apps": [
+    {
+     "id": "F3302",
+     "name": "Reconcile GR/IR Accounts"
+    },
+    {
+     "id": "F3303",
+     "name": "Monitor GR/IR Account Reconciliation"
+    }
+   ]
+  },
+  {
+   "id": "mmout",
+   "title": "Output, forms & supplier collaboration",
+   "area": "mmcross",
+   "tcodes": [
+    "NACE",
+    "OPD",
+    "SPRO"
+   ],
+   "plain": "PO forms, e-mail / EDI output, supplier portal and Ariba Network.",
+   "fields": [
+    {
+     "id": "mmout.f1",
+     "label": "Output management (BRF+ / NAST)",
+     "tier": "core"
+    },
+    {
+     "id": "mmout.f2",
+     "label": "PO form layout",
+     "tier": "core"
+    },
+    {
+     "id": "mmout.f3",
+     "label": "EDI messages (ORDERS, ORDRSP, DESADV, INVOIC)",
+     "tier": "core"
+    },
+    {
+     "id": "mmout.f4",
+     "label": "SAP Ariba Network / supplier portal",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmout.q1",
+     "text": "Which documents go to suppliers, and how?",
+     "type": "text"
+    },
+    {
+     "id": "mmout.q2",
+     "text": "Is the PO form customised today?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmout.d1",
+     "text": "Output framework",
+     "options": [
+      "S/4HANA output management",
+      "Classic NAST"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "mmkpi",
+   "title": "Reports & KPIs",
+   "area": "mmcross",
+   "tcodes": [
+    "ME2N",
+    "ME80FN",
+    "MB51",
+    "MC.9"
+   ],
+   "plain": "Purchasing and inventory reporting: spend, delivery performance, stock value, slow movers.",
+   "fields": [
+    {
+     "id": "mmkpi.f1",
+     "label": "Spend analysis",
+     "tier": "core"
+    },
+    {
+     "id": "mmkpi.f2",
+     "label": "Supplier delivery performance",
+     "tier": "core"
+    },
+    {
+     "id": "mmkpi.f3",
+     "label": "Stock value & range of coverage",
+     "tier": "core"
+    },
+    {
+     "id": "mmkpi.f4",
+     "label": "Slow / non-moving stock",
+     "tier": "core"
+    },
+    {
+     "id": "mmkpi.f5",
+     "label": "Purchasing savings",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmkpi.q1",
+     "text": "Which purchasing / inventory KPIs are reported today?",
+     "type": "text"
+    },
+    {
+     "id": "mmkpi.q2",
+     "text": "Who uses them and how often?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmkpi.d1",
+     "text": "Reporting tool",
+     "options": [
+      "Embedded analytics / Fiori",
+      "BW / Datasphere",
+      "Excel"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "mmusr",
+   "title": "Users, roles & approvals",
+   "area": "mmcross",
+   "tcodes": [
+    "PFCG",
+    "SU01"
+   ],
+   "plain": "Who uses purchasing and inventory functions and how many users per role.",
+   "fields": [
+    {
+     "id": "mmusr.f1",
+     "label": "Buyers",
+     "tier": "core"
+    },
+    {
+     "id": "mmusr.f2",
+     "label": "Requesters",
+     "tier": "core"
+    },
+    {
+     "id": "mmusr.f3",
+     "label": "Warehouse / stores users",
+     "tier": "core"
+    },
+    {
+     "id": "mmusr.f4",
+     "label": "Invoice clerks",
+     "tier": "core"
+    },
+    {
+     "id": "mmusr.f5",
+     "label": "Approvers only",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmusr.q1",
+     "text": "How many users per role?",
+     "type": "text"
+    },
+    {
+     "id": "mmusr.q2",
+     "text": "Will requesters use self-service Fiori apps?",
+     "type": "yesno"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmusr.d1",
+     "text": "Requester channel",
+     "options": [
+      "Fiori self-service",
+      "Buyer enters on behalf",
+      "Catalogue / punch-out"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "mmlgc",
+   "title": "Legacy data & migration",
+   "area": "mmcross",
+   "tcodes": [
+    "LTMC",
+    "LTMOM"
+   ],
+   "plain": "Which purchasing and stock data comes over from the legacy system.",
+   "fields": [
+    {
+     "id": "mmlgc.f1",
+     "label": "Materials",
+     "tier": "core"
+    },
+    {
+     "id": "mmlgc.f2",
+     "label": "Suppliers",
+     "tier": "core"
+    },
+    {
+     "id": "mmlgc.f3",
+     "label": "Info records / prices",
+     "tier": "core"
+    },
+    {
+     "id": "mmlgc.f4",
+     "label": "Contracts / scheduling agreements",
+     "tier": "core"
+    },
+    {
+     "id": "mmlgc.f5",
+     "label": "Open POs",
+     "tier": "core"
+    },
+    {
+     "id": "mmlgc.f6",
+     "label": "Stock balances (quantity & value)",
+     "tier": "core"
+    },
+    {
+     "id": "mmlgc.f7",
+     "label": "Open requisitions",
+     "tier": "optional"
+    },
+    {
+     "id": "mmlgc.f8",
+     "label": "Purchasing history",
+     "tier": "optional"
+    }
+   ],
+   "questions": [
+    {
+     "id": "mmlgc.q1",
+     "text": "Which legacy system holds purchasing data?",
+     "type": "text"
+    },
+    {
+     "id": "mmlgc.q2",
+     "text": "Are open POs migrated or closed in legacy?",
+     "type": "single",
+     "options": [
+      "Migrate",
+      "Close in legacy",
+      "Mixed"
+     ]
+    },
+    {
+     "id": "mmlgc.q3",
+     "text": "How is stock value reconciled at cut-over?",
+     "type": "text"
+    }
+   ],
+   "decisions": [
+    {
+     "id": "mmlgc.d1",
+     "text": "Open POs at go-live",
+     "options": [
+      "Migrate",
+      "Close in legacy",
+      "Recreate manually"
+     ]
+    }
+   ]
+  }
+ ]
+}

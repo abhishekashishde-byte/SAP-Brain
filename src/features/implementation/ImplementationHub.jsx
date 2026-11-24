@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { WaniLogo, WaniWordmark } from '../../pages/Login.jsx'
 import { loadWorkshops } from '../discovery/data.js'
-import { discoveryCatalog } from '../discovery/catalog.js'
+import { DISCOVERY_MODULES, moduleKeyFor } from '../discovery/catalog.js'
 import './ImplementationHub.css'
 
 // SAP modules covered by the Discover phase. Only modules with a real catalog are
 // clickable; the rest are shown so the roadmap is visible, not hidden.
 const MODULES = [
-  { id: 'pm', code: 'PM', name: 'Plant Maintenance', blurb: 'Technical objects, maintenance planning, orders, notifications and work clearance.', href: '/discovery', available: true },
-  { id: 'mm', code: 'MM', name: 'Materials Management', blurb: 'Procurement, inventory management, material master and MRP.' },
-  { id: 'pp', code: 'PP', name: 'Production Planning', blurb: 'BOMs, routings, production versions, planning and shop floor execution.' },
+  { id: 'pm', code: 'PM', name: 'Plant Maintenance', blurb: 'Technical objects, maintenance planning, scheduling & capacity, orders, notifications and work clearance.', href: '/discovery?module=pm', available: true },
+  { id: 'pp', code: 'PP', name: 'Production Planning', blurb: 'BOMs, routings, production versions, MRP, capacity planning and shop floor execution.', href: '/discovery?module=pp', available: true },
+  { id: 'mm', code: 'MM', name: 'Materials Management', blurb: 'Procurement, sources of supply, inventory management, invoice verification and valuation.', href: '/discovery?module=mm', available: true },
   { id: 'qm', code: 'QM', name: 'Quality Management', blurb: 'Inspection planning, quality notifications and results recording.' },
   { id: 'ewm', code: 'EWM', name: 'Warehouse Management', blurb: 'Warehouse structure, putaway, picking and stock movements.' },
   { id: 'sd', code: 'SD', name: 'Sales & Distribution', blurb: 'Order-to-cash, pricing, delivery and billing.' },
@@ -36,9 +36,9 @@ export default function ImplementationHub({ session }) {
     return () => { cancelled = true }
   }, [userId])
 
-  const pmCounts = {
-    objects: discoveryCatalog.objects.length,
-    questions: discoveryCatalog.objects.reduce((n, o) => n + o.questions.length, 0),
+  const counts = id => {
+    const c = DISCOVERY_MODULES[id]?.catalog
+    return c ? { objects: c.objects.length, questions: c.objects.reduce((n, o) => n + o.questions.length, 0), draft: !!c.draft } : null
   }
 
   return (
@@ -76,11 +76,11 @@ export default function ImplementationHub({ session }) {
               <>
                 <div className="ih-module-top">
                   <span className="ih-code">{m.code}</span>
-                  <span className={`ih-pill ${m.available ? 'ih-pill-live' : ''}`}>{m.available ? 'Available' : 'Planned'}</span>
+                  <span className={`ih-pill ${m.available ? 'ih-pill-live' : ''}`}>{m.available ? (counts(m.id)?.draft ? 'Draft' : 'Available') : 'Planned'}</span>
                 </div>
                 <strong>{m.name}</strong>
                 <p>{m.blurb}</p>
-                {m.available && <span className="ih-module-meta">{pmCounts.objects} objects · {pmCounts.questions} guided questions</span>}
+                {m.available && <span className="ih-module-meta">{counts(m.id).objects} objects · {counts(m.id).questions} guided questions</span>}
                 {m.available && <span className="ih-open">Open workshops →</span>}
               </>
             )
@@ -92,8 +92,8 @@ export default function ImplementationHub({ session }) {
 
         <div className="ih-recent">
           <div className="ih-recent-head">
-            <h3 className="ih-sub">Recent PM workshops</h3>
-            <a className="ih-link" href="/discovery?new=1">+ New workshop</a>
+            <h3 className="ih-sub">Recent workshops</h3>
+            <a className="ih-link" href="/discovery?module=pm&new=1">+ New PM workshop</a>
           </div>
           {recent === null && <p className="ih-muted">Loading…</p>}
           {recent?.length === 0 && <p className="ih-muted">No workshops yet. Create your first one to start capturing requirements.</p>}
@@ -101,9 +101,9 @@ export default function ImplementationHub({ session }) {
             <ul>
               {recent.map(w => (
                 <li key={w.id}>
-                  <a href={`/discovery?workshop=${encodeURIComponent(w.id)}`}>
+                  <a href={`/discovery?module=${moduleKeyFor(w.catalog_id)}&workshop=${encodeURIComponent(w.id)}`}>
                     <span className="ih-recent-name">{w.client_name}</span>
-                    <span className="ih-recent-meta">{w.project_name || w.title}</span>
+                    <span className="ih-recent-meta">{DISCOVERY_MODULES[moduleKeyFor(w.catalog_id)].label.replace('SAP ', '')} · {w.project_name || w.title}</span>
                     <span className="ih-recent-date">{w.call_date}</span>
                   </a>
                 </li>

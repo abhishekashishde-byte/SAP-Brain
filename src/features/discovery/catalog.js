@@ -1,4 +1,6 @@
-import catalog from './catalog/sap-pm-discovery-catalog.json' with { type: 'json' }
+import pmCatalog from './catalog/sap-pm-discovery-catalog.json' with { type: 'json' }
+import ppCatalog from './catalog/sap-pp-discovery-catalog.json' with { type: 'json' }
+import mmCatalog from './catalog/sap-mm-discovery-catalog.json' with { type: 'json' }
 
 const QUESTION_TYPES = new Set(['yesno', 'single', 'multi', 'number', 'text'])
 const ids = new Set()
@@ -50,7 +52,36 @@ export function validateDiscoveryCatalog(data) {
   return data
 }
 
-export const discoveryCatalog = validateDiscoveryCatalog(catalog)
+// One workshop = one SAP module. The module's catalog is chosen once per page load
+// (the workshop page reloads when you open a workshop of another module), so every
+// screen can keep importing `discoveryCatalog` as before.
+export const DISCOVERY_MODULES = {
+  pm: { key: 'pm', label: 'SAP PM', name: 'Plant Maintenance', catalog: validateDiscoveryCatalog(pmCatalog) },
+  pp: { key: 'pp', label: 'SAP PP', name: 'Production Planning', catalog: validateDiscoveryCatalog(ppCatalog) },
+  mm: { key: 'mm', label: 'SAP MM', name: 'Materials Management', catalog: validateDiscoveryCatalog(mmCatalog) },
+}
+export const MODULE_STORAGE_KEY = 'wani-discovery-module'
+export function moduleKeyFor(catalogId) {
+  return Object.values(DISCOVERY_MODULES).find(m => m.catalog.catalogId === catalogId)?.key || 'pm'
+}
+function initialModule() {
+  try {
+    const fromUrl = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('module') : null
+    const key = fromUrl || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(MODULE_STORAGE_KEY) : null)
+    return DISCOVERY_MODULES[key] ? key : 'pm'
+  } catch { return 'pm' }
+}
+export const activeModuleKey = initialModule()
+export const activeModule = DISCOVERY_MODULES[activeModuleKey]
+export const discoveryCatalog = activeModule.catalog
+// Areas added after a workshop was created (e.g. PM "Planning, scheduling & capacity") are in scope
+// whenever the area they were split from is in scope.
+export function scopeIncludes(scopeAreas, areaId) {
+  if (!scopeAreas?.length) return true
+  if (scopeAreas.includes(areaId)) return true
+  const area = discoveryCatalog.areas.find(a => a.id === areaId)
+  return !!area?.impliedBy && scopeAreas.includes(area.impliedBy)
+}
 export const discoveryCounts = {
   areas: discoveryCatalog.areas.length,
   objects: discoveryCatalog.objects.length,
