@@ -10,7 +10,7 @@ const T = {
   en: {
     report: 'Status report – work in progress', finalReport: 'Final discovery report', wip: 'Work in progress', final: 'Final', progress: 'Progress', keyPoints: 'Key points', point2: 'Key point', nextPhase: 'Overview — what the next phase picks up', customer: 'Customer', project: 'Project', date: 'Report date', consultant: 'Consultant',
     sessions: 'Sessions so far', legacy: 'Legacy system', summary: 'Summary', status: 'Overall status',
-    on_track: 'On track', attention: 'Needs attention', at_risk: 'At risk', coverage: 'Progress by area',
+    on_track: 'On track', attention: 'Needs attention', at_risk: 'At risk', coverage: 'Progress by topic', topic: 'Topic',
     area: 'Area', fields: 'Fields', questions: 'Questions', decisions: 'Decisions', done: 'Done',
     discussed: 'What has been discussed', decisionsTaken: 'Decisions taken', decision: 'Decision',
     why: 'Why', open: 'Open points', point: 'Point', owner: 'Owner', due: 'Due', none: 'No open points.',
@@ -20,7 +20,7 @@ const T = {
   de: {
     report: 'Statusbericht – Zwischenstand', finalReport: 'Abschlussbericht Discovery', wip: 'Zwischenstand', final: 'Abschluss', progress: 'Fortschritt', keyPoints: 'Wichtige Punkte', point2: 'Punkt', nextPhase: 'Überblick – was die nächste Phase aufgreift', customer: 'Kunde', project: 'Projekt', date: 'Berichtsdatum', consultant: 'Berater',
     sessions: 'Bisherige Termine', legacy: 'Altsystem', summary: 'Zusammenfassung', status: 'Gesamtstatus',
-    on_track: 'Im Plan', attention: 'Aufmerksamkeit erforderlich', at_risk: 'Gefährdet', coverage: 'Fortschritt nach Bereich',
+    on_track: 'Im Plan', attention: 'Aufmerksamkeit erforderlich', at_risk: 'Gefährdet', coverage: 'Fortschritt nach Thema', topic: 'Thema',
     area: 'Bereich', fields: 'Felder', questions: 'Fragen', decisions: 'Entscheidungen', done: 'Erledigt',
     discussed: 'Was bisher besprochen wurde', decisionsTaken: 'Getroffene Entscheidungen', decision: 'Entscheidung',
     why: 'Begründung', open: 'Offene Punkte', point: 'Punkt', owner: 'Verantwortlich', due: 'Fällig', none: 'Keine offenen Punkte.',
@@ -33,14 +33,20 @@ const T = {
 export function coverageByArea(workshop, entries, todos, audience, extras, language = 'en') {
   const { rows } = gather(workshop, entries, todos, audience, extras)
   const localized = Object.fromEntries(discoveryCatalog.areas.map(a => [a.title, getAreaTitle(a, language)]))
-  const byArea = new Map()
-  for (const [area, , type, total, completed] of rows.Coverage.slice(1)) {
-    const a = byArea.get(area) || { area, fields: [0, 0], questions: [0, 0], decisions: [0, 0] }
-    const key = type === 'Fields' ? 'fields' : type === 'Questions' ? 'questions' : 'decisions'
-    a[key][0] += Number(completed) || 0; a[key][1] += Number(total) || 0
-    byArea.set(area, a)
+  // One entry per topic (catalog object) in scope, so every topic — refurbishment,
+  // measuring points … — is named in the report, including ones not started yet.
+  const byObject = new Map()
+  for (const [area, object, type, total, completed] of rows.Coverage.slice(1)) {
+    const key = area + '\u0000' + object
+    const o = byObject.get(key) || { area: localized[area] || area, object, fields: [0, 0], questions: [0, 0], decisions: [0, 0] }
+    const k = type === 'Fields' ? 'fields' : type === 'Questions' ? 'questions' : 'decisions'
+    o[k][0] += Number(completed) || 0; o[k][1] += Number(total) || 0
+    byObject.set(key, o)
   }
-  return [...byArea.values()].map(a => ({ ...a, area: localized[a.area] || a.area }))
+  return [...byObject.values()].map(o => {
+    const done = o.fields[0] + o.questions[0] + o.decisions[0], total = o.fields[1] + o.questions[1] + o.decisions[1]
+    return { ...o, percent: total ? Math.round(done / total * 100) : 0 }
+  })
 }
 
 export async function downloadStatusReport({ workshop, report, coverage, todos, sessions, audience, language, reportId }) {
@@ -94,8 +100,14 @@ export async function downloadStatusReport({ workshop, report, coverage, todos, 
   ]
 
   if (coverage?.length) {
-    const overall = c => { const done = c.fields[0] + c.questions[0] + c.decisions[0], total = c.fields[1] + c.questions[1] + c.decisions[1]; return total ? Math.round(done / total * 100) : 0 }
-    children.push(h(t.coverage), table([t.area, t.progress], coverage.map(c => [c.area, `${overall(c)} %`]), [70, 30]))
+    // Area shown once, then each of its topics with its own percentage.
+    const rowsOut = []
+    let lastArea = null
+    for (const c of coverage) {
+      rowsOut.push([c.area === lastArea ? '' : c.area, c.object, `${c.percent} %`])
+      lastArea = c.area
+    }
+    children.push(h(t.coverage), table([t.area, t.topic, t.progress], rowsOut, [34, 46, 20]))
   }
   if (report.discussed?.length) {
     children.push(h(t.discussed))

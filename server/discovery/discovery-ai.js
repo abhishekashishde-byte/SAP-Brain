@@ -240,7 +240,8 @@ export default async function handler(req,res) {
        'Return STRICT JSON ONLY: {"title":"report title","executive_summary":"4-6 sentences: where discovery stands, what has been covered and worked out, which areas come next","overall_status":"on_track|attention|at_risk","status_reason":"one or two sentences",'+
        '"discussed":[{"area":"SAP area","summary":"3-6 sentences: what was discussed and clarified about the current situation — what exists in the legacy system, how it is used today, volumes and structures"}],'+
        '"key_points":[{"area":"SAP area","point":"an important finding about the customer\'s current / legacy situation, one sentence (e.g. what exists or does not exist in the legacy system, how it is handled today)"}],'+
-       '"remaining_overview":["short bullet: which areas or topics still need to be covered in discovery, with a few words each"]}. Key points: the 5-15 most important across all areas.'
+       '"remaining_overview":["short bullet: which topics still need to be covered in discovery, with a few words each"]}. Key points: the 5-15 most important across all areas. '+
+       'The coverage list gives every topic in scope with its percent done: name each topic that is at 0 % or clearly incomplete in remaining_overview (by its topic name, e.g. Refurbishment, Measuring point & counter, Safety & work permits), grouped where sensible.'
     const report=await runStructured(system,{...context,catalogLookup:labels,processLookup:processLabels,sessions,meetings,coverage},
      v=>v&&typeof v.executive_summary==='string'&&Array.isArray(v.discussed)&&Array.isArray(v.key_points)&&Array.isArray(v.remaining_overview),
      16000)
