@@ -821,7 +821,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
     text = text.replace(/\*\*(\[[^\]]*\]\(https?:\/\/[^\s)]+\))\*\*/g, '$1')
     // Handle markdown links [label](url) FIRST — split them out before the bare-URL rule,
     // otherwise the raw https:// inside a link leaks as visible text.
-    return text.split(/(\[[^\]]*\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|`[^`]+`|_[^_]+_|https?:\/\/[^\s)<>\]]+)/g).map((part, i) => {
+    return text.split(/(\[[^\]]*\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|`[^`]+`|(?<![A-Za-z0-9_])_[^_\n]+_(?![A-Za-z0-9_])|https?:\/\/[^\s)<>\]]+)/g).map((part, i) => {
       const mdLink = part.match(/^\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)$/)
       if (mdLink) {
         const label = mdLink[1]
@@ -832,7 +832,9 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
       }
       if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ fontWeight:600,color:t.text }}>{part.slice(2,-2)}</strong>
       if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily:"'IBM Plex Mono',ui-monospace,monospace",background:t.codeBg,padding:'1px 5px',borderRadius:5,fontSize:'0.86em',color:t.text,border:`1px solid ${t.border}`,whiteSpace:'nowrap' }}>{part.slice(1,-1)}</code>
-      if (part.startsWith('_') && part.endsWith('_')) return <span key={i} style={{ fontSize:11,color:t.text4,fontStyle:'italic' }}>{part.slice(1,-1)}</span>
+      // Only a real regex match (odd index) is italic. SAP identifiers such as
+      // EXIT_SAPLATPC_001 or BAPI_PRODORD_CREATE keep their underscores as plain text.
+      if (i % 2 === 1 && part.startsWith('_') && part.endsWith('_')) return <span key={i} style={{ fontSize:11,color:t.text4,fontStyle:'italic' }}>{part.slice(1,-1)}</span>
       if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color:'#90949b',textDecoration:'underline',wordBreak:'break-all' }}>{part}</a>
       return <span key={i}>{part}</span>
     })

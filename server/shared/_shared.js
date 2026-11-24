@@ -548,6 +548,24 @@ export function parseAnswerMeta(rawText) {
   }
 }
 
+// Last-resort cleanup for answers that did NOT go through the container parse
+// but still contain marker text (e.g. the model used the format unprompted).
+// Keeps the quick-answer text itself, drops only the marker words, and removes
+// the trailing references/follow-ups JSON entirely, closed or not.
+export function stripStrayContainerMarkers(text) {
+  if (!text) return text || ''
+  let out = text
+  const metaIdx = out.indexOf(META_MARKER_START)
+  if (metaIdx !== -1) {
+    const metaEnd = out.indexOf(META_MARKER_END, metaIdx)
+    out = metaEnd === -1
+      ? out.slice(0, metaIdx)
+      : out.slice(0, metaIdx) + out.slice(metaEnd + META_MARKER_END.length)
+  }
+  out = out.split(QUICK_MARKER_START).join('').split(QUICK_MARKER_END).join('')
+  return out.trim()
+}
+
 // Convenience wrapper combining both parses — this is what chat.js calls on
 // the full raw answer once streaming finishes.
 export function parseAnswerContainer(fullAnswer) {
