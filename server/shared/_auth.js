@@ -182,6 +182,8 @@ export async function requireApprovedUser(req) {
 }
 
 export function sendAuthError(res, auth) {
+  // Structured security log line — filter Cloudflare logs for "security" to spot abuse.
+  console.warn(JSON.stringify({ security: 'auth_denied', status: auth.status || 401, reason: auth.error || 'Unauthorized' }))
   return res.status(auth.status || 401).json({ error: auth.error || 'Unauthorized' })
 }
 

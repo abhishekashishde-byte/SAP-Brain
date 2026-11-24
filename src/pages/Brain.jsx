@@ -203,6 +203,16 @@ function ModuleBadge({ module, small }) {
   )
 }
 
+// Only http(s) links from AI answers or web sources become clickable — never javascript:/data:.
+const safeHref = url => /^https?:\/\//i.test(String(url || '').trim()) ? String(url).trim() : undefined
+
+// JSON headers with the current login token — protected endpoints reject requests without it.
+async function authJsonHeaders() {
+  const { data } = await supabase.auth.getSession()
+  const token = data?.session?.access_token
+  return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+}
+
 // ── PARTICLE FIELD — jet black background with slowly drifting grey particles ──
 // Canvas, ~1 particle per 18k px², capped; pauses when the tab is hidden and is
 // static for users who prefer reduced motion.
@@ -602,7 +612,7 @@ function FurtherReading({ links, t, dark }) {
             const meta = SOURCE_META[link.source] || SOURCE_META['SAP']
             const cleanTitle = link.title.replace(/ [|] SAP Help Portal$| [|] SAP Community$| [|] SAP$/i, '').trim()
             return (
-              <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+              <a key={i} href={safeHref(link.url)} target="_blank" rel="noopener noreferrer"
                 style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', transition: 'opacity 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
                 onMouseLeave={e => e.currentTarget.style.opacity = '1'}
@@ -625,7 +635,7 @@ function FurtherReading({ links, t, dark }) {
           {dedupedSupp.map((link, i) => {
             const meta = SOURCE_META[link.source] || SOURCE_META['Web']
             return (
-              <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+              <a key={i} href={safeHref(link.url)} target="_blank" rel="noopener noreferrer"
                 style={{
                   display: 'inline-block', fontSize: 12, fontWeight: 400, color: t.text2,
                   textDecoration: 'none', padding: '3px 10px', borderRadius: 20,
@@ -970,7 +980,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         for (let pi = 0; pi < parts.length; pi++) {
           if (parts[pi].startsWith('[') && parts[pi].includes('](')) {
             const match = parts[pi].match(/\[([^\]]+)\]\(([^)]+)\)/)
-            if (match) rendered.push(<a key={pi} href={match[2]} target="_blank" rel="noopener noreferrer" style={{ color:'#90949b',textDecoration:'underline' }}>{match[1]}</a>)
+            if (match) rendered.push(<a key={pi} href={safeHref(match[2])} target="_blank" rel="noopener noreferrer" style={{ color:'#90949b',textDecoration:'underline' }}>{match[1]}</a>)
           } else if (parts[pi] && !parts[pi].match(/^[^\]]+$|^\([^)]+\)$/)) {
             rendered.push(<span key={pi}>{inlineFormat(parts[pi])}</span>)
           }
@@ -1158,7 +1168,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
             onClick={async () => {
               try {
                 const r = await fetch('/api/generate-fs-doc', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  method: 'POST', headers: await authJsonHeaders(),
                   body: JSON.stringify({ fsText: msg._fsText, fileName: `Wani_FS_${new Date().toISOString().slice(0,10)}` })
                 })
                 if (!r.ok) return
@@ -1181,7 +1191,7 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
             onClick={async () => {
               try {
                 const r = await fetch('/api/generate-ppt', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  method: 'POST', headers: await authJsonHeaders(),
                   body: JSON.stringify({ pptText: msg._pptText, fileName: `Wani_Workshop_${new Date().toISOString().slice(0,10)}` })
                 })
                 if (!r.ok) return
@@ -2154,7 +2164,7 @@ export default function Brain({ session }) {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc =
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
         }
-        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
+        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise
         let text = ''
         for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
           const page = await pdf.getPage(i)
@@ -2767,7 +2777,7 @@ export default function Brain({ session }) {
                 try {
                   const fsRes = await fetch('/api/generate-fs-doc', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await authJsonHeaders(),
                     body: JSON.stringify({
                       fsText: evt.fsText,
                       fileName: `Wani_FS_${new Date().toISOString().slice(0,10)}`
@@ -2803,7 +2813,7 @@ export default function Brain({ session }) {
                 try {
                   const pptRes = await fetch('/api/generate-ppt', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await authJsonHeaders(),
                     body: JSON.stringify({
                       pptText: evt.pptText,
                       fileName: `Wani_Workshop_${new Date().toISOString().slice(0,10)}`

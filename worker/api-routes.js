@@ -17,6 +17,9 @@ const HANDLERS = {
 }
 
 // Same limits middleware.js enforced on Vercel.
+// Endpoints that call a paid AI model.
+const AI_ROUTES = new Set(['chat', 'code', 'external-chat', 'summarise', 'extract', 'categorise', 'discovery-ai', 'discovery-transcript', 'discovery-correct', 'discovery-import'])
+
 const MAX_BODY_BYTES = {
   'discovery-transcript': 15_000,
   'discovery-find': 4_000,
@@ -81,6 +84,19 @@ export async function routeApi(request, env, ctx) {
 
   const load = HANDLERS[name]
   if (!load) return null
+
+  // Rate limit per client IP. AI endpoints (they cost money per call) are stricter.
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown'
+  const limiter = AI_ROUTES.has(match[1]) ? env.RL_AI : env.RL_API
+  if (limiter && request.method !== 'OPTIONS') {
+    const { success } = await limiter.limit({ key: `${match[1]}:${ip}` })
+    if (!success) {
+      console.warn(JSON.stringify({ security: 'rate_limited', route: match[1], ip }))
+      return new Response(JSON.stringify({ error: 'Too many requests — please wait a minute and try again.' }), {
+        status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60', 'Cache-Control': 'no-store' },
+      })
+    }
+  }
 
   const contentLength = Number(request.headers.get('content-length') || 0)
   if (maxBodyBytes && contentLength > maxBodyBytes) return jsonError(413, 'Request body too large')

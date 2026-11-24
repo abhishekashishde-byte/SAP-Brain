@@ -25,7 +25,7 @@ function ReferencesList({ refs, dark }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {refs.map((r, i) => (
         <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <a href={r.url} target="_blank" rel="noopener noreferrer" style={{
+          <a href={/^https?:\/\//i.test(String(r.url || '')) ? r.url : undefined} target="_blank" rel="noopener noreferrer" style={{
             fontSize: 12.5, color: '#0A6ED1', textDecoration: 'none', display: 'flex', gap: 6, alignItems: 'baseline',
           }}>
             <span style={{

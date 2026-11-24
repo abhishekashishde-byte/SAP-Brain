@@ -16,7 +16,7 @@ export function LegacyImportPanel({workshop,session,onImported}){
   setBusy(true);setNotice('Uploading to private workshop storage…');setWarnings([])
   try{
    const path=session.user.id+'/'+workshop.id+'/'+crypto.randomUUID()+'.'+extension
-   const {error:uploadError}=await supabase.storage.from('discovery-legacy').upload(path,file,{upsert:false,contentType:file.type||TYPES[extension]})
+   const {error:uploadError}=await supabase.storage.from('discovery-legacy').upload(path,file,{upsert:false,contentType:TYPES[extension]})
    if(uploadError)throw uploadError
    setNotice('Extracting features and mapping to SAP objects…')
    const response=await fetch('/api/discovery-import',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({

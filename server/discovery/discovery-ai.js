@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { requireApprovedUser, sendAuthError } from '../shared/_auth.js'
 
 
 const MODEL=process.env.DISCOVERY_AI_MODEL||'claude-sonnet-5-5'
@@ -51,6 +52,9 @@ async function runStructured(system,input,valid,maxTokens=6000) {
 }
 export default async function handler(req,res) {
  if(req.method!=='POST')return respond(res,405,{error:'POST required'})
+ // Same gate as every other AI endpoint: signed in AND approved (not just signed up).
+ const approval=await requireApprovedUser(req)
+ if(!approval.ok)return sendAuthError(res,approval)
  try{
   const {db,user}=await authenticated(req)
   const {action,workshopId,payload={}}=req.body||{}

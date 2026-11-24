@@ -2129,7 +2129,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
   if (body.action === 'delete_memory') {
     try {
       const { memoryId } = body
-      if (!memoryId) return res.status(400).json({ error: 'Missing memoryId' })
+      if (!memoryId || !/^[0-9a-f-]{36}$/i.test(String(memoryId))) return res.status(400).json({ error: 'Missing memoryId' })
       const supaUrl = process.env.SUPABASE_URL
       const supaKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
       await fetch(`${supaUrl}/rest/v1/memories?id=eq.${memoryId}&user_id=eq.${userId}`, { method: 'DELETE', headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` } })
@@ -2188,7 +2188,15 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
   res.setHeader('Connection', 'keep-alive')
   res.setHeader('X-Accel-Buffering', 'no')
 
-  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
+  // Internal diagnostics (debug document, case file) are for admins only — never sent to
+  // other users, even though the UI would not display them.
+  const send = (data) => {
+    if (!isAdmin && data && typeof data === 'object' && 'debugDoc' in data) {
+      const { debugDoc: _omit, ...rest } = data
+      data = rest
+    }
+    return res.write(`data: ${JSON.stringify(data)}\n\n`)
+  }
   const debugLog = {}  // admin debug info collected throughout
   debugLog.question = lastMsg
   let todayTopicHint = null // e.g. { module: 'PM', count: 6, totalToday: 8 } — used for occasional light callback

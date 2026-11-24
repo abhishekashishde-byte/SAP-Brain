@@ -57,19 +57,28 @@ export const createConversation = async (userId, { title, module, topic, message
   return data
 }
 
+// Owner filter in addition to row-level security (defence in depth).
+const currentUserId = async () => (await supabase.auth.getSession()).data?.session?.user?.id
+
 export const updateConversation = async (id, updates) => {
+  const userId = await currentUserId()
+  if (!userId) throw new Error('Not signed in')
   const { error } = await supabase
     .from('sap_conversations')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('user_id', userId)
   if (error) throw error
 }
 
 export const deleteConversation = async (id) => {
+  const userId = await currentUserId()
+  if (!userId) throw new Error('Not signed in')
   const { error } = await supabase
     .from('sap_conversations')
     .delete()
     .eq('id', id)
+    .eq('user_id', userId)
   if (error) throw error
 }
 

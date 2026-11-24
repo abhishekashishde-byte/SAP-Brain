@@ -12,6 +12,7 @@ import {
   HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType,
   LevelFormat, Footer, Header, PageNumber, SimpleField,
 } from 'docx'
+import { requireApprovedUser, sendAuthError } from '../server/shared/_auth.js'
 
 // ── Colours matching the uploaded FS template ────────────────────────────────
 const C = {
@@ -451,6 +452,9 @@ function buildFSDocument(fsText) {
 // ── Vercel handler ────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
+  // Only approved Wani users may generate documents.
+  const auth = await requireApprovedUser(req)
+  if (!auth.ok) return sendAuthError(res, auth)
 
   const { fsText, fileName } = req.body
   if (!fsText?.trim()) return res.status(400).json({ error: 'fsText is required' })
@@ -466,6 +470,6 @@ export default async function handler(req, res) {
     res.status(200).send(buffer)
   } catch (err) {
     console.error('FS Doc generation error:', err.message)
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: 'Document generation failed' })
   }
 }

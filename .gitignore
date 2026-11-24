@@ -1,3 +1,14 @@
 # Cloudflare local dev
 .dev.vars
 .wrangler/
+
+# Dependencies and build output are rebuilt by Cloudflare — never commit them
+node_modules/
+dist/
+
+# Secrets must never be committed
+.env
+.env.*
+!.env.example
+*.pem
+*.key

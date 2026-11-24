@@ -34,7 +34,7 @@ async function extractText(bytes,extension){
  }
  const module=await import('pdfjs-dist/legacy/build/pdf.js')
  const pdfjs=module.getDocument?module:module.default
- const task=pdfjs.getDocument({data:new Uint8Array(bytes),useSystemFonts:true,disableFontFace:true,disableWorker:true})
+ const task=pdfjs.getDocument({data:new Uint8Array(bytes),useSystemFonts:true,disableFontFace:true,disableWorker:true,isEvalSupported:false})
  const doc=await task.promise
  const texts=[]
  for(let p=1;p<=Math.min(doc.numPages,45);p++){

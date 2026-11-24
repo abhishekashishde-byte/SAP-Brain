@@ -24,14 +24,7 @@
     <title>Wani — SAP AI Assistant</title>
 
     <!-- Capture PWA install prompt before React loads -->
-    <script>
-      window.__pwaInstallPrompt = null;
-      window.addEventListener('beforeinstallprompt', function(e) {
-        e.preventDefault();
-        window.__pwaInstallPrompt = e;
-        window.dispatchEvent(new Event('pwaPromptReady'));
-      });
-    </script>
+    <script src="/pwa-capture.js"></script>
   </head>
   <body>
     <div id="root"></div>

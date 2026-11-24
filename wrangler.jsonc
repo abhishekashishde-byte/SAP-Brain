@@ -16,6 +16,12 @@
   "observability": {
     "enabled": true
   },
+  // Per-IP request limits (checked in worker/api-routes.js). AI endpoints cost money,
+  // so they get the tighter limit.
+  "ratelimits": [
+    { "name": "RL_AI", "namespace_id": "4101", "simple": { "limit": 20, "period": 60 } },
+    { "name": "RL_API", "namespace_id": "4102", "simple": { "limit": 120, "period": 60 } }
+  ],
   "triggers": {
     "crons": [
       "0 3 * * *"

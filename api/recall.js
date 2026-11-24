@@ -27,17 +27,17 @@ export default async function handler(req, res) {
 
   try {
     if (action === 'admin_dashboard') {
-      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      if (!isAdmin) return denyAdmin(res, action, auth.user.email)
       return await handleAdminDashboard(res, auth)
     }
 
     if (action === 'admin_approve_user') {
-      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      if (!isAdmin) return denyAdmin(res, action, auth.user.email)
       return await handleAdminApproveUsers(req, res, auth, [req.body.userId])
     }
 
     if (action === 'admin_approve_users') {
-      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      if (!isAdmin) return denyAdmin(res, action, auth.user.email)
       const ids = Array.isArray(req.body.userIds) ? req.body.userIds.slice(0, 50) : []
       return await handleAdminApproveUsers(req, res, auth, ids)
     }
@@ -51,22 +51,22 @@ export default async function handler(req, res) {
     }
 
     if (action === 'knowledge_review_queue') {
-      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      if (!isAdmin) return denyAdmin(res, action, auth.user.email)
       return await handleReviewQueue(res, auth)
     }
 
     if (action === 'knowledge_review') {
-      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      if (!isAdmin) return denyAdmin(res, action, auth.user.email)
       return await handleReviewDecision(req, res, auth)
     }
 
     if (action === 'knowledge_update_global') {
-      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      if (!isAdmin) return denyAdmin(res, action, auth.user.email)
       return await handleUpdateGlobal(req, res, auth)
     }
 
     if (action === 'knowledge_archive_global') {
-      if (!isAdmin) return res.status(403).json({ error: 'Administrator access required' })
+      if (!isAdmin) return denyAdmin(res, action, auth.user.email)
       return await handleArchiveGlobal(req, res, auth)
     }
 
@@ -487,4 +487,10 @@ function safeError(error) {
   const message = String(error?.message || '')
   if (/already reviewed|not found|missing/i.test(message)) return message
   return 'Knowledge operation failed'
+}
+
+// A non-admin reaching an admin action is worth knowing about.
+function denyAdmin(res, action, email) {
+  console.warn(JSON.stringify({ security: 'admin_denied', action, email }))
+  return res.status(403).json({ error: 'Administrator access required' })
 }

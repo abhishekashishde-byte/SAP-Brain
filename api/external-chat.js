@@ -40,7 +40,12 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'External API not configured' })
   }
 
-  if (!providedKey || providedKey !== validKey) {
+  // Constant-time comparison so the key cannot be guessed character by character.
+  const a = new TextEncoder().encode(String(providedKey || ''))
+  const b = new TextEncoder().encode(String(validKey))
+  let diff = a.length ^ b.length
+  for (let i = 0; i < b.length; i++) diff |= (a[i] ?? 0) ^ b[i]
+  if (!providedKey || diff !== 0) {
     return res.status(401).json({ error: 'Invalid or missing API key' })
   }
 

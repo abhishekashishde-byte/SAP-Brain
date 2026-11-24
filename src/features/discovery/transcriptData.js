@@ -8,7 +8,9 @@ export async function uploadTranscript(workshop,user,file,days,consentText,meeti
  if(!['txt','vtt','docx','mp3','m4a','wav'].includes(ext))throw Error('Unsupported file type')
  if(file.size>20*1024*1024)throw Error('Maximum file size is 20 MB')
  const path=user.id+'/'+workshop.id+'/'+crypto.randomUUID()+'.'+ext
- const upload=await supabase.storage.from('discovery-transcripts').upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'})
+ // Content type from the extension (not the browser's guess) — the bucket only accepts these types.
+ const TYPES={txt:'text/plain',vtt:'text/vtt',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',mp3:'audio/mpeg',m4a:'audio/mp4',wav:'audio/wav'}
+ const upload=await supabase.storage.from('discovery-transcripts').upload(path,file,{upsert:false,contentType:TYPES[ext]})
  if(upload.error)throw upload.error
  const audio=['mp3','m4a','wav'].includes(ext)
  const deleteAfter=days?new Date(Date.now()+days*86400000).toISOString().slice(0,10):null

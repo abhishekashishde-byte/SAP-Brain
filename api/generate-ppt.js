@@ -4,6 +4,7 @@
 // Audience: Business users / Maintenance technicians / Production staff
 
 import PptxGenJS from 'pptxgenjs'
+import { requireApprovedUser, sendAuthError } from '../server/shared/_auth.js'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const D = {
@@ -432,6 +433,9 @@ async function buildPPT(pptText, presTitle) {
 // ── Vercel handler ────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
+  // Only approved Wani users may generate documents.
+  const auth = await requireApprovedUser(req)
+  if (!auth.ok) return sendAuthError(res, auth)
 
   const { pptText, fileName } = req.body
   if (!pptText?.trim()) return res.status(400).json({ error: 'pptText is required' })
@@ -447,6 +451,6 @@ export default async function handler(req, res) {
     res.status(200).send(buffer)
   } catch (err) {
     console.error('PPT generation error:', err.message)
-    res.status(500).json({ error: err.message })
+    res.status(500).json({ error: 'Document generation failed' })
   }
 }
