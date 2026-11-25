@@ -24,6 +24,7 @@ import { buildHistory, planTurn, updateCaseFile, caseFileText, modePrompt } from
 import { findLargePrograms, renderMap, applyProgramMaps } from '../server/chat/program-map.js'
 import { isAdminEmail } from '../server/shared/admin.js'
 import { traceQuotes } from '../server/chat/quote-trace.js'
+import { fetchRelevantFindings, findingLabel } from '../server/findings/findings.js'
 
 // ── ANSWER MODEL ──────────────────────────────────────────────────────────────
 // One place for the Claude model that writes Wani's answers (Q&A, code, deliverables).
@@ -2597,6 +2598,16 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
       ? fetchCodeLibraryIndex(userToken).catch(() => [])
       : Promise.resolve([])
 
+    // Consultant's saved findings (numbered solved tickets): the closest ones to this
+    // question by meaning; the answer model judges whether they really apply.
+    const findingsPromise = (!isDeliverable && planMode !== 'rewrite' && userToken)
+      ? fetchRelevantFindings(retrievalQ, userToken).catch(() => [])
+      : Promise.resolve([])
+    if (!isDeliverable && planMode !== 'rewrite' && userToken) {
+      activity('findings', 'Checking your saved findings')
+      findingsPromise.then(f => activity('findings', f.length ? `Found ${f.length} related finding${f.length === 1 ? '' : 's'} (${f.map(x => x.number).join(', ')})` : 'Checked your saved findings', 'done')).catch(() => {})
+    }
+
     // ── STEP 6: Resolve all parallel promises ─────────────────────────────
     const [
       bookChunks,
@@ -2618,6 +2629,8 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
 
     const codeLibrary = await codeLibraryPromise
     debugLog.codeLibraryEntries = codeLibrary.length
+    const savedFindings = await findingsPromise
+    debugLog.findings = savedFindings.map(f => ({ number: f.number, title: f.title, similarity: Math.round((f.similarity || 0) * 1000) / 1000 }))
 
     const t2 = Date.now()
     debugLog.parallelMs = t2 - t1
@@ -2794,6 +2807,19 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
       systemPrompt += `\n\n🗂️ CONSULTANT'S CODE LIBRARY (solutions this consultant saved earlier from real programs):\n${lines}\n\nHOW TO USE THE CODE LIBRARY:\n- Standard SAP always comes first. Suggest a saved entry ONLY when (a) it genuinely solves the problem the consultant is describing now AND standard SAP has no real solution for it (or only one whose gaps clearly matter here), or (b) the consultant explicitly asks for a custom / Z solution or for their earlier code. In every other case say nothing about the library — not even that an entry exists.\n- When it does apply: state briefly why standard does not cover it, then one short line such as "You have a saved solution for this in your Code library: <title> — <one-line approach>." Do not paste or reconstruct code.\n- Never invent library entries or details beyond what is listed above.`
     }
 
+    // ── Inject the consultant's saved findings (numbered solved tickets) ───
+    if (savedFindings.length > 0) {
+      const blocks = savedFindings.map(f => [
+        `[${findingLabel(f)}${f.ticket_ref ? ` · customer ticket ${f.ticket_ref}` : ''}] ${f.title}${f.module ? ` (${f.module})` : ''} — status: ${f.status === 'solved' ? 'solved' : f.status === 'root_cause_found' ? 'root cause found, no fix recorded' : 'open'}`,
+        f.problem && `Problem: ${f.problem}`,
+        f.investigation && `Investigation:\n${String(f.investigation).slice(0, 5000)}`,
+        f.root_cause && `Root cause: ${f.root_cause}`,
+        f.solution && `Solution: ${f.solution}`,
+        f.sap_objects?.length && `SAP objects: ${f.sap_objects.join(', ')}`,
+      ].filter(Boolean).join('\n')).join('\n\n')
+      systemPrompt += `\n\n🎫 CONSULTANT'S SAVED FINDINGS (investigations this consultant solved earlier on real tickets):\n${blocks}\n\nHOW TO USE SAVED FINDINGS:\n- Use a finding only if it genuinely concerns the same problem or mechanism as the current question; otherwise ignore it and do not mention it.\n- When you use one, name it by its number and date, e.g. "This matches Finding ${savedFindings[0].number}${savedFindings[0].found_on ? ` from ${String(savedFindings[0].found_on).split('-').reverse().join('.')}` : ''}: …", and say what carries over and what may differ for this case.\n- Quote its wording only exactly as written above. Never invent details, steps or fixes the finding does not contain; if it has no solution recorded, say so.`
+    }
+
     // ── Inject verified knowledge ──────────────────────────────────────────
     // These are findings THIS consultant previously confirmed as correct (via the
     // Knowledge Base save flow) — not generic training data or search results.
@@ -2837,7 +2863,7 @@ Only set suggest=true when confidence >= 0.92. Keep the suggestion concise.` },
       systemPrompt += `\n\n🌐 LIVE VERIFICATION REQUIRED — MANDATORY FOR THIS TURN:\nBefore writing the final answer, you MUST use your native web_search tool at least once. Do not treat Book RAG, Tavily scoring, saved knowledge, or your training memory as a substitute for this independent check. Verify the central SAP mechanism and every exact technical identifier you intend to rely on (especially T-codes, tables/fields, BAdIs, app IDs, SAP Notes, and SPRO paths). If live search conflicts with retrieved context, surface the conflict and prefer directly verified evidence. If a specific identifier cannot be verified, do not present it as fact.`
     }
 
-    if (bookChunks.length===0 && knowledgeForPrompt.length===0 && openAISources.length===0 && answerSearchResults.length===0) {
+    if (bookChunks.length===0 && knowledgeForPrompt.length===0 && savedFindings.length===0 && openAISources.length===0 && answerSearchResults.length===0) {
       systemPrompt += `\n\n⚠️ ZERO GROUNDING THIS TURN: no book chunks, no saved knowledge, no search sources — nothing was actually retrieved for this question. You are answering purely from your own training. If the answer requires stating a specific table field, TDOBJECT/TDID value, T-code, BAdI, or other named technical object, you must flag it as unverified ("verify in your system") rather than stating it with confidence — this is the exact situation the grounding rule above exists for.`
     }
 
@@ -3347,9 +3373,9 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
     // knowledge it came from, and whether the quoted wording is literally in that source.
     // Shown under the answer (Sources) and written to the logs so it can be checked later.
     debugLog.quoteTrace = []
-    if (!fsComplete && !pptComplete && (bookChunks.length || answerSearchResults.length || knowledgeForPrompt.length)) {
+    if (!fsComplete && !pptComplete && (bookChunks.length || answerSearchResults.length || knowledgeForPrompt.length || savedFindings.length)) {
       activity('trace', 'Checking where quotes come from')
-      debugLog.quoteTrace = await traceQuotes({ answer: chatAnswer, books: bookChunks, web: answerSearchResults, knowledge: knowledgeForPrompt }).catch(() => [])
+      debugLog.quoteTrace = await traceQuotes({ answer: chatAnswer, books: bookChunks, web: answerSearchResults, knowledge: knowledgeForPrompt, findings: savedFindings }).catch(() => [])
       activity('trace', debugLog.quoteTrace.length ? `Traced ${debugLog.quoteTrace.length} quote${debugLog.quoteTrace.length === 1 ? '' : 's'} / citation${debugLog.quoteTrace.length === 1 ? '' : 's'} to their source` : 'No quotes or citations to trace', 'done')
       if (debugLog.quoteTrace.length) {
         console.log('[QUOTE TRACE]', JSON.stringify({ question: String(lastMsg || '').slice(0, 160), items: debugLog.quoteTrace.map(q => ({ kind: q.kind, status: q.status, text: q.text, source: q.source ? `${q.source.id} ${q.source.label}${q.source.url ? ' ' + q.source.url : ''}` : null })) }))
@@ -3682,6 +3708,7 @@ EVIDENCE HIERARCHY AND RESPONSE RULES:
         bookChunks:     debugLog.bookChunks   || 0,
         bookSources:    (bookChunks || []).map(c => `${c.source_book}, p.${c.page_number}`),
         quoteTrace:     debugLog.quoteTrace || [],
+        findings:       debugLog.findings || [],
         tavilyRaw:      debugLog.tavilyRaw    || 0,
         tavilyFiltered: debugLog.tavilyFiltered || 0,
         tavilyNotes:    debugLog.tavilyNotes  || 0,

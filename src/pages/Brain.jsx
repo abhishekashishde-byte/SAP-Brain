@@ -1,3 +1,4 @@
+import { FindingDialog } from '../features/findings/FindingsPage.jsx'
 import PastedFile, { pastedFileName } from '../components/PastedFile.jsx'
 import { useState, useEffect, useRef } from 'react'
 import { TOPICS, MODULE_META, STARTERS, SUMMARISE_THRESHOLD } from '../constants'
@@ -386,6 +387,7 @@ function SourceInfoPanel({ info, t, dark }) {
   const trace = Array.isArray(info.quoteTrace) ? info.quoteTrace : []
   const untraced = trace.filter(q => q.status === 'no_source').length
   const pills = [
+    info.findings?.length > 0 && { icon:'🎫', label:`Finding${info.findings.length>1?'s':''}: ${info.findings.map(f=>f.number).join(', ')}`, color:'#a78bfa' },
     trace.length > 0         && { icon:'❝', label:`${trace.length} quote${trace.length>1?'s':''} / citation${trace.length>1?'s':''} traced${untraced ? ` · ${untraced} without source` : ''}`, color: untraced ? '#D97706' : '#7c8aa0' },
     info.bookChunks > 0     && { icon:'📚', label:`Book: ${info.bookChunks} chunk${info.bookChunks>1?'s':''}`, color:'#059669' },
     webSearchCount > 0       && { icon:'🌐', label:`Web search: ${webSearchCount}`, color:'#2563EB' },
@@ -463,6 +465,14 @@ function SourceInfoPanel({ info, t, dark }) {
                   </div>
                 )
               })}
+            </div>
+          )}
+          {info.findings?.length > 0 && (
+            <div style={{ marginTop:6 }}>
+              <span style={{ color: dark?'rgba(255,255,255,0.4)':'rgba(0,0,0,0.4)' }}>Your findings Wani considered: </span>
+              {info.findings.map((f, i) => (
+                <span key={f.number}>{i>0 && ' · '}<a href={`/findings?n=${f.number}`} style={{ color:'#a78bfa' }} title={f.title}>{f.number} — {f.title}</a></span>
+              ))}
             </div>
           )}
           {info.bookSources?.length > 0 && (
@@ -813,7 +823,7 @@ function OnDemandHandout({ msg, onRequestHandout, t, dark }) {
   )
 }
 
-function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, onRequestHandout, session, activity }) {
+function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, isPreparing, isFinalizing, t, dark, userInitial, prevUserMsg, onAnalyse, onRequestVisual, onRequestHandout, onSaveFinding, session, activity }) {
   const isUser = msg.role === 'user'
   const content = isStreaming ? streamingText : msg.content
   const displayContent = msg._display || (isUser ? content?.replace(/\[ATTACHED_CODE[\s\S]*?\[\/ATTACHED_CODE\]/g, '').trim() : content)
@@ -1051,6 +1061,13 @@ function MessageBubble({ msg, isStreaming, streamingText, streamingQuickAnswer, 
         borderRadius:8,padding:'3px 9px',cursor:'pointer',fontSize:11,
         color:copied?'#90949b':t.text4,transition:'all 0.15s',fontFamily:"'Inter','DM Sans',sans-serif",
       }}>{copied?'✓ Copied':'Copy'}</button>
+      {onSaveFinding && (
+        <button title="Save what was found in this conversation as a numbered finding" onClick={onSaveFinding} style={{
+          background:'transparent',border:`1px solid ${t.border}`,
+          borderRadius:8,padding:'3px 9px',cursor:'pointer',fontSize:11,
+          color:t.text4,transition:'all 0.15s',fontFamily:"'Inter','DM Sans',sans-serif",
+        }}>🎫 Save as finding</button>
+      )}
     </div>
   )
 
@@ -1987,6 +2004,7 @@ export default function Brain({ session }) {
   const [searchQuery, setSearchQuery]     = useState('')
   const [showProfile, setShowProfile]     = useState(false)
   const [showSaveFinding, setShowSaveFinding] = useState(false)
+  const [findingText, setFindingText] = useState(null)
   const [profile, setProfile]             = useState(null)
   const activeThemeKey = Object.prototype.hasOwnProperty.call(BG_THEMES, resolveThemeKey(profile?.theme)) ? resolveThemeKey(profile?.theme) : 'midnight'
   const dark = activeThemeKey !== 'light'
@@ -3324,6 +3342,9 @@ export default function Brain({ session }) {
             <a href="/code" title="Analyse programs and your code library" aria-label="Open Code section"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',background:'transparent',color:t.text3,textDecoration:'none' }}
               onMouseEnter={e=>{e.currentTarget.style.color=t.text}} onMouseLeave={e=>{e.currentTarget.style.color=t.text3}}><IconCode size={15}/>{!isMobile&&' Code'}</a>
+            <a href="/findings" title="Your numbered findings (solved tickets)" aria-label="Open Findings"
+              style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',background:'transparent',color:t.text3,textDecoration:'none' }}
+              onMouseEnter={e=>{e.currentTarget.style.color=t.text}} onMouseLeave={e=>{e.currentTarget.style.color=t.text3}}><span aria-hidden="true" style={{fontSize:13,lineHeight:1}}>🎫</span>{!isMobile&&' Findings'}</a>
           </div>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
 
@@ -3514,6 +3535,11 @@ export default function Brain({ session }) {
                         }}
                         onRequestVisual={msg.role === 'assistant' ? () => handleGenerateVisual(activeConvId, i, prevUser, msg.content) : null}
                         onRequestHandout={msg.role === 'assistant' ? () => handleGenerateHandout(activeConvId, i, prevUser, msg.content) : null}
+                        onSaveFinding={msg.role === 'assistant' && !msg._deliverable && msg.content?.trim() ? () => {
+                          // The conversation up to this answer (most recent part) is what Wani structures.
+                          const upTo = messages.filter(m=>m.role!=='system').slice(0, i + 1).slice(-10)
+                          setFindingText(upTo.map(m => `${m.role === 'user' ? 'Consultant' : 'Wani'}:\n${m.content}`).join('\n\n').slice(-100000))
+                        } : null}
                       />
                     })}
                     {isLoading&&!isStreaming&&(
@@ -3810,6 +3836,7 @@ export default function Brain({ session }) {
       )}
 
       {showProfile&&<ProfileModal session={session} profile={profile} t={t} onClose={()=>setShowProfile(false)} onSave={async(u)=>{await upsertProfile(session.user.id,u);setProfile(p=>({...p,...u}))}} onSignOut={signOut}/>}
+      {findingText&&<FindingDialog session={session} text={findingText} onClose={()=>setFindingText(null)}/>}
       {showSaveFinding&&<SaveFindingModal t={t} dark={dark} onClose={()=>setShowSaveFinding(false)} onSave={saveManualFinding}/>}
 
       {showExport&&<ExportModal conversation={activeConv} messages={messages} t={t} dark={dark} onClose={()=>setShowExport(false)}/>}

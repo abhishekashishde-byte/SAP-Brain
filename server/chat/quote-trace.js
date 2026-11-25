@@ -27,11 +27,12 @@ const norm = s => String(s || '')
 
 const unquote = s => String(s || '').replace(/^[\s“”„"'‘’«»]+|[\s“”„"'‘’«».,;:]+$/g, '')
 
-export async function traceQuotes({ answer, books = [], web = [], knowledge = [], timeoutMs = 9000 }) {
+export async function traceQuotes({ answer, books = [], web = [], knowledge = [], findings = [], timeoutMs = 9000 }) {
   const sources = [
     ...books.map((c, i) => ({ id: 'B' + (i + 1), type: 'book', label: `${c.source_book || 'SAP book'}, p.${c.page_number ?? '?'}`, topic: c.lesson_title || '', text: String(c.content || '') })),
     ...web.map((r, i) => ({ id: 'W' + (i + 1), type: 'web', label: r.title || r.url || 'Web page', url: r.url || '', text: String(r.snippet || '') })),
     ...knowledge.map((k, i) => ({ id: 'K' + (i + 1), type: 'knowledge', label: `Your confirmed knowledge — ${[k.module, k.topic, k.object].filter(Boolean).join(' > ')}`, text: String(k.finding || '') })),
+    ...findings.map(f => ({ id: 'F' + f.number, type: 'finding', label: `Finding ${f.number}${f.found_on ? ` (${String(f.found_on).split('-').reverse().join('.')})` : ''} — ${f.title}`, text: [f.problem, f.investigation, f.root_cause, f.solution].filter(Boolean).join('\n') })),
   ].filter(s => s.text.trim())
   if (!sources.length || !String(answer || '').trim()) return []
 

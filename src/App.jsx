@@ -6,6 +6,7 @@ import Brain from './pages/Brain.jsx'
 const DiscoveryWorkshop = lazy(() => import('./features/discovery/DiscoveryWorkshop.jsx'))
 const ImplementationHub = lazy(() => import('./features/implementation/ImplementationHub.jsx'))
 const CodeStudio = lazy(() => import('./features/code/CodeStudio.jsx'))
+const FindingsPage = lazy(() => import('./features/findings/FindingsPage.jsx'))
 import AdminDashboard from './pages/AdminDashboard.jsx'
 
 
@@ -210,7 +211,9 @@ export default function App() {
           ? adminView
             ? <AdminDashboard session={session} onClose={() => setAdminView(false)} />
             : <>
-                {window.location.pathname.startsWith('/code')
+                {window.location.pathname.startsWith('/findings')
+                  ? <Suspense fallback={<div role="status" style={{background:'#000',color:'#a1a1aa',minHeight:'100dvh',display:'grid',placeItems:'center',fontFamily:'Inter,sans-serif'}}>Loading…</div>}><FindingsPage session={session}/></Suspense>
+                  : window.location.pathname.startsWith('/code')
                   ? <Suspense fallback={<div role="status" style={{background:'#000',color:'#a1a1aa',minHeight:'100dvh',display:'grid',placeItems:'center',fontFamily:'Inter,sans-serif'}}>Loading…</div>}><CodeStudio session={session}/></Suspense>
                   : window.location.pathname.startsWith('/implementation')
                   ? <Suspense fallback={<div role="status" style={{background:'#0d0d0d',color:'#a3a8b1',minHeight:'100dvh',display:'grid',placeItems:'center',fontFamily:'Inter,sans-serif'}}>Loading…</div>}><ImplementationHub session={session}/></Suspense>
@@ -219,7 +222,7 @@ export default function App() {
                   : <>
                   <Brain session={session}/>
                 </>}
-                {adminAvailable && !window.location.pathname.startsWith('/discovery') && !window.location.pathname.startsWith('/implementation') && !window.location.pathname.startsWith('/code') && (
+                {adminAvailable && !window.location.pathname.startsWith('/discovery') && !window.location.pathname.startsWith('/implementation') && !window.location.pathname.startsWith('/code') && !window.location.pathname.startsWith('/findings') && (
                   <button
                     onClick={() => setAdminView(true)}
                     title="Open Wani admin dashboard"
