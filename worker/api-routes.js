@@ -15,11 +15,12 @@ const HANDLERS = {
   discovery: () => import('../api/discovery.js'),
   code: () => import('../server/code/code-ai.js'),
   findings: () => import('../server/findings/findings.js'),
+  changes: () => import('../server/changes/changes-ai.js'),
 }
 
 // Same limits middleware.js enforced on Vercel.
 // Endpoints that call a paid AI model.
-const AI_ROUTES = new Set(['chat', 'code', 'findings', 'external-chat', 'summarise', 'extract', 'categorise', 'discovery-ai', 'discovery-transcript', 'discovery-correct', 'discovery-import'])
+const AI_ROUTES = new Set(['chat', 'code', 'findings', 'changes', 'external-chat', 'summarise', 'extract', 'categorise', 'discovery-ai', 'discovery-transcript', 'discovery-correct', 'discovery-import'])
 
 const MAX_BODY_BYTES = {
   'discovery-transcript': 15_000,
@@ -28,6 +29,7 @@ const MAX_BODY_BYTES = {
   chat: 2_000_000,
   code: 1_000_000,
   findings: 400_000,
+  changes: 1_000_000,
   categorise: 30_000,
   extract: 50_000,
   recall: 30_000,

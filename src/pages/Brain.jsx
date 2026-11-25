@@ -3345,6 +3345,9 @@ export default function Brain({ session }) {
             <a href="/findings" title="Your numbered findings (solved tickets)" aria-label="Open Findings"
               style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',background:'transparent',color:t.text3,textDecoration:'none' }}
               onMouseEnter={e=>{e.currentTarget.style.color=t.text}} onMouseLeave={e=>{e.currentTarget.style.color=t.text3}}><span aria-hidden="true" style={{fontSize:13,lineHeight:1}}>🎫</span>{!isMobile&&' Findings'}</a>
+            <a href="/changes" title="Change requests and Z-developments: requirement, FS, code check, tests" aria-label="Open Changes"
+              style={{ display:'flex',alignItems:'center',gap:6,border:'none',borderRadius:8,cursor:'pointer',padding:isMobile?'8px 12px':'6px 10px',fontSize:isMobile?13:12,fontWeight:600,fontFamily:"'Inter','DM Sans',sans-serif",transition:'all 0.15s',background:'transparent',color:t.text3,textDecoration:'none' }}
+              onMouseEnter={e=>{e.currentTarget.style.color=t.text}} onMouseLeave={e=>{e.currentTarget.style.color=t.text3}}><span aria-hidden="true" style={{fontSize:13,lineHeight:1}}>🛠</span>{!isMobile&&' Changes'}</a>
           </div>
           {!(isMobile&&view==='chat')&&(<div style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',flexShrink:0 }} onClick={goHome}><WaniLogo size={isMobile?26:22} dark={dark}/>{!isMobile&&<WaniWordmark height={13} dark={dark}/>}</div>)}
 

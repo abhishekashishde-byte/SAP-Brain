@@ -70,7 +70,7 @@ Return ONLY JSON:
  "s4_notes":"S/4HANA points to remember, or empty string",
  "tags":["module or topic tags, e.g. PM, MM, BAdI, output"]}`
 
-async function callModel(system, user, { search = false, maxTokens = 6000, model = MODEL, cachedContext = '' } = {}) {
+export async function callModel(system, user, { search = false, maxTokens = 6000, model = MODEL, cachedContext = '' } = {}) {
   // The program is sent as a cached system block: follow-up questions, documentation
   // and test cases on the same program reread it at ~10× lower cost.
   const body = {
@@ -111,7 +111,7 @@ function extractJson(text) {
 // Large analyses sometimes come back as almost-valid JSON (typically an unescaped
 // quote from an ABAP comment inside a string). Rather than failing the whole — often
 // expensive — analysis, a small model repairs the syntax without changing content.
-async function parseJson(text) {
+export async function parseJson(text) {
   const raw = extractJson(text)
   if (!raw) throw Error('Wani returned an unreadable result. Try again.')
   try { return JSON.parse(raw) } catch (firstError) {
