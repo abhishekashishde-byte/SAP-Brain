@@ -58,7 +58,7 @@ grant select, insert, update, delete on public.wani_findings to authenticated;
 create or replace function public.match_wani_findings(query_embedding vector(1536), match_count int default 3)
 returns table (id uuid, number bigint, found_on date, ticket_ref text, title text, module text, problem text,
                investigation text, root_cause text, solution text, sap_objects text[], status text, similarity float)
-language sql stable security invoker set search_path = public as $$
+language sql stable security invoker set search_path = public, extensions as $$
   select f.id, f.number, f.found_on, f.ticket_ref, f.title, f.module, f.problem, f.investigation, f.root_cause,
          f.solution, f.sap_objects, f.status, 1 - (f.embedding <=> query_embedding) as similarity
   from public.wani_findings f
