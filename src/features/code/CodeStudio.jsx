@@ -334,7 +334,54 @@ function Analyse({ session, onSaved, onOpenLibrary, initial }) {
   )
 }
 
-function Library({ entries, loading, error, onDelete, onOpenCode }) {
+// Questions on a saved program. Works with the kept code, or — if only the summary was saved —
+// from the summary and analysis. The conversation is stored with the library entry.
+function LibraryAsk({ entry, session, onUpdate }) {
+  const s = entry.summary || {}
+  const thread = Array.isArray(s.qa) ? s.qa : []
+  const [question, setQuestion] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const ask = async () => {
+    const q = question.trim(); if (!q || busy) return
+    const before = thread
+    const withQ = [...before, { role: 'user', text: q }]
+    onUpdate({ ...entry, summary: { ...s, qa: withQ } }); setQuestion(''); setBusy(true); setError('')
+    try {
+      const { analysis, qa, ...summary } = s
+      const r = await callCode(session, { action: 'ask', code: entry.code || '', analysis: analysis || null, summary: { title: entry.title, ...summary }, question: q, history: before })
+      const next = { ...entry, summary: { ...s, qa: [...withQ, { role: 'wani', text: r.answer }] } }
+      onUpdate(next)
+      const { error: e } = await supabase.from('code_library').update({ summary: next.summary }).eq('id', entry.id)
+      if (e) setError('Answer shown but not saved: ' + e.message)
+    } catch (e) {
+      onUpdate({ ...entry, summary: { ...s, qa: before } }); setQuestion(q); setError(e.message)
+    } finally { setBusy(false) }
+  }
+  const clear = async () => {
+    if (!window.confirm('Remove the questions and answers from this entry?')) return
+    const next = { ...entry, summary: { ...s, qa: [] } }
+    onUpdate(next)
+    await supabase.from('code_library').update({ summary: next.summary }).eq('id', entry.id)
+  }
+  return (
+    <section className="cs-lib-ask">
+      <div className="cs-card-head"><h3>Ask about this program</h3>{thread.length > 0 && <button className="cs-btn" onClick={clear}>Clear</button>}</div>
+      {!entry.code && <p className="cs-dim">The code itself wasn't kept, so Wani answers from the saved summary and analysis — paste the relevant part into your question if you need exact positions.</p>}
+      {thread.map((m, i) => <div key={i} className={'cs-msg cs-' + m.role}>{m.role === 'user' ? m.text : <Markdown text={m.text} />}</div>)}
+      {busy && <div className="cs-dim" role="status"><span className="cs-spin" /> Thinking…</div>}
+      {error && <div className="cs-error">{error}</div>}
+      <div className="cs-ask">
+        <textarea rows={2} value={question} onChange={e => setQuestion(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask() } }}
+          placeholder="e.g. Where should the texts be translated — text elements, message class, or the ALV field catalog?" />
+        <button className="cs-btn cs-primary" disabled={busy || !question.trim()} onClick={ask}>Ask</button>
+      </div>
+    </section>
+  )
+}
+
+function Library({ entries, loading, error, onDelete, onOpenCode, session, onUpdate }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(null)
   const list = useMemo(() => {
@@ -372,6 +419,7 @@ function Library({ entries, loading, error, onDelete, onOpenCode }) {
                   {e.documentation && <details><summary>Documentation</summary><Markdown text={e.documentation} /></details>}
                   {Array.isArray(e.test_cases) && e.test_cases.length > 0 && <details><summary>Test cases ({e.test_cases.length})</summary><Tests tests={e.test_cases} /></details>}
                   {e.code && <div className="cs-file"><PastedFile content={e.code} name={pastedFileName(e.code, e.title.replace(/[^\w-]+/g, '_'))} /></div>}
+                  <LibraryAsk entry={e} session={session} onUpdate={onUpdate} />
                   <div className="cs-row">
                     {e.code && <button className="cs-btn" onClick={() => onOpenCode(e)}>Analyse again</button>}
                     <button className="cs-btn cs-danger" onClick={() => { if (window.confirm(`Delete "${e.title}" from your library?`)) onDelete(e.id) }}>Delete</button>
@@ -417,7 +465,8 @@ export default function CodeStudio({ session }) {
         <button role="tab" aria-selected={tab === 'library'} onClick={() => setTab('library')}>Library{entries.length ? ` (${entries.length})` : ''}</button>
       </div>
       <div hidden={tab !== 'analyse'}><Analyse key={reopen?.id || 'new'} initial={reopen} session={session} onSaved={load} onOpenLibrary={() => setTab('library')} /></div>
-      {tab === 'library' && <Library entries={entries} loading={loading} error={libError} onDelete={remove}
+      {tab === 'library' && <Library entries={entries} loading={loading} error={libError} onDelete={remove} session={session}
+        onUpdate={u => setEntries(es => es.map(x => x.id === u.id ? u : x))}
         onOpenCode={e => { setReopen(e); setTab('analyse') }} />}
     </div>
   )

@@ -145,10 +145,15 @@ export default async function handler(req, res) {
   const code = str(req.body.code, MAX_CODE)
   const analysis = req.body.analysis && typeof req.body.analysis === 'object' ? req.body.analysis : null
   const history = Array.isArray(req.body.history) ? req.body.history.slice(-12).map(m => ({ role: m.role === 'user' ? 'consultant' : 'wani', text: str(m.text, 4000) })) : []
-  if (code.trim().length < 20) return res.status(400).json({ error: 'Paste the program code first' })
-  const context = `PROGRAM:\n\`\`\`\n${code}\n\`\`\``
+  // A saved library entry may have only its summary and analysis (code not kept): questions still work from those.
+  const saved = req.body.summary && typeof req.body.summary === 'object' ? req.body.summary : null
+  const summaryOnly = action === 'ask' && code.trim().length < 20 && (analysis || saved)
+  if (code.trim().length < 20 && !summaryOnly) return res.status(400).json({ error: 'Paste the program code first' })
+  const context = summaryOnly
+    ? 'PROGRAM: the code itself was not kept in the library — only the saved summary and analysis below are available. If the answer needs exact code positions, say what you can from the summary and ask the consultant to paste the relevant part.'
+    : `PROGRAM:\n\`\`\`\n${code}\n\`\`\``
   const cached = { cachedContext: context }
-  const withAnalysis = analysis ? `\n\nEARLIER ANALYSIS:\n${JSON.stringify(analysis)}` : ''
+  const withAnalysis = (saved ? `\n\nSAVED LIBRARY SUMMARY:\n${JSON.stringify(saved)}` : '') + (analysis ? `\n\nEARLIER ANALYSIS:\n${JSON.stringify(analysis)}` : '')
 
   try {
     if (action === 'analyse') {

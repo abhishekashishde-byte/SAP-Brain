@@ -122,3 +122,6 @@
 .cs-save-actions{margin-top:0}
 .cs-toast{position:sticky;bottom:64px;display:flex;align-items:center;gap:12px;justify-content:space-between;max-width:640px;margin:12px auto 0;box-shadow:0 10px 30px rgba(0,0,0,.6)}
 .cs-toast button{background:none;border:0;color:inherit;cursor:pointer;font-size:14px}
+.cs-lib-ask{margin-top:14px;padding-top:12px;border-top:1px solid var(--line, #232326)}
+.cs-lib-ask h3{font-size:14px;margin:0}
+.cs-lib-ask .cs-ask{margin-top:8px}
