@@ -183,7 +183,7 @@ function SaveDialog({ draft, setDraft, keepCode, setKeepCode, onSave, onCancel, 
       <label>SAP objects<input value={(draft.objects || []).join(', ')} onChange={e => set('objects', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} /></label>
       <label>Tags<input value={(draft.tags || []).join(', ')} onChange={e => set('tags', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} /></label>
       <label className="cs-check"><input type="checkbox" checked={keepCode} onChange={e => setKeepCode(e.target.checked)} />
-        <span>Also keep the full code<small>Only if you are allowed to keep it. Client code is usually the client's property.</small></span></label>
+        <span>Also keep the full code<small>Needed for exact answers later (Ask, Analyse again). Only if you are allowed to keep it — client code is usually the client's property. You can also add it to the entry later.</small></span></label>
       {error && <div className="cs-error" role="alert">Not saved: {error}</div>}
       {actions}
     </section>
@@ -334,6 +334,42 @@ function Analyse({ session, onSaved, onOpenLibrary, initial }) {
   )
 }
 
+// A summary-only entry can get its program attached later, so questions are answered from the real code.
+function AddCode({ entry, onUpdate }) {
+  const [open, setOpen] = useState(false)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const lines = code ? code.split('\n').length : 0
+  const save = async () => {
+    setBusy(true); setError('')
+    const { error: e } = await supabase.from('code_library').update({ code }).eq('id', entry.id)
+    setBusy(false)
+    if (e) { setError(e.message); return }
+    onUpdate({ ...entry, code }); setOpen(false)
+  }
+  const upload = async e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setCode(await f.text()) }
+  if (!open) return (
+    <div className="cs-addcode">
+      <span>Only the summary of this program was saved, so Wani can't see where things are in your code.</span>
+      <button className="cs-btn cs-primary" onClick={() => setOpen(true)}>Add the program code</button>
+    </div>
+  )
+  return (
+    <div className="cs-addcode cs-addcode-open">
+      <textarea className="cs-code" spellCheck={false} wrap="off" rows={10} value={code} onChange={e => setCode(e.target.value)}
+        placeholder="Paste the program (main program and the includes you want to ask about)…" />
+      <div className="cs-row">
+        <button className="cs-btn cs-primary" disabled={busy || code.trim().length < 20 || lines > 10000} onClick={save}>{busy ? 'Saving…' : 'Keep code with this entry'}</button>
+        <label className="cs-btn cs-upload-btn">Upload file<input type="file" accept=".txt,.abap,.sql,.js,.ts,.cds,.xml,text/*" onChange={upload} hidden /></label>
+        <button className="cs-btn" onClick={() => setOpen(false)}>Cancel</button>
+        <span className="cs-dim">{lines ? `${lines.toLocaleString()} lines` : ''}{lines > 10000 ? ' — limit is 10,000' : ''}</span>
+      </div>
+      {error && <div className="cs-error">{error}</div>}
+    </div>
+  )
+}
+
 // Questions on a saved program. Works with the kept code, or — if only the summary was saved —
 // from the summary and analysis. The conversation is stored with the library entry.
 function LibraryAsk({ entry, session, onUpdate }) {
@@ -367,7 +403,7 @@ function LibraryAsk({ entry, session, onUpdate }) {
   return (
     <section className="cs-lib-ask">
       <div className="cs-card-head"><h3>Ask about this program</h3>{thread.length > 0 && <button className="cs-btn" onClick={clear}>Clear</button>}</div>
-      {!entry.code && <p className="cs-dim">The code itself wasn't kept, so Wani answers from the saved summary and analysis — paste the relevant part into your question if you need exact positions.</p>}
+      {!entry.code && <AddCode entry={entry} onUpdate={onUpdate} />}
       {thread.map((m, i) => <div key={i} className={'cs-msg cs-' + m.role}>{m.role === 'user' ? m.text : <Markdown text={m.text} />}</div>)}
       {busy && <div className="cs-dim" role="status"><span className="cs-spin" /> Thinking…</div>}
       {error && <div className="cs-error">{error}</div>}

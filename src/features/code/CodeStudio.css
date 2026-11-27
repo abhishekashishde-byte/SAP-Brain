@@ -125,3 +125,7 @@
 .cs-lib-ask{margin-top:14px;padding-top:12px;border-top:1px solid var(--line, #232326)}
 .cs-lib-ask h3{font-size:14px;margin:0}
 .cs-lib-ask .cs-ask{margin-top:8px}
+.cs-addcode{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:10px 0;padding:10px 12px;border:1px solid #5b4a17;background:#1d180b;border-radius:10px;font-size:13px;color:#fcd34d}
+.cs-addcode-open{display:block;border-color:var(--line, #34343a);background:transparent;color:inherit}
+.cs-addcode-open .cs-row{margin-top:8px}
+.cs-upload-btn{cursor:pointer}
