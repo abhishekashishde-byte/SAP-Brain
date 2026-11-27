@@ -1722,7 +1722,9 @@ async function fetchCodeLibraryIndex(userToken) {
     const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
     if (!url || !anonKey || !userToken) return []
     const userClient = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${userToken}` } } })
-    const { data, error } = await userClient.from('code_library').select('title,summary').order('created_at', { ascending: false }).limit(40)
+    // Only entries the consultant added to the library; plain analysed programs stay private history.
+    let { data, error } = await userClient.from('code_library').select('title,summary').eq('in_library', true).order('created_at', { ascending: false }).limit(40)
+    if (error && /in_library/.test(error.message)) ({ data, error } = await userClient.from('code_library').select('title,summary').order('created_at', { ascending: false }).limit(40))
     if (error) { if (!/does not exist|schema cache/i.test(error.message)) console.error('code library error:', error.message); return [] }
     return data || []
   } catch (err) {

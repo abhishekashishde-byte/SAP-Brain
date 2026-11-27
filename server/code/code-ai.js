@@ -8,6 +8,8 @@ const MODEL = process.env.WANI_CODE_MODEL || process.env.WANI_ANSWER_MODEL || 'c
 const FALLBACK_MODEL = 'claude-sonnet-4-5'
 const REPAIR_MODEL = process.env.WANI_SMALL_MODEL || 'claude-haiku-5-5'
 const MAX_CODE = 450_000 // ~10,000 lines
+// Line numbers let answers point to the exact place ("lines 212–230").
+const numbered = code => code.split('\n').map((l, i) => `${String(i + 1).padStart(5)}  ${l}`).join('\n')
 
 const PERSONA = `You are Wani, a senior SAP S/4HANA consultant and ABAP reviewer talking to a senior functional/technical consultant.
 Write SAP identifiers (T-codes, tables, fields, BAPIs, BAdIs, function modules, classes, programs) in single backticks.
@@ -35,9 +37,14 @@ Return ONLY strictly valid JSON. Inside JSON strings escape every double quote a
  "risks":["short risk or code issue worth knowing", "..."]}`
 
 const ASK = `${PERSONA}
-The consultant is asking a follow-up about the program below. You also have your earlier analysis and the conversation so far.
-Answer the question asked, at the depth asked. Identification questions get the object(s) and one or two lines each; detail only when asked.
-Use web_search when the question depends on SAP release behaviour you are not sure of.
+The consultant is asking about ONE program (below, with line numbers). You also have your earlier analysis and the conversation so far.
+Rules:
+- Answer exactly the question asked, about this program. Start with the direct answer in one or two sentences, then only the detail needed to act on it.
+- When the question is about where or how something happens, point to the exact place in this code: include / form / method / event and line numbers (e.g. "lines 212–230, FORM build_fieldcat").
+- A general SAP question is answered for this program: what it means for this code and what to change here.
+- Do not repeat the analysis. No unasked recommendations, no general best-practice lists, no sections the question did not ask for.
+- If the needed part is not in the code shown (an include, class or customizing that was not pasted), say which part is missing instead of guessing.
+- Use web_search when the answer depends on SAP release behaviour you are not sure of. Say plainly when something is not verified.
 Reply in Markdown (not JSON).`
 
 const DOCUMENT = `${PERSONA}
@@ -147,11 +154,11 @@ export default async function handler(req, res) {
   const history = Array.isArray(req.body.history) ? req.body.history.slice(-12).map(m => ({ role: m.role === 'user' ? 'consultant' : 'wani', text: str(m.text, 4000) })) : []
   // A saved library entry may have only its summary and analysis (code not kept): questions still work from those.
   const saved = req.body.summary && typeof req.body.summary === 'object' ? req.body.summary : null
-  const summaryOnly = action === 'ask' && code.trim().length < 20 && (analysis || saved)
+  const summaryOnly = action !== 'analyse' && code.trim().length < 20 && (analysis || saved)
   if (code.trim().length < 20 && !summaryOnly) return res.status(400).json({ error: 'Paste the program code first' })
   const context = summaryOnly
     ? 'PROGRAM: the code itself was not kept in the library — only the saved summary and analysis below are available. If the answer needs exact code positions, say what you can from the summary and ask the consultant to paste the relevant part.'
-    : `PROGRAM:\n\`\`\`\n${code}\n\`\`\``
+    : `PROGRAM (line numbers added for reference, not part of the code):\n\`\`\`\n${numbered(code)}\n\`\`\``
   const cached = { cachedContext: context }
   const withAnalysis = (saved ? `\n\nSAVED LIBRARY SUMMARY:\n${JSON.stringify(saved)}` : '') + (analysis ? `\n\nEARLIER ANALYSIS:\n${JSON.stringify(analysis)}` : '')
 
