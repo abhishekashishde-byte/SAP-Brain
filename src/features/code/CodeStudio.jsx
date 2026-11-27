@@ -346,7 +346,8 @@ function AddCode({ entry, patch }) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const n = lineCount(code)
-  const save = async () => { setBusy(true); await patch({ code }); setBusy(false); setOpen(false) }
+  // Close only when the code really was stored; otherwise keep the pasted text and the error visible.
+  const save = async () => { setBusy(true); const ok = await patch({ code }); setBusy(false); if (ok) { setOpen(false); setCode('') } }
   const upload = async e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setCode(await f.text()) }
   if (!open) return (
     <div className="cs-addcode">
